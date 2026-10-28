@@ -1110,7 +1110,7 @@ SHEETS = {
      # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
         "sales_report": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
+        "url":  "All_Years_Sale_Data.xlsx",
         "sheet_name": "Sales Data",  # Aapke screenshot ke hisaab se tab ka naam
         "date_col": "MONTH",         # Aapki sheet me date ka column
         "dayfirst": True,
@@ -1118,7 +1118,7 @@ SHEETS = {
     # Add more tabs/sheets here, each with ITS OWN date_col.
         "production_logs": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx",
+        "url":  "All shed production 2026-27 (4).xlsx",
         "sheet_name": "FY2026-27 Prod. Sheet",
         "date_col": "DATE",
         "dayfirst": True,
@@ -1126,7 +1126,7 @@ SHEETS = {
         "min_stock": {
         "type": "excel",
         "static": True,
-        "url": r"C:\Users\IT\Downloads\Stock Minimum Balance.xlsx",
+        "url": "Stock Minimum Balance.xlsx", # <--- Sirf naam
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
     },
@@ -1140,7 +1140,7 @@ SHEETS = {
 
         "foaming_chemicals": {
         "type": "excel", 
-        "url": r"C:\Users\IT\Downloads\Chemical Consumption.xlsx",
+        "url": "Chemical Consumption.xlsx", # <--- Sirf naam
         "sheet_name": "Data", # <--- YEH ADD KARNA ZAROORI HAI (Aapki excel file me jo tab ka naam hai, woh daalein)
         "date_col": "MONTH", 
         "dayfirst": True
@@ -1148,7 +1148,7 @@ SHEETS = {
 
         "stock_data": {
         "type": "stock",
-        "url": r"C:\Users\IT\Downloads\STOCK.xlsx",
+        "url": "STOCK.xlsx", # <--- Sirf naam
         "sheet_name": "Inventory Data",
     },
 
@@ -1160,7 +1160,7 @@ SHEETS = {
     },
      "grade_category": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\Grade wise category (1).xlsx", 
+        "url": "Grade wise category.xlsx", # <--- Sirf naam
         "sheet_name": "Grade+Category",
         "date_col": "GRADE", 
         "static": True, 
@@ -1330,7 +1330,7 @@ DEPARTMENTS = [
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
-            ("📋 Plant Logs Register (Google Sheets)", r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx"),
+            ("📋 Plant Logs Register (Google Sheets)", "All shed production 2026-27 (4).xlsx"),
         ],
     },
     {
