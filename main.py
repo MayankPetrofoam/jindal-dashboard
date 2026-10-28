@@ -74,16 +74,12 @@ st.markdown(
     .kpi-wrap { padding-bottom: 1.1rem; }
 
     /* compact per-KPI date dropdown (original design) */
+    /* Dropdowns ko naya size aur spacing dein */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-        min-height: 24px !important; font-size: 11px !important;
+        min-height: 28px !important; font-size: 11px !important;
     }
-    div[data-testid="stSelectbox"] { width: 132px !important; margin-bottom: -6px; }
-    div[data-testid="stDateInput"] { width: 132px !important; margin-bottom: -6px; }
-    div[data-testid="stDateInput"] div[data-baseweb="input"] {
-        min-height: 22px !important; height: 24px !important; font-size: 10.5px !important;
-    }
-    div[data-testid="stDateInput"] input { padding: 0 2px 0 8px !important; }
-    div[data-testid="stVerticalBlockBorderWrapper"] { padding: 0.35rem 0.5rem; }
+    div[data-testid="stSelectbox"] { width: 100% !important; margin-bottom: 0px !important; }
+    div[data-testid="stHorizontalBlock"] { gap: 0.5rem !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -733,6 +729,32 @@ def _fetch_stock_cached(url, sheet_name):
         raise DataError("Stock sheet mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_rolls_cached(files):
+    """B-Shed aur C-Shed ki files padhkar ek table banata hai. files = ((shed, path, sheet), ...)"""
+    def _to_date(v):
+        if isinstance(v, (datetime.datetime, pd.Timestamp)):
+            return v.date()
+        if isinstance(v, datetime.date):
+            return v
+        d = _parse_dates(pd.Series([str(v)]), True).iloc[0]
+        return d.date() if pd.notna(d) else None
+
+    frames = []
+    for shed, path, sheet in files:
+        raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=object, engine="openpyxl")
+        t = pd.DataFrame({
+            "shed": shed,
+            "_date": raw.iloc[:, 2].apply(_to_date),
+            "type": raw.iloc[:, 3].astype(str).str.strip().str.upper(),
+            "val": _num(raw.iloc[:, 4]).fillna(0),
+        })
+        frames.append(t.dropna(subset=["_date"]))   # header row apne aap hat jayegi
+    df = pd.concat(frames, ignore_index=True)
+    if df.empty:
+        raise DataError("B/C shed files mein koi valid date nahi mili")
+    return df, datetime.datetime.now(IST)
+
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
@@ -956,6 +978,22 @@ def compute_kpi(df, spec, day):
                 "desc": f"{len(dead):,} items, {days}+ din se koi movement nahi ({pct} of stock)",
                 "color": RED if len(dead) else BLUE,
                 "extra": txt or "Koi dead stock nahi"}
+     # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
+    if calc == "rolls_bc":
+        def tot(d, typ):
+            return float(d.loc[d["type"] == typ, "val"].sum())
+
+        d_day = df[df["_date"] == day]
+        d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
+        r, m, p = tot(d_day, "ROLLS"), tot(d_day, "METERS"), tot(d_day, "PRODUCTION")
+        parts = []
+        for shed in sorted(df["shed"].unique()):
+            s = d_day[d_day["shed"] == shed]
+            parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr")
+        return {"value": f"{r:,.0f} Rolls | {m:,.0f} Mtr",
+                "desc": f"Production: {p:,.1f} | Month-to-date: {tot(d_mtd, 'ROLLS'):,.0f} Rolls",
+                "color": BLUE,
+                "extra": " | ".join(parts)}
 
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
@@ -1110,7 +1148,7 @@ SHEETS = {
      # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
         "sales_report": {
         "type": "excel",
-        "url":  "All_Years_Sale_Data.xlsx",
+        "url": r"C:\Users\IT\Downloads\All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
         "sheet_name": "Sales Data",  # Aapke screenshot ke hisaab se tab ka naam
         "date_col": "MONTH",         # Aapki sheet me date ka column
         "dayfirst": True,
@@ -1118,7 +1156,7 @@ SHEETS = {
     # Add more tabs/sheets here, each with ITS OWN date_col.
         "production_logs": {
         "type": "excel",
-        "url":  "All shed production 2026-27 (4).xlsx",
+        "url": r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx",
         "sheet_name": "FY2026-27 Prod. Sheet",
         "date_col": "DATE",
         "dayfirst": True,
@@ -1126,9 +1164,18 @@ SHEETS = {
         "min_stock": {
         "type": "excel",
         "static": True,
-        "url": "Stock Minimum Balance.xlsx", # <--- Sirf naam
+        "url": r"C:\Users\IT\Downloads\Stock Minimum Balance.xlsx",
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
+    },
+
+        "rolls_bc": {
+        "type": "rolls_bc",
+        "url": "rolls_bc",
+        "files": (
+            ("B Shed", r"C:\Users\IT\Downloads\B-Shed Mtrs+Rolls+Prod.xlsx", "B-Shed Mtrs+Rolls+Prod"),
+            ("C Shed", r"C:\Users\IT\Downloads\C-Shed Mtrs+Rolls+Prod (1).xlsx", "C-Shed Mtrs+Rolls+Prod"),
+        ),
     },
 
     "maintenance_logs": {
@@ -1140,7 +1187,7 @@ SHEETS = {
 
         "foaming_chemicals": {
         "type": "excel", 
-        "url": "Chemical Consumption.xlsx", # <--- Sirf naam
+        "url": r"C:\Users\IT\Downloads\Chemical Consumption.xlsx",
         "sheet_name": "Data", # <--- YEH ADD KARNA ZAROORI HAI (Aapki excel file me jo tab ka naam hai, woh daalein)
         "date_col": "MONTH", 
         "dayfirst": True
@@ -1148,7 +1195,7 @@ SHEETS = {
 
         "stock_data": {
         "type": "stock",
-        "url": "STOCK.xlsx", # <--- Sirf naam
+        "url": r"C:\Users\IT\Downloads\STOCK.xlsx",
         "sheet_name": "Inventory Data",
     },
 
@@ -1160,7 +1207,7 @@ SHEETS = {
     },
      "grade_category": {
         "type": "excel",
-        "url": "Grade wise category.xlsx", # <--- Sirf naam
+        "url": r"C:\Users\IT\Downloads\Grade wise category (1).xlsx", 
         "sheet_name": "Grade+Category",
         "date_col": "GRADE", 
         "static": True, 
@@ -1205,7 +1252,7 @@ KPI_SOURCES = {
         # Production Department ke saare blocks ki live binding:
     ("production", "Total Production & Yield"): {"sheet": "production_logs", "calc": "prod_log", "type": "total"},
     ("production", "Bdls & Yield"):      {"sheet": "production_logs", "calc": "prod_log", "type": "bdls"},
-    ("production", "Rolls & Yield"):     {"sheet": "production_logs", "calc": "prod_log", "type": "rolls"},
+    ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
     ("production", "Mattress & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "mattress"},
     ("production", "Pillow & Yield"):    {"sheet": "production_logs", "calc": "prod_log", "type": "pillow"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
@@ -1330,7 +1377,7 @@ DEPARTMENTS = [
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
-            ("📋 Plant Logs Register (Google Sheets)", "All shed production 2026-27 (4).xlsx"),
+            ("📋 Plant Logs Register (Google Sheets)", r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx"),
         ],
     },
     {
@@ -1510,6 +1557,12 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+
+        if cfg.get("type") == "rolls_bc":
+            df, fetched = _fetch_rolls_cached(tuple(cfg["files"]))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
         if cfg.get("type") == "stock":
             df, fetched = _fetch_stock_cached(cfg["url"], cfg["sheet_name"])
             good[name] = (df, fetched)
@@ -1601,15 +1654,29 @@ def render_kpi(dept_key, idx, title, desc):
                 _card(slot, title, "Data unavailable", err, RED, error=True)
                 return
 
-                        # PATCH: Production sheet ke liye dates ko matrix se uthao
+            # PATCH: Production sheet ke liye dates ko matrix se uthao
             if str(spec.get("calc", "")).startswith("hr_"):
                 dates = _hr_dates(df)
             else:
-                dates = available_dates(df)          # real dates found in THIS KPI's own source
-            chosen = st.selectbox(
-                f"{title} date", dates, key=key, label_visibility="collapsed",
+                dates = available_dates(df)
+
+            # --- MONTH + DATE dropdown ---
+            # --- MONTH + DATE dropdown ---
+            months = sorted({(d.year, d.month) for d in dates}, reverse=True)
+            
+            # Yahan columns me gap diya gaya hai taaki dono box alag dikhein
+            mcol, dcol = st.columns([1, 1], gap="medium") 
+            chosen_m = mcol.selectbox(
+                f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
+                format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%Y"),
+            )
+            month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
+            chosen = dcol.selectbox(
+                f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
+                label_visibility="collapsed",
                 format_func=lambda d: d.strftime(DATE_FMT),
             )
+            st.session_state[key] = chosen      # Diagnostics panel ke liye
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
             label = f"{prefix} {chosen.strftime(DATE_FMT)}".strip()
             try:
