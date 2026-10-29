@@ -1285,7 +1285,7 @@ SHEETS = {
     # Add more tabs/sheets here, each with ITS OWN date_col.
         "production_logs": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(4).xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
         "sheet_name": "FY2026-27 Prod. Sheet",
         "date_col": "DATE",
         "dayfirst": True,
