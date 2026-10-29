@@ -638,7 +638,7 @@ PROD_TYPES = {
     "rolls":    {"col": "ITEM", "words": ["ROLL"], "not": ["ROLLPACK", "ROLL PACK"], "qty": "MTR", "unit": "Mtr"},
     "mattress": {"col": "ITEM", "words": ["MATTRESS"],              "qty": "SHEET", "unit": "Pcs"},
      "pillow":   {"col": "ITEM", "words": ["PILLOW"],                "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
-    "rollpack": {"col": "ITEM", "words": ["ROLLPACK", "ROLL PACK"], "qty": "SHEET", "unit": "Pcs"},
+    "rollpack": {"col": "ITEM", "words": ["ROLLPACK", "ROLL PACK", "ROLL P"], "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
 }
 
 
@@ -798,6 +798,39 @@ def _fetch_rolls_cached(files):
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
+    # ---------- PRODUCTION: ROLLPACK (Yield from F-Shed) ----------
+    if calc == "prod_log" and spec.get("type") == "rollpack":
+        # F-Shed wali sheet ko load karo
+        f_df, err_f, _ = get_sheet("f_shed")
+        if f_df is None:
+            return {"value": "Error", "desc": "F-Shed data not available", "color": RED}
+
+        # F-Shed mein 'ITEM' column Grade hai aur 'F-SHED' column Yield/Quantity hai
+        # (Aapke screenshot ke hisaab se)
+        
+        # 1. Selected Date ka Yield
+        day_data = f_df[f_df["_date"] == day]
+        day_yield = _num(day_data["F-SHED"]).sum() if "F-SHED" in day_data.columns else 0
+        
+        # 2. Selected Month ka Yield (1st se selected date tak)
+        month_data = f_df[(f_df["_date"] >= day.replace(day=1)) & (f_df["_date"] <= day)]
+        month_yield = _num(month_data["F-SHED"]).sum() if "F-SHED" in month_data.columns else 0
+
+        # 3. Top 4 Categories (Grade wise) us month ka
+        grade_col = "ITEM"  # Aapki F-Shed sheet mein Grade 'ITEM' column mein hai
+        if grade_col in month_data.columns and "F-SHED" in month_data.columns:
+            grade_sum = month_data.groupby(grade_col)["F-SHED"].apply(lambda x: _num(x).sum()).sort_values(ascending=False).head(4)
+            categories_text = " | ".join(f"{str(k).title()}: {v:,.1f}" for k, v in grade_sum.items())
+        else:
+            categories_text = "Grade data not found"
+
+        return {
+            "value": f"{day_yield:,.1f} Yield",  # Aaj ka yield
+            "desc": f"Month-to-date: {month_yield:,.1f} Yield",
+            "color": BLUE,
+            "extra": f"Top 4 Categories: {categories_text}"
+        }
+
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
     if calc in ("order_pending", "order_current_schedule", "order_serviceability"):
         sub = df[df["_date"] <= day]
@@ -827,117 +860,6 @@ def compute_kpi(df, spec, day):
                 "desc": f"{n_app} of {n_all} orders approved",
                 "color": BLUE}
 
-        # ---------- SALES (Live Excel Data) ----------
-    if calc in ("sales_last_month", "sales_mtd", "sales_category_mix"):
-        # 1. AMT. column dhoondein (dot ke saath)
-        amt_col = next((c for c in df.columns if "AMT" in str(c).upper()), None)
-        if not amt_col:
-            raise DataError("Sales sheet mein 'AMT' column nahi mila.")
-        
-        df["_amt_num"] = _num(df[amt_col])
-        
-        # 2. BDLS. column dhoondein
-        bdl_col = next((c for c in df.columns if "BDLS" in str(c).upper()), None)
-        df["_bdls_num"] = _num(df[bdl_col]) if bdl_col else 0
-
-        # 3. Selected Date ke Month ka filter banayein
-        selected_month = day.strftime("%b-%y") 
-        mtd_data = df[df["_date"].apply(lambda d: d.strftime("%b-%y") == selected_month if pd.notna(d) else False)]
-        
-        if mtd_data.empty:
-            latest_date = df["_date"].max()
-            mtd_data = df[df["_date"] == latest_date]
-            selected_month = latest_date.strftime("%b-%y") if pd.notna(latest_date) else selected_month
-
-        # --- BLOCK 1: T/O IN THIS MONTH ---
-        if calc == "sales_mtd":
-            total_amt = mtd_data["_amt_num"].sum()
-            val_cr = total_amt / 10000000 
-            return {"value": f"₹{val_cr:,.2f} Cr", "desc": f"Turnover for {selected_month}", "color": BLUE}
-
-        # --- BLOCK 2: LAST DAY SALE ---
-        if calc == "sales_last_month":
-            total_amt = mtd_data["_amt_num"].sum()
-            total_bdls = mtd_data["_bdls_num"].sum()
-            val_cr = total_amt / 10000000
-            return {"value": f"₹{val_cr:,.2f} Cr", "desc": f"{total_bdls:,.0f} Bundles ({selected_month})", "color": BLUE}
-
-        # --- BLOCK 3: CATEGORY MIX (Top Cities) ---
-        if calc == "sales_category_mix":
-            if "CITY" in df.columns:
-                city_sum = mtd_data.groupby("CITY")["_amt_num"].sum().sort_values(ascending=False)
-                top_cities = city_sum.head(2)
-                text = " | ".join(f"{str(k).title()}: ₹{v/10000000:.2f} Cr" for k, v in top_cities.items())
-                return {"value": "Top Cities", "desc": text, "color": BLUE}
-            
-            return {"value": "Category Mix", "desc": "CITY column not found", "color": RED}
-
-        # ---------- MAINTENANCE ----------
-    if calc == "generic_count":
-        col = spec.get("col", "Issue Resolved")
-        if col not in df.columns:
-            return {"value": "0", "desc": "Column not found", "color": RED}
-        is_open = df[col].astype(str).str.strip().str.upper() == "FALSE"
-        extra = f"Total under repair (all dates): {int(is_open.sum())} Machines"
-        sub = df[df["_date"] == day]
-        if sub.empty:
-            return {"value": "0 Machines", "desc": "No breakdowns on this date",
-                    "color": BLUE, "extra": extra}
-        count = int((sub[col].astype(str).str.strip().str.upper() == "FALSE").sum())
-        return {"value": f"{count} Machines",
-                "desc": f"Breakdowns reported on {day:%d-%b-%Y}",
-                "color": RED if count > 0 else BLUE, "extra": extra}
-
-    if calc == "maintenance_pct":
-        if "Issue Resolved" not in df.columns:
-            return {"value": "Error", "desc": "Issue Resolved column not found", "color": RED}
-        flag = df["Issue Resolved"].astype(str).str.strip().str.upper()
-        done_all, total_all = int((flag == "TRUE").sum()), len(df)
-        extra = (f"Total (all dates): {done_all} of {total_all} resolved = "
-                f"{done_all / total_all * 100:.1f}%") if total_all else None
-        sub = df[df["_date"] == day]
-        if sub.empty:
-            return {"value": "0%", "desc": "No records on this date", "color": BLUE, "extra": extra}
-        resolved = int((sub["Issue Resolved"].astype(str).str.strip().str.upper() == "TRUE").sum())
-        return {"value": f"{resolved / len(sub) * 100:.1f}%",
-                "desc": f"{resolved} of {len(sub)} resolved on this date",
-                "color": BLUE, "extra": extra}
-
-        # ---------- PRODUCTION ----------
-    if calc == "prod_log":
-        t = PROD_TYPES[spec["type"]]
-        work = df
-        if t["col"]:
-            s = _pcol(df, t["col"]).astype(str).str.upper()
-            m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
-            if t.get("not"):
-                m &= ~s.str.contains("|".join(map(re.escape, t["not"])), na=False)
-            work = df[m]
-
-        def agg(d):
-            if d.empty:
-                return 0, 0.0
-            bdl = int(_pcol(d, "BDLS.").astype(str).str.strip().ne("").sum())
-            return bdl, float(_num(_pcol(d, t["qty"])).sum())
-
-        day_b, day_q = agg(work[work["_date"] == day])
-        mtd = work[(work["_date"] >= day.replace(day=1)) & (work["_date"] <= day)]
-        mtd_b, mtd_q = agg(mtd)
-        all_b, all_q = agg(work)
-        
-        # NAYA: Poora Month Total nikalne ke liye
-        month_start = day.replace(day=1)
-        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        month_end = next_month - datetime.timedelta(days=1)
-        full_month = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-        fm_b, fm_q = agg(full_month)
-
-        u = t["unit"]
-        return {"value": f"{day_b:,} Bdls | {day_q:,.0f} {u}",
-                "desc": f"Month-to-date: {mtd_b:,} Bdls | {mtd_q:,.0f} {u}",
-                "color": BLUE,
-                "extra": f"Month Total: {fm_b:,} Bdls | {fm_q:,.0f} {u} | Total (all dates): {all_b:,} Bdls | {all_q:,.0f} {u}"}
-        
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
     if calc == "prod_log" and spec.get("type") == "pillow":
         t = PROD_TYPES[spec["type"]]
@@ -969,8 +891,7 @@ def compute_kpi(df, spec, day):
                 "color": BLUE,
                 "extra": None} 
         
-        # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
-        # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
+    # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
         col = spec.get("col", "CONS")
         if col not in df.columns:
@@ -1354,6 +1275,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["REASON", "FINANCE"],
+    },
+        "f_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed.xlsx", 
+        "sheet_name": "F-Shed",
+        "date_col": "DATE",
+        "dayfirst": True,
     },
 }
 # ====================================================================
@@ -1828,6 +1756,8 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # --- PILLOW KE LIYE SIRF MONTH, DATE HIDDEN ---
+            # --- SIRF PILLOW KE LIYE DATE HIDDEN, BAaki sabke liye dikhao ---
+                        # --- SIRF PILLOW KE LIYE DATE HIDDEN, BAaki sabke liye dikhao ---
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
 
             if is_pillow:
