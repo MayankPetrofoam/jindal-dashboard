@@ -1798,7 +1798,7 @@ def render_kpi(dept_key, idx, title, desc):
             else:
                 dates = available_dates(df)
 
-            # --- MONTH + DATE dropdown (Saare mahine dikhane ke liye) ---
+            # --- MONTH dropdown ---
             all_months = set()
             for d in dates:
                 all_months.add((d.year, d.month))
@@ -1807,7 +1807,6 @@ def render_kpi(dept_key, idx, title, desc):
                 all_months.add((current_year, m))
                 all_months.add((current_year - 1, m))
             
-            # NAYA FIX: Jin mahino mein data hai wo upar dikhein, baaki neeche
             months_with_data = sorted({(d.year, d.month) for d in dates}, reverse=True)
             other_months = sorted([m for m in all_months if m not in months_with_data], reverse=True)
             months = months_with_data + other_months
@@ -1817,31 +1816,31 @@ def render_kpi(dept_key, idx, title, desc):
                 f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
                 format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
             )
-            month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             
-            # NAYA FIX: Agar selected month mein koi date nahi hai, toh error na de
+            month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             if not month_dates:
                 _disabled_date(title, key)
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
                 return
 
-            # --- SIRF PILLOW KE LIYE DATE HIDE KARO ---
+            # --- PILLOW KE LIYE SIRF MONTH, DATE HIDDEN ---
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
-            
+
             if is_pillow:
-                # Pillow ke liye Date dropdown nahi, bas pehli date utha lo calculation ke liye
-                chosen = month_dates[0] 
+                chosen = month_dates[0]
+                date_label = f"Full Month ({chosen.strftime('%b-%Y')})"
             else:
-                # Baaki sabke liye normal Date dropdown
                 chosen = dcol.selectbox(
                     f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
                     label_visibility="collapsed",
                     format_func=lambda d: d.strftime("%d-%m-%y"),
                 )
+                date_label = chosen.strftime(DATE_FMT)
 
-            st.session_state[key] = chosen      # Diagnostics panel ke liye
+            st.session_state[key] = chosen
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
-            label = f"{prefix} {chosen.strftime(DATE_FMT)}".strip()
+            label = f"{prefix} {date_label}".strip()
+            
             try:
                 res = compute_kpi(df, spec, chosen)
             except Exception as exc:
