@@ -948,11 +948,11 @@ def compute_kpi(df, spec, day):
         def agg_pillow(d):
             if d.empty:
                 return 0, 0.0
-            # BDLS column ka sum (jo ki sheet mein 0 hai)
+            # BDLS column ka sum
             bdl = int(_num(_pcol(d, "BDLS")).sum())
             
-            # 'SHEET' wale column ko hi Pcs maan kar sum karo
-            qty = float(len(d)) 
+            # Pcs ke liye 'SHEET' column ki values ko sum karo (kyunki sheet mein yahi Pcs hai)
+            qty = float(_num(_pcol(d, "SHEET")).sum()) 
             return bdl, qty
 
         # Sirf selected month ka data (1st se last date tak)
@@ -963,6 +963,7 @@ def compute_kpi(df, spec, day):
         
         month_b, month_q = agg_pillow(month_data)
 
+        # UI par display format
         return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
                 "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                 "color": BLUE,
