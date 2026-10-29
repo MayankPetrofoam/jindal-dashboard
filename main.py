@@ -900,6 +900,35 @@ def compute_kpi(df, spec, day):
                     "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                     "color": BLUE,
                     "extra": None}
+
+        # ---------- FINANCE: TOTAL DRS & CRS ----------
+    if calc == "finance_total_drs_crs":
+        cb_col = _pcol(df, "CB")
+        cb_vals = _num(cb_col).dropna()
+        debtors = cb_vals[cb_vals > 0].sum()
+        creditors = abs(cb_vals[cb_vals < 0].sum())
+        return {"value": f"₹{debtors:,.0f} Dr | ₹{creditors:,.0f} Cr",
+                "desc": f"Total Parties: {len(cb_vals)}", "color": BLUE}
+
+    # ---------- FINANCE: TOTAL DUE ----------
+    if calc == "finance_total_due":
+        total_col = _pcol(df, "TOTAL")
+        total_due = _num(total_col).sum()
+        return {"value": f"₹{total_due:,.0f}",
+                "desc": f"Total overdue amount (All buckets)", "color": BLUE}
+
+    # ---------- FINANCE: GREATER THAN 90 / 180 DAYS ----------
+    if calc == "finance_ageing_90_180":
+        col_61_120 = _pcol(df, "61-120")
+        col_120 = _pcol(df, ">120")
+        col_180 = _pcol(df, ">180")
+        
+        amt_90_plus = _num(col_61_120).sum() + _num(col_120).sum() + _num(col_180).sum()
+        amt_180_plus = _num(col_180).sum()
+        
+        return {"value": f"₹{amt_90_plus:,.0f}",
+                "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
+                "color": RED if amt_90_plus > 0 else BLUE}
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
     if calc in ("order_pending", "order_current_schedule", "order_serviceability"):
         sub = df[df["_date"] <= day]
@@ -1355,6 +1384,20 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+        "finance_ageing": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Finance.xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "sheet_name": "Ageing (2)",
+        "date_col": "PARTY NAME",
+    },
+    "finance_svp": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Finance.xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "sheet_name": "svp",
+        "date_col": "PARTY NAME",
+    },
 }
 # ====================================================================
 # 5b. KPI_SOURCES  (key = (department key, KPI title exactly as on screen))
@@ -1405,6 +1448,19 @@ KPI_SOURCES = {
         "sheet": "maintenance_logs",
         "mode": "as_of",
         "calc": "maintenance_pct",
+    },
+    # <<< FINANCE DATA SOURCE >>>
+    ("finance", "Total Drs & Crs"): {
+        "sheet": "finance_svp",
+        "calc": "finance_total_drs_crs",
+    },
+    ("finance", "Total Due (Drs & Crs)"): {
+        "sheet": "finance_ageing",
+        "calc": "finance_total_due",
+    },
+    ("finance", "Greater Than 90 / 180 Days"): {
+        "sheet": "finance_ageing",
+        "calc": "finance_ageing_90_180",
     },
 # <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
         # <<< SALES DATA SOURCE >>>
