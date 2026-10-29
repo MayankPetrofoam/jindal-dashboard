@@ -804,9 +804,9 @@ def compute_kpi(df, spec, day):
         
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
-            f_df, err_f, _ = get_sheet("f_shed")
-            if f_df is None:
-                return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
+        f_df, err_f, _ = get_sheet("f_shed")
+        if f_df is None:
+            return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
 
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
