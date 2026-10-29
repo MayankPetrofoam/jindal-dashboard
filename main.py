@@ -803,30 +803,46 @@ def compute_kpi(df, spec, day):
         ptype = spec.get("type")
         
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
-        if ptype == "rollpack":
+              if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
             if f_df is None:
-                return {"value": "Error", "desc": "F-Shed data not available", "color": RED}
+                return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
 
-            # F-Shed mein 'ITEM' column Grade hai aur 'F-SHED' column Yield/Quantity hai
-            day_data = f_df[f_df["_date"] == day]
-            day_yield = _num(day_data["F-SHED"]).sum() if "F-SHED" in day_data.columns else 0
-            
-            month_data = f_df[(f_df["_date"] >= day.replace(day=1)) & (f_df["_date"] <= day)]
-            month_yield = _num(month_data["F-SHED"]).sum() if "F-SHED" in month_data.columns else 0
+            month_start = day.replace(day=1)
+            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+            month_end = next_month - datetime.timedelta(days=1)
 
-            grade_col = "ITEM"
-            if grade_col in month_data.columns and "F-SHED" in month_data.columns:
-                grade_sum = month_data.groupby(grade_col)["F-SHED"].apply(lambda x: _num(x).sum()).sort_values(ascending=False).head(4)
-                categories_text = " | ".join(f"{str(k).title()}: {v:,.1f}" for k, v in grade_sum.items())
+            # --- YIELD: F-Shed sheet, DATE dropdown se ---
+            f_day = f_df[f_df["_date"] == day]
+            day_yield = float(_num(_pcol(f_day, "F-SHED")).sum()) if not f_day.empty else 0.0
+            f_mon = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
+            month_yield = float(_num(_pcol(f_mon, "F-SHED")).sum()) if not f_mon.empty else 0.0
+
+            # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
+            t = PROD_TYPES["rollpack"]
+            s = _pcol(df, t["col"]).astype(str).str.upper()
+            work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
+            w_mon = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+            if w_mon.empty:
+                bdls, sheets, weight = 0, 0.0, 0.0
             else:
-                categories_text = "Grade data not found"
+                bdls = int(_pcol(w_mon, "BDLS").astype(str).str.strip().ne("").sum())
+                sheets = float(_num(_pcol(w_mon, "SHEET")).sum())
+                weight = float(_num(_pcol(w_mon, "WEIGHT")).sum())
+
+            if not f_mon.empty:
+                top = (f_mon.assign(_v=_num(_pcol(f_mon, "F-SHED")))
+                       .groupby(_pcol(f_mon, "ITEM").astype(str).str.strip())["_v"].sum()
+                       .sort_values(ascending=False).head(4))
+                cats = " | ".join(f"{k}: {v:,.1f}" for k, v in top.items())
+            else:
+                cats = "No yield data this month"
 
             return {
                 "value": f"{day_yield:,.1f} Yield",
-                "desc": f"Month-to-date: {month_yield:,.1f} Yield",
+                "desc": f"Month ({month_start:%b-%y}): {bdls:,} Bdls | {sheets:,.0f} Sheets | {weight:,.1f} Wt",
                 "color": BLUE,
-                "extra": f"Top 4 Categories: {categories_text}"
+                "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
             }
 
         # 2. TOTAL aur MATTRESS ke liye generic logic (Production Logs sheet se)
@@ -1784,10 +1800,10 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # PATCH: Production sheet ke liye dates ko matrix se uthao
-            if str(spec.get("calc", "")).startswith("hr_"):
-                dates = _hr_dates(df)
-            else:
-                dates = available_dates(df)
+                if spec.get("type") == "rollpack":
+                _f, _e, _t = get_sheet("f_shed")
+                if _f is not None:
+                    dates = sorted(set(dates) | set(_f["_date"].dropna().unique()), reverse=True)
 
             # --- MONTH dropdown ---
             all_months = set()
