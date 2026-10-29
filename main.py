@@ -1387,14 +1387,14 @@ SHEETS = {
         "finance_ageing": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Finance.xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Ageing%20(2).xlsx", # <-- Yahan apni actual Finance file ka link daalein
         "sheet_name": "Ageing (2)",
         "date_col": "PARTY NAME",
     },
     "finance_svp": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Finance.xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/SVP%20(1).xlsx", # <-- Yahan apni actual Finance file ka link daalein
         "sheet_name": "svp",
         "date_col": "PARTY NAME",
     },
