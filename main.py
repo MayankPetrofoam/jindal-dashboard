@@ -1245,7 +1245,7 @@ SHEETS = {
     # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
         "sales_report": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
         "sheet_name": "Sales Data",  # Aapke screenshot ke hisaab se tab ka naam
         "date_col": "MONTH",         # Aapki sheet me date ka column
         "dayfirst": True,
@@ -1253,7 +1253,7 @@ SHEETS = {
     # Add more tabs/sheets here, each with ITS OWN date_col.
         "production_logs": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(4).xlsx",
         "sheet_name": "FY2026-27 Prod. Sheet",
         "date_col": "DATE",
         "dayfirst": True,
@@ -1261,25 +1261,24 @@ SHEETS = {
         "min_stock": {
         "type": "excel",
         "static": True,
-        "url": r"C:\Users\IT\Downloads\Stock Minimum Balance.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance.xlsx",
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
     },
-        "bdls_de": {
+            "bdls_de": {
         "type": "bdls_de",
         "url": "bdls_de",
         "files": (
-            ("D Shed", r"C:\Users\IT\Downloads\Shed-D Bdls+Prod (1).xlsx", "Shed-D Bdls+Prod"),
-            ("E Shed", r"C:\Users\IT\Downloads\Shed-E Bdls+Prod.xlsx", "Shed-E Bdls+Prod"),
+            ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-D%20Bdls%2BProd%20(1).xlsx", "Shed-D Bdls+Prod"),
+            ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-E%20Bdls%2BProd.xlsx", "Shed-E Bdls+Prod"),
         ),
     },
-
         "rolls_bc": {
         "type": "rolls_bc",
         "url": "rolls_bc",
         "files": (
-            ("B Shed", r"C:\Users\IT\Downloads\B-Shed Mtrs+Rolls+Prod.xlsx", "B-Shed Mtrs+Rolls+Prod"),
-            ("C Shed", r"C:\Users\IT\Downloads\C-Shed Mtrs+Rolls+Prod (1).xlsx", "C-Shed Mtrs+Rolls+Prod"),
+            ("B Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed%20Mtrs%2BRolls%2BProd.xlsx", "B-Shed Mtrs+Rolls+Prod"),
+            ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd%20(1).xlsx", "C-Shed Mtrs+Rolls+Prod"),
         ),
     },
 
@@ -1292,7 +1291,7 @@ SHEETS = {
 
         "foaming_chemicals": {
         "type": "excel", 
-        "url": r"C:\Users\IT\Downloads\Chemical Consumption.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20Consumption.xlsx",
         "sheet_name": "Data", # <--- YEH ADD KARNA ZAROORI HAI (Aapki excel file me jo tab ka naam hai, woh daalein)
         "date_col": "MONTH", 
         "dayfirst": True
@@ -1300,7 +1299,7 @@ SHEETS = {
 
         "stock_data": {
         "type": "stock",
-        "url": r"C:\Users\IT\Downloads\STOCK.xlsx",
+        "url":  "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/STOCK.xlsx",
         "sheet_name": "Inventory Data",
     },
 
@@ -1312,7 +1311,7 @@ SHEETS = {
     },
     "grade_category": {
         "type": "excel",
-        "url": r"C:\Users\IT\Downloads\Grade wise category (1).xlsx", 
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Grade%20wise%20category.xlsx", 
         "sheet_name": "Grade+Category",
         "date_col": "GRADE", 
         "static": True, 
@@ -1482,7 +1481,7 @@ DEPARTMENTS = [
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
-            ("📋 Plant Logs Register (Google Sheets)", r"C:\Users\IT\Downloads\All shed production 2026-27 (2).xlsx"),
+            ("📋 Plant Logs Register (Google Sheets)", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(4).xlsx"),
         ],
     },
     {
@@ -1865,7 +1864,6 @@ def discover_tabs(pub_url):
             tabs.append((f"tab gid {g}", g))
     return tabs or [("first tab", "0")]
 
-
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def peek_tab(pub_url, gid, n=8):
     data = _http_get(pub_url.split("/pub")[0] + f"/pub?output=csv&gid={gid}")
@@ -1972,7 +1970,7 @@ def render_diagnostics():
 # ====================================================================
 # 10. MAIN LAYOUT (original: two departments per row, auto-refresh fragment)
 # ====================================================================
-@st.fragment(run_every=REFRESH_SECONDS)
+@st.fragment
 def dashboard_body():
     st.session_state["_errors"] = {}
 
