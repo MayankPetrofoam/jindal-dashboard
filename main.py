@@ -798,38 +798,94 @@ def _fetch_rolls_cached(files):
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
-    # ---------- PRODUCTION: ROLLPACK (Yield from F-Shed) ----------
-    if calc == "prod_log" and spec.get("type") == "rollpack":
-        # F-Shed wali sheet ko load karo
-        f_df, err_f, _ = get_sheet("f_shed")
-        if f_df is None:
-            return {"value": "Error", "desc": "F-Shed data not available", "color": RED}
-
-        # F-Shed mein 'ITEM' column Grade hai aur 'F-SHED' column Yield/Quantity hai
-        # (Aapke screenshot ke hisaab se)
+    # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
+    if calc == "prod_log":
+        ptype = spec.get("type")
         
-        # 1. Selected Date ka Yield
-        day_data = f_df[f_df["_date"] == day]
-        day_yield = _num(day_data["F-SHED"]).sum() if "F-SHED" in day_data.columns else 0
-        
-        # 2. Selected Month ka Yield (1st se selected date tak)
-        month_data = f_df[(f_df["_date"] >= day.replace(day=1)) & (f_df["_date"] <= day)]
-        month_yield = _num(month_data["F-SHED"]).sum() if "F-SHED" in month_data.columns else 0
+        # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
+        if ptype == "rollpack":
+            f_df, err_f, _ = get_sheet("f_shed")
+            if f_df is None:
+                return {"value": "Error", "desc": "F-Shed data not available", "color": RED}
 
-        # 3. Top 4 Categories (Grade wise) us month ka
-        grade_col = "ITEM"  # Aapki F-Shed sheet mein Grade 'ITEM' column mein hai
-        if grade_col in month_data.columns and "F-SHED" in month_data.columns:
-            grade_sum = month_data.groupby(grade_col)["F-SHED"].apply(lambda x: _num(x).sum()).sort_values(ascending=False).head(4)
-            categories_text = " | ".join(f"{str(k).title()}: {v:,.1f}" for k, v in grade_sum.items())
-        else:
-            categories_text = "Grade data not found"
+            # F-Shed mein 'ITEM' column Grade hai aur 'F-SHED' column Yield/Quantity hai
+            day_data = f_df[f_df["_date"] == day]
+            day_yield = _num(day_data["F-SHED"]).sum() if "F-SHED" in day_data.columns else 0
+            
+            month_data = f_df[(f_df["_date"] >= day.replace(day=1)) & (f_df["_date"] <= day)]
+            month_yield = _num(month_data["F-SHED"]).sum() if "F-SHED" in month_data.columns else 0
 
-        return {
-            "value": f"{day_yield:,.1f} Yield",  # Aaj ka yield
-            "desc": f"Month-to-date: {month_yield:,.1f} Yield",
-            "color": BLUE,
-            "extra": f"Top 4 Categories: {categories_text}"
-        }
+            grade_col = "ITEM"
+            if grade_col in month_data.columns and "F-SHED" in month_data.columns:
+                grade_sum = month_data.groupby(grade_col)["F-SHED"].apply(lambda x: _num(x).sum()).sort_values(ascending=False).head(4)
+                categories_text = " | ".join(f"{str(k).title()}: {v:,.1f}" for k, v in grade_sum.items())
+            else:
+                categories_text = "Grade data not found"
+
+            return {
+                "value": f"{day_yield:,.1f} Yield",
+                "desc": f"Month-to-date: {month_yield:,.1f} Yield",
+                "color": BLUE,
+                "extra": f"Top 4 Categories: {categories_text}"
+            }
+
+        # 2. TOTAL aur MATTRESS ke liye generic logic (Production Logs sheet se)
+        elif ptype in ["total", "mattress"]:
+            t = PROD_TYPES[ptype]
+            df_prod = df.copy()
+            
+            # Agar 'total' nahi hai, toh ITEM column se filter karo
+            if t["col"]:
+                s = _pcol(df_prod, t["col"]).astype(str).str.upper()
+                m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
+                if t.get("not"):
+                    m = m & ~s.str.contains("|".join(map(re.escape, t["not"])), na=False)
+                df_prod = df_prod[m]
+
+            month_start = day.replace(day=1)
+            
+            # Daily (selected date) ka data
+            day_data = df_prod[df_prod["_date"] == day]
+            day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
+            day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
+            
+            # Month-to-date ka data
+            mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
+            mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
+            mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+
+            return {
+                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
+                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                "color": BLUE,
+                "extra": None
+            }
+
+        # 3. PILLOW ke liye purana logic (Jo aapne likha tha)
+        elif ptype == "pillow":
+            t = PROD_TYPES[ptype]
+            s = _pcol(df, t["col"]).astype(str).str.upper()
+            m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
+            work = df[m]
+
+            def agg_pillow(d):
+                if d.empty:
+                    return 0, 0.0
+                bdl = int(_num(_pcol(d, "BDLS")).sum())
+                qty = float(_num(_pcol(d, "SHEET")).sum()) 
+                return bdl, qty
+
+            month_start = day.replace(day=1)
+            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+            month_end = next_month - datetime.timedelta(days=1)
+            month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+            
+            month_b, month_q = agg_pillow(month_data)
+
+            return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
+                    "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
+                    "color": BLUE,
+                    "extra": None}
 
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
     if calc in ("order_pending", "order_current_schedule", "order_serviceability"):
@@ -1096,8 +1152,11 @@ def compute_kpi(df, spec, day):
                 "color": BLUE, "extra": f"Total manpower: {man:,.0f}"}
 
     # ---------- FALLBACK ----------
-    v = compute(df, spec, day)
-    return None if v is None else {"value": v, "desc": None, "color": None}
+    if spec.get("parts"):
+        v = compute(df, spec, day)
+        return None if v is None else {"value": v, "desc": None, "color": None}
+    else:
+        return {"value": "Not configured", "desc": "No calculation defined for this KPI", "color": GREY}
     
 
 
@@ -1278,7 +1337,7 @@ SHEETS = {
     },
         "f_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed.xlsx", 
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx", 
         "sheet_name": "F-Shed",
         "date_col": "DATE",
         "dayfirst": True,
