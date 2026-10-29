@@ -930,33 +930,40 @@ def compute_kpi(df, spec, day):
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
-    if calc in ("order_pending", "order_current_schedule", "order_serviceability"):
-        sub = df[df["_date"] <= day]
-        if sub.empty:
-            return None
-        fin = _pcol(df, "FINANCE").astype(str).str.strip().str.upper()
-        approved = fin.loc[sub.index] == "APPROVED"
-        n_all, n_app = len(sub), int(approved.sum())
-        n_pend = n_all - n_app
-
-        if calc == "order_pending":
-            return {"value": f"{n_pend} Orders",
-                    "desc": f"Finance approval pending (as of {day:%d-%b})",
-                    "color": RED if n_pend else BLUE,
-                    "extra": f"Total orders: {n_all} | Approved: {n_app}"}
-
-        if calc == "order_current_schedule":
-            d = df[df["_date"] == day]
-            d_app = int((fin.loc[d.index] == "APPROVED").sum())
-            return {"value": f"{len(d)} Orders",
-                    "desc": f"Received on {day:%d-%b-%Y}",
-                    "color": BLUE,
-                    "extra": f"Approved: {d_app} | Not approved: {len(d) - d_app}"}
-
-        pct = n_app / n_all * 100 if n_all else 0
-        return {"value": f"{pct:.1f}%",
-                "desc": f"{n_app} of {n_all} orders approved",
-                "color": BLUE}
+        # ---------- ORDER MANAGEMENT: AGEING (DIN KE HISAAB SE) ----------
+    if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
+        # Aaj ki date nikalenge comparison ke liye
+        today = datetime.date.today()
+        
+        # Har order ka age (din mein) nikaalenge
+        df_age = df.copy()
+        df_age["_age_days"] = df_age["_date"].apply(lambda x: (today - x).days if pd.notna(x) else 999)
+        
+        # Condition ke hisaab se filter karenge
+        if calc == "order_age_0_7":
+            sub = df_age[(df_age["_age_days"] >= 0) & (df_age["_age_days"] <= 7)]
+            label = "0-7 Days"
+            color = BLUE
+        elif calc == "order_age_7_14":
+            sub = df_age[(df_age["_age_days"] > 7) & (df_age["_age_days"] <= 14)]
+            label = "7-14 Days"
+            color = BLUE
+        elif calc == "order_age_14_21":
+            sub = df_age[(df_age["_age_days"] > 14) & (df_age["_age_days"] <= 21)]
+            label = "14-21 Days"
+            color = AMBER
+        elif calc == "order_age_21_plus":
+            sub = df_age[df_age["_age_days"] > 21]
+            label = "21+ Days (Critical)"
+            color = RED
+        
+        total_orders = len(sub)
+        
+        return {
+            "value": f"{total_orders} Orders",
+            "desc": f"{label} pending orders",
+            "color": color
+        }
 
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
     if calc == "prod_log" and spec.get("type") == "pillow":
@@ -1449,6 +1456,23 @@ KPI_SOURCES = {
         "mode": "as_of",
         "calc": "maintenance_pct",
     },
+        # <<< Yahan se naye Order Ageing blocks shuru >>>
+    ("order", "Orders 0-7 Days Old"): {
+        "sheet": "order_management",
+        "calc": "order_age_0_7",
+    },
+    ("order", "Orders 7-14 Days Old"): {
+        "sheet": "order_management",
+        "calc": "order_age_7_14",
+    },
+    ("order", "Orders 14-21 Days Old"): {
+        "sheet": "order_management",
+        "calc": "order_age_14_21",
+    },
+    ("order", "Orders 21+ Days Old"): {
+        "sheet": "order_management",
+        "calc": "order_age_21_plus",
+    },
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
         "sheet": "finance_svp",
@@ -1579,14 +1603,17 @@ DEPARTMENTS = [
         "icon": "📦",
         "name": "ORDER MANAGEMENT",
         "kpis": [
-            ("Orders Left (No. / Qty)", "PPC-wise pending"),
-            ("Current Schedule", "Schedule status"),
-            ("Serviceability %", "Serviceability"),
+            ("Orders 0-7 Days Old", "Naye pending orders"),
+            ("Orders 7-14 Days Old", "Pending 7 to 14 days"),
+            ("Orders 14-21 Days Old", "Pending 14 to 21 days"),
+            ("Orders 21+ Days Old", "Critical: Pending > 21 days"),
+            ("Current Schedule", "Today's orders"),
         ],
         "links": [
             ("📊 Order Dispatch Console (Power BI)", None),
             ("📋 Booking Tracker (Google Sheets)", None),
         ],
+    },
     },
     {
         "key": "sales",
