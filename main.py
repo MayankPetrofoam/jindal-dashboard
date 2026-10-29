@@ -804,9 +804,9 @@ def compute_kpi(df, spec, day):
         
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
-        f_df, err_f, _ = get_sheet("f_shed")
-        if f_df is None:
-            return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
+            f_df, err_f, _ = get_sheet("f_shed")
+            if f_df is None:
+                return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
 
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
@@ -823,6 +823,7 @@ def compute_kpi(df, spec, day):
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
             w_mon = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+            
             if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
@@ -850,7 +851,6 @@ def compute_kpi(df, spec, day):
             t = PROD_TYPES[ptype]
             df_prod = df.copy()
             
-            # Agar 'total' nahi hai, toh ITEM column se filter karo
             if t["col"]:
                 s = _pcol(df_prod, t["col"]).astype(str).str.upper()
                 m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
@@ -860,12 +860,10 @@ def compute_kpi(df, spec, day):
 
             month_start = day.replace(day=1)
             
-            # Daily (selected date) ka data
             day_data = df_prod[df_prod["_date"] == day]
             day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
             day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
             
-            # Month-to-date ka data
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
@@ -877,7 +875,7 @@ def compute_kpi(df, spec, day):
                 "extra": None
             }
 
-        # 3. PILLOW ke liye purana logic (Jo aapne likha tha)
+        # 3. PILLOW ke liye logic
         elif ptype == "pillow":
             t = PROD_TYPES[ptype]
             s = _pcol(df, t["col"]).astype(str).str.upper()
@@ -902,7 +900,6 @@ def compute_kpi(df, spec, day):
                     "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                     "color": BLUE,
                     "extra": None}
-
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
     if calc in ("order_pending", "order_current_schedule", "order_serviceability"):
         sub = df[df["_date"] <= day]
@@ -1799,8 +1796,14 @@ def render_kpi(dept_key, idx, title, desc):
                 _card(slot, title, "Data unavailable", err, RED, error=True)
                 return
 
-            # PATCH: Production sheet ke liye dates ko matrix se uthao
-                if spec.get("type") == "rollpack":
+            # Main Dates nikalne ka code
+            if str(spec.get("calc", "")).startswith("hr_"):
+                dates = _hr_dates(df)
+            else:
+                dates = available_dates(df)
+
+            # Rollpack ke liye F-shed ki dates bhi jodo
+            if spec.get("type") == "rollpack":
                 _f, _e, _t = get_sheet("f_shed")
                 if _f is not None:
                     dates = sorted(set(dates) | set(_f["_date"].dropna().unique()), reverse=True)
