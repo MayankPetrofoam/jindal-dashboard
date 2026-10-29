@@ -637,7 +637,7 @@ PROD_TYPES = {
     "bdls":     {"col": "ITEM", "words": ["BONDED"],                "qty": "SHEET", "unit": "Sheets"},
     "rolls":    {"col": "ITEM", "words": ["ROLL"], "not": ["ROLLPACK", "ROLL PACK"], "qty": "MTR", "unit": "Mtr"},
     "mattress": {"col": "ITEM", "words": ["MATTRESS"],              "qty": "SHEET", "unit": "Pcs"},
-    "pillow":   {"col": "ITEM", "words": ["PILLOW"],                "qty": "SHEET", "unit": "Pcs"},
+     "pillow":   {"col": "ITEM", "words": ["PILLOW"],                "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
     "rollpack": {"col": "ITEM", "words": ["ROLLPACK", "ROLL PACK"], "qty": "SHEET", "unit": "Pcs"},
 }
 
@@ -937,6 +937,34 @@ def compute_kpi(df, spec, day):
                 "desc": f"Month-to-date: {mtd_b:,} Bdls | {mtd_q:,.0f} {u}",
                 "color": BLUE,
                 "extra": f"Month Total: {fm_b:,} Bdls | {fm_q:,.0f} {u} | Total (all dates): {all_b:,} Bdls | {all_q:,.0f} {u}"}
+        # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
+    if calc == "prod_log" and spec.get("type") == "pillow":
+        t = PROD_TYPES[spec["type"]]
+        s = _pcol(df, t["col"]).astype(str).str.upper()
+        m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
+        work = df[m]
+
+        def agg_pillow(d):
+            if d.empty:
+                return 0, 0.0
+            bdl = int(_pcol(d, "BDLS.").astype(str).str.strip().ne("").sum())
+            # Pcs ke liye direct count (rows count)
+            qty = float(len(d))
+            return bdl, qty
+
+        # Sirf selected month ka data (1st se last date tak)
+        month_start = day.replace(day=1)
+        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        month_end = next_month - datetime.timedelta(days=1)
+        month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+        month_b, month_q = agg_pillow(month_data)
+        
+        all_b, all_q = agg_pillow(work)
+
+        return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
+                "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
+                "color": BLUE,
+                "extra": f"Total (all dates): {all_b:,} Bdls | {all_q:,.0f} Pcs"}
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
@@ -1770,7 +1798,7 @@ def render_kpi(dept_key, idx, title, desc):
             else:
                 dates = available_dates(df)
 
-    # --- MONTH + DATE dropdown (Saare mahine dikhane ke liye) ---
+            # --- MONTH + DATE dropdown (Saare mahine dikhane ke liye) ---
             all_months = set()
             for d in dates:
                 all_months.add((d.year, d.month))
@@ -1796,12 +1824,21 @@ def render_kpi(dept_key, idx, title, desc):
                 _disabled_date(title, key)
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
                 return
-                
-            chosen = dcol.selectbox(
-                f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
-                label_visibility="collapsed",
-                format_func=lambda d: d.strftime("%d-%m-%y"),
-            )
+
+            # --- SIRF PILLOW KE LIYE DATE HIDE KARO ---
+            is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
+            
+            if is_pillow:
+                # Pillow ke liye Date dropdown nahi, bas pehli date utha lo calculation ke liye
+                chosen = month_dates[0] 
+            else:
+                # Baaki sabke liye normal Date dropdown
+                chosen = dcol.selectbox(
+                    f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
+                    label_visibility="collapsed",
+                    format_func=lambda d: d.strftime("%d-%m-%y"),
+                )
+
             st.session_state[key] = chosen      # Diagnostics panel ke liye
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
             label = f"{prefix} {chosen.strftime(DATE_FMT)}".strip()
