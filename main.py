@@ -1454,14 +1454,16 @@ KPI_SOURCES = {
         "sheet": "finance_svp",
         "calc": "finance_total_drs_crs",
     },
-    ("finance", "Total Due (Drs & Crs)"): {
-        "sheet": "finance_ageing",
-        "calc": "finance_total_due",
-    },
     ("finance", "Greater Than 90 / 180 Days"): {
         "sheet": "finance_ageing",
         "calc": "finance_ageing_90_180",
     },
+    ("finance", "Total Due (Drs & Crs)"): {
+        "sheet": "finance_ageing",
+        "calc": "finance_total_due",
+    },
+    # Baaki 2 blocks (Receivable/Payable Days aur Total Amt Received/Paid) ke liye abhi data nahi hai
+    # isliye unhe hata dein ya unka "calc" empty chhod dein
 # <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
         # <<< SALES DATA SOURCE >>>
     ("sales", "Last Day Sale (Value & Bdls)"): {
