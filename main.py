@@ -937,7 +937,8 @@ def compute_kpi(df, spec, day):
                 "desc": f"Month-to-date: {mtd_b:,} Bdls | {mtd_q:,.0f} {u}",
                 "color": BLUE,
                 "extra": f"Month Total: {fm_b:,} Bdls | {fm_q:,.0f} {u} | Total (all dates): {all_b:,} Bdls | {all_q:,.0f} {u}"}
-        # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
+        
+    # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
     if calc == "prod_log" and spec.get("type") == "pillow":
         t = PROD_TYPES[spec["type"]]
         s = _pcol(df, t["col"]).astype(str).str.upper()
@@ -947,9 +948,11 @@ def compute_kpi(df, spec, day):
         def agg_pillow(d):
             if d.empty:
                 return 0, 0.0
-            bdl = int(_pcol(d, "BDLS.").astype(str).str.strip().ne("").sum())
-            # Pcs ke liye direct count (rows count)
-            qty = float(len(d))
+            # BDLS column ka sum (jo ki sheet mein 0 hai)
+            bdl = int(_num(_pcol(d, "BDLS")).sum())
+            
+            # 'SHEET' wale column ko hi Pcs maan kar sum karo
+            qty = float(len(d)) 
             return bdl, qty
 
         # Sirf selected month ka data (1st se last date tak)
@@ -957,14 +960,14 @@ def compute_kpi(df, spec, day):
         next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
         month_end = next_month - datetime.timedelta(days=1)
         month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-        month_b, month_q = agg_pillow(month_data)
         
-        all_b, all_q = agg_pillow(work)
+        month_b, month_q = agg_pillow(month_data)
 
         return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
                 "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                 "color": BLUE,
-                "extra": f"Total (all dates): {all_b:,} Bdls | {all_q:,.0f} Pcs"}
+                "extra": None} 
+        
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
