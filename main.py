@@ -799,7 +799,7 @@ def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
     # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
-        if calc == "prod_log":
+    if calc == "prod_log":
         ptype = spec.get("type")
         
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
