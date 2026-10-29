@@ -1388,7 +1388,7 @@ SHEETS = {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Ageing%20(2).xlsx", # <-- Yahan apni actual Finance file ka link daalein
-        "sheet_name": "Ageing (2)",
+        "sheet_name": "Ageing analysis",
         "date_col": "PARTY NAME",
     },
     "finance_svp": {
@@ -1892,13 +1892,12 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # --- PILLOW KE LIYE SIRF MONTH, DATE HIDDEN ---
-            # --- SIRF PILLOW KE LIYE DATE HIDDEN, BAaki sabke liye dikhao ---
-                        # --- SIRF PILLOW KE LIYE DATE HIDDEN, BAaki sabke liye dikhao ---
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
+            is_finance = str(spec.get("calc", "")).startswith("finance_")
 
-            if is_pillow:
+            if is_pillow or is_finance:
                 chosen = month_dates[0]
-                date_label = f"Full Month ({chosen.strftime('%b-%Y')})"
+                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow else "As on date"
             else:
                 chosen = dcol.selectbox(
                     f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
@@ -1906,8 +1905,8 @@ def render_kpi(dept_key, idx, title, desc):
                     format_func=lambda d: d.strftime("%d-%m-%y"),
                 )
                 date_label = chosen.strftime(DATE_FMT)
-
-            st.session_state[key] = chosen
+            
+            st.session_state[key] = chosen  # <--- YEH LINE BAHAR (EKDUM LEFT) AANI CHAHIYE
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
             label = f"{prefix} {date_label}".strip()
             
