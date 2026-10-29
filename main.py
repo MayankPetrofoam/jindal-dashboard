@@ -64,22 +64,36 @@ st.markdown(
     }
 
     .kpi-title { font-size: 10.5px; font-weight: 700; color: #334155;
-                 text-transform: uppercase; line-height: 1.15; }
+                text-transform: uppercase; line-height: 1.15; }
     .kpi-value { font-size: 16px; font-weight: 800; color: #0F172A; line-height: 1.2; }
     .kpi-desc  { font-size: 10px; font-weight: 500; line-height: 1.3;
-                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .kpi-date  { font-size: 10px; font-weight: 700; color: #1E3A8A; line-height: 1.3; }
     .kpi-err   { font-size: 10px; font-weight: 500; line-height: 1.3; color: #dc2626;
-                 max-height: 3.9em; overflow: hidden; }
+                max-height: 3.9em; overflow: hidden; }
     .kpi-wrap { padding-bottom: 1.1rem; }
 
     /* compact per-KPI date dropdown (original design) */
     /* Dropdowns ko naya size aur spacing dein */
+        /* Dropdowns ko chhota size aur spacing */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-        min-height: 28px !important; font-size: 11px !important;
+        min-height: 24px !important; 
+        font-size: 10px !important;
+        padding-left: 4px !important; 
+        padding-right: 1px !important;
     }
-    div[data-testid="stSelectbox"] { width: 100% !important; margin-bottom: 0px !important; }
-    div[data-testid="stHorizontalBlock"] { gap: 0.5rem !important; }
+    div[data-testid="stSelectbox"] { 
+        width: 100% !important; 
+        margin-bottom: 0 !important; 
+    }
+    /* Label ko chhota karo taaki jagah bache */
+    div[data-testid="stSelectbox"] label {
+        font-size: 9px !important;
+        margin-bottom: 2px !important;
+        line-height: 1 !important;
+    }
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] span { overflow: visible !important; }
+    div[data-testid="stDateInput"] { width: 132px !important; margin-bottom: -6px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -417,7 +431,7 @@ def _resolve_columns(df, overrides=None):
         raise DataError(
             "PO calculation cannot find column(s): " + ", ".join(missing)
             + f". Sheet columns are: {cols}. Fix: add \"columns\": {{\"po_no\": \"...\", \"item\": \"...\", "
-              "\"po_qty\": \"...\", \"received_qty\": \"...\"}} (exact header text) to the KPI in KPI_SOURCES."
+            "\"po_qty\": \"...\", \"received_qty\": \"...\"}} (exact header text) to the KPI in KPI_SOURCES."
         )
     if "received_qty" not in (overrides or {}):
         if set(_norm(found["received_qty"]).split()) & {"inv", "invoice"} and "receipt_date" not in found:
@@ -487,7 +501,7 @@ def po_pending(df, day, overrides=None, only_day=False):
         undated = ((w["_inv"] > 0) & ~rd.apply(lambda d: _is_date(d, lambda x: True)).astype(bool))
         if undated.any():
             issues.append(f"{int(undated.sum())} invoice rows have a quantity but no valid {c['receipt_date']}: "
-                          "counted as NOT yet received")
+                        "counted as NOT yet received")
         w["_rec_asof"] = w["_inv"].where(by_day, 0.0)
     else:
         w["_rec_asof"] = w["_inv"]
@@ -502,12 +516,12 @@ def po_pending(df, day, overrides=None, only_day=False):
         w["_sb"] = float("nan")
 
     agg = {c["po_no"]: "first", c["item"]: "first", "_po_qty": "first",
-           "_rec_asof": "sum", "_inv": "sum", "_sb": "first"}
+        "_rec_asof": "sum", "_inv": "sum", "_sb": "first"}
     if "uom" in c:
         agg[c["uom"]] = "first"
     g = w.groupby("_grp", sort=False).agg(agg).reset_index(drop=True)
     g = g.rename(columns={c["po_no"]: "PO", c["item"]: "Item", "_po_qty": "po_qty",
-                          "_rec_asof": "received", "_inv": "received_all", "_sb": "sheet_balance"})
+                        "_rec_asof": "received", "_inv": "received_all", "_sb": "sheet_balance"})
     g["UoM"] = g[c["uom"]].astype(str).str.strip() if "uom" in c else ""
 
     bad = g["po_qty"].isna() | (g["po_qty"] < 0)
@@ -593,7 +607,7 @@ def purchase_mtd(df, day, overrides=None, basis="received", all_time=False):
     flagged = _mixed_rate_items(df, c["item"], [c[k] for k in ("po_rate", "inv_rate") if k in c])
     used = set(rows[c["item"]].astype(str).str.strip().str.upper())
     table = pd.DataFrame({"PO": rows[c["po_no"]], "Item": rows[c["item"]], "Qty": qty,
-                          "Rate": rate, "Value": qty * rate})
+                        "Rate": rate, "Value": qty * rate})
     formula = (
         f"Sum of ({'Inv Qty x Invoice Rate for invoices with ' + c['receipt_date'] if basis == 'received' else 'PO Qty x PO Rate for PO lines with PO Date'}"
         f") between {start:%d-%m-%Y} and {day:%d-%m-%Y}; duplicate invoice rows ignored. "
@@ -688,8 +702,8 @@ def _hr_daily(df):
             raise DataError(f"HR sheet mein column '{need}' nahi mila. Columns: {list(cols.values())}")
     w = pd.DataFrame({"_date": df["_date"]})
     w["dept"] = (df[cols["department"]].astype(str).str.strip().str.upper()
-                 .str.replace(r"\s+", " ", regex=True)
-                 .replace({"STICHING & COVRING": "STICHING & COVERING"}))
+                .str.replace(r"\s+", " ", regex=True)
+                .replace({"STICHING & COVRING": "STICHING & COVERING"}))
     w["man"] = _num(df[cols["actual man power"]]).fillna(0)
     w["ot"] = _num(df[cols["total over time hours"]]).fillna(0)
     w = w[w["dept"] != ""]
@@ -727,6 +741,32 @@ def _fetch_stock_cached(url, sheet_name):
     df["_date"] = df["date"].dt.date
     if df.empty:
         raise DataError("Stock sheet mein koi valid date nahi mili")
+    return df, datetime.datetime.now(IST)
+
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_shed_cached(files):
+    """D/E shed jaisi files (Date=col C, Type=col D, Value=col E) jodta hai."""
+    def _to_date(v):
+        if isinstance(v, (datetime.datetime, pd.Timestamp)):
+            return v.date()
+        if isinstance(v, datetime.date):
+            return v
+        d = _parse_dates(pd.Series([str(v)]), True).iloc[0]
+        return d.date() if pd.notna(d) else None
+
+    frames = []
+    for shed, path, sheet in files:
+        raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=object, engine="openpyxl")
+        t = pd.DataFrame({
+            "shed": shed,
+            "_date": raw.iloc[:, 2].apply(_to_date),
+            "type": raw.iloc[:, 3].astype(str).str.strip().str.upper(),
+            "val": _num(raw.iloc[:, 4]).fillna(0),
+        })
+        frames.append(t.dropna(subset=["_date"]))
+    df = pd.concat(frames, ignore_index=True)
+    if df.empty:
+        raise DataError("Shed files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
@@ -854,7 +894,7 @@ def compute_kpi(df, spec, day):
         flag = df["Issue Resolved"].astype(str).str.strip().str.upper()
         done_all, total_all = int((flag == "TRUE").sum()), len(df)
         extra = (f"Total (all dates): {done_all} of {total_all} resolved = "
-                 f"{done_all / total_all * 100:.1f}%") if total_all else None
+                f"{done_all / total_all * 100:.1f}%") if total_all else None
         sub = df[df["_date"] == day]
         if sub.empty:
             return {"value": "0%", "desc": "No records on this date", "color": BLUE, "extra": extra}
@@ -863,7 +903,7 @@ def compute_kpi(df, spec, day):
                 "desc": f"{resolved} of {len(sub)} resolved on this date",
                 "color": BLUE, "extra": extra}
 
-    # ---------- PRODUCTION ----------
+        # ---------- PRODUCTION ----------
     if calc == "prod_log":
         t = PROD_TYPES[spec["type"]]
         work = df
@@ -884,11 +924,19 @@ def compute_kpi(df, spec, day):
         mtd = work[(work["_date"] >= day.replace(day=1)) & (work["_date"] <= day)]
         mtd_b, mtd_q = agg(mtd)
         all_b, all_q = agg(work)
+        
+        # NAYA: Poora Month Total nikalne ke liye
+        month_start = day.replace(day=1)
+        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        month_end = next_month - datetime.timedelta(days=1)
+        full_month = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+        fm_b, fm_q = agg(full_month)
+
         u = t["unit"]
         return {"value": f"{day_b:,} Bdls | {day_q:,.0f} {u}",
                 "desc": f"Month-to-date: {mtd_b:,} Bdls | {mtd_q:,.0f} {u}",
                 "color": BLUE,
-                "extra": f"Total (all dates): {all_b:,} Bdls | {all_q:,.0f} {u}"}
+                "extra": f"Month Total: {fm_b:,} Bdls | {fm_q:,.0f} {u} | Total (all dates): {all_b:,} Bdls | {all_q:,.0f} {u}"}
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
         # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
@@ -957,8 +1005,8 @@ def compute_kpi(df, spec, day):
         days = spec.get("dead_days", 90)
         cutoff = day - datetime.timedelta(days=days)
         g = (df[df["_date"] <= day]
-             .groupby(["group", "item", "_date"], as_index=False)
-             .agg(qty=("qty", "sum"), amount=("amount", "sum")))
+            .groupby(["group", "item", "_date"], as_index=False)
+            .agg(qty=("qty", "sum"), amount=("amount", "sum")))
         today = g[g["_date"] == day].set_index(["group", "item"])[["qty", "amount"]]
         if today.empty:
             return None
@@ -968,7 +1016,7 @@ def compute_kpi(df, spec, day):
         s = win.join(today, how="inner")
         s["first"] = first.reindex(s.index)
         dead = s[(s["qmin"] == s["qmax"]) & (s["qmax"] > 0)
-                 & s["first"].apply(lambda x: x <= cutoff)]
+                & s["first"].apply(lambda x: x <= cutoff)]
         total = today["amount"].sum()
         dv, dq = float(dead["amount"].sum()), float(dead["qty"].sum())
         by = dead.groupby(level=0)["amount"].sum().sort_values(ascending=False)
@@ -978,22 +1026,71 @@ def compute_kpi(df, spec, day):
                 "desc": f"{len(dead):,} items, {days}+ din se koi movement nahi ({pct} of stock)",
                 "color": RED if len(dead) else BLUE,
                 "extra": txt or "Koi dead stock nahi"}
-     # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
+    
+        # ---------- PRODUCTION: BDLS (D + E Shed) ----------
+    if calc == "bdls_de":
+        def tot(d, typ):
+            return float(d.loc[d["type"] == typ, "val"].sum())
+
+        d_day = df[df["_date"] == day]
+        # Month-to-date (1st se selected date tak)
+        d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
+        # POORA MONTH (1st se last date tak) - naya add kiya
+        month_start = day.replace(day=1)
+        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        month_end = next_month - datetime.timedelta(days=1)
+        d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
+
+        b, p = tot(d_day, "BUNDLES"), tot(d_day, "PRODUCTION")
+        
+        # Shed-wise breakdown for selected date
+        parts = []
+        for shed in sorted(df["shed"].unique()):
+            s = d_day[d_day["shed"] == shed]
+            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls")
+
+        # Naya: Complete month ki total production (Bundles + Production)
+        full_month_b = tot(d_full_month, "BUNDLES")
+        full_month_p = tot(d_full_month, "PRODUCTION")
+
+        return {
+            "value": f"{b:,.0f} Bdls | {p:,.1f} Prod",
+            "desc": f"Month-to-date: {tot(d_mtd, 'BUNDLES'):,.0f} Bdls | {tot(d_mtd, 'PRODUCTION'):,.1f} Prod",
+            "color": BLUE,
+            "extra": f"{' | '.join(parts)} | Month Total: {full_month_b:,.0f} Bdls | {full_month_p:,.1f} Prod"
+        }
+
+    # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
     if calc == "rolls_bc":
         def tot(d, typ):
             return float(d.loc[d["type"] == typ, "val"].sum())
 
         d_day = df[df["_date"] == day]
         d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
+        # POORA MONTH - naya add kiya
+        month_start = day.replace(day=1)
+        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        month_end = next_month - datetime.timedelta(days=1)
+        d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
+
         r, m, p = tot(d_day, "ROLLS"), tot(d_day, "METERS"), tot(d_day, "PRODUCTION")
+        
         parts = []
         for shed in sorted(df["shed"].unique()):
             s = d_day[d_day["shed"] == shed]
             parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr")
-        return {"value": f"{r:,.0f} Rolls | {m:,.0f} Mtr",
-                "desc": f"Production: {p:,.1f} | Month-to-date: {tot(d_mtd, 'ROLLS'):,.0f} Rolls",
-                "color": BLUE,
-                "extra": " | ".join(parts)}
+
+        # Naya: Complete month ki total production
+        full_month_r = tot(d_full_month, "ROLLS")
+        full_month_m = tot(d_full_month, "METERS")
+        full_month_p = tot(d_full_month, "PRODUCTION")
+
+        return {
+            "value": f"{r:,.0f} Rolls | {m:,.0f} Mtr",
+            "desc": f"Production: {p:,.1f} | Month-to-date: {tot(d_mtd, 'ROLLS'):,.0f} Rolls",
+            "color": BLUE,
+            "extra": f"{' | '.join(parts)} | Month Total: {full_month_r:,.0f} Rolls | {full_month_m:,.0f} Mtr | Prod: {full_month_p:,.1f}"
+        }
 
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
@@ -1002,7 +1099,7 @@ def compute_kpi(df, spec, day):
         r_all = po_pending(df, datetime.date.max, cols)        # poori sheet ka total pending
         uom = lambda r: " · ".join(f"{k or 'units'}: {v:,.0f}" for k, v in r["qty_by_uom"].items())
         total_txt = (f"Total pending (all dates): {r_all['open_pos']} POs"
-                     + (f" | {uom(r_all)}" if r_all["qty_by_uom"] else "")) if r_all else None
+                    + (f" | {uom(r_all)}" if r_all["qty_by_uom"] else "")) if r_all else None
         if r_day is None:
             return {"value": "0 POs", "desc": "No PO dated on this date", "color": None, "extra": total_txt}
         return {"value": f"{r_day['open_pos']} POs", "desc": uom(r_day) or None,
@@ -1141,11 +1238,11 @@ SHEETS = {
         "dayfirst": False,         # dates are month/day/year (e.g. 10/14/2026)
         "anchor": "PO #",          # a row with a PO # starts a new PO line
         "ffill": ["PO #", "PO Date", "Supplier Name", "Category", "Item Description",
-                  "UoM", "PO Qty", "PO Rate"],   # copied down onto the invoice rows below
+                "UoM", "PO Qty", "PO Rate"],   # copied down onto the invoice rows below
         "extra_date_cols": ["Recd Date"],        # receipt dates also appear in the date dropdown
         "ignore_cols": ["Status"],               # dropdown-only column (not used to detect blank rows)
     },
-     # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
+    # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
         "sales_report": {
         "type": "excel",
         "url": r"C:\Users\IT\Downloads\All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
@@ -1167,6 +1264,14 @@ SHEETS = {
         "url": r"C:\Users\IT\Downloads\Stock Minimum Balance.xlsx",
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
+    },
+        "bdls_de": {
+        "type": "bdls_de",
+        "url": "bdls_de",
+        "files": (
+            ("D Shed", r"C:\Users\IT\Downloads\Shed-D Bdls+Prod (1).xlsx", "Shed-D Bdls+Prod"),
+            ("E Shed", r"C:\Users\IT\Downloads\Shed-E Bdls+Prod.xlsx", "Shed-E Bdls+Prod"),
+        ),
     },
 
         "rolls_bc": {
@@ -1205,7 +1310,7 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
-     "grade_category": {
+    "grade_category": {
         "type": "excel",
         "url": r"C:\Users\IT\Downloads\Grade wise category (1).xlsx", 
         "sheet_name": "Grade+Category",
@@ -1251,13 +1356,13 @@ KPI_SOURCES = {
 
         # Production Department ke saare blocks ki live binding:
     ("production", "Total Production & Yield"): {"sheet": "production_logs", "calc": "prod_log", "type": "total"},
-    ("production", "Bdls & Yield"):      {"sheet": "production_logs", "calc": "prod_log", "type": "bdls"},
+    ("production", "Bdls & Yield"):      {"sheet": "bdls_de", "calc": "bdls_de"},
     ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
     ("production", "Mattress & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "mattress"},
     ("production", "Pillow & Yield"):    {"sheet": "production_logs", "calc": "prod_log", "type": "pillow"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
 
-       # <<< Maintenance  >>>
+    # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
     "sheet": "maintenance_logs",
         "mode": "as_of",
@@ -1270,7 +1375,7 @@ KPI_SOURCES = {
         "mode": "as_of",
         "calc": "maintenance_pct",
     },
-  # <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
+# <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
         # <<< SALES DATA SOURCE >>>
     ("sales", "Last Day Sale (Value & Bdls)"): {
         "sheet": "sales_report",
@@ -1501,7 +1606,7 @@ DEPARTMENTS = [
 
 # Dashboard mein departments ka order (upar se neeche)
 DISPLAY_ORDER = ["foaming", "production", "order", "sales", "purchase",
-                 "inventory", "finance", "maint", "hr", "other"]
+                "inventory", "finance", "maint", "hr", "other"]
 DEPARTMENTS.sort(key=lambda d: DISPLAY_ORDER.index(d["key"]))
 
 
@@ -1553,7 +1658,13 @@ def get_sheet(name):
     try:
         if isinstance(cfg.get("worksheet"), (list, tuple)):
             df, fetched = _fetch_multi_cached(cfg["url"], tuple(cfg["worksheet"]), cfg["date_col"],
-                                              cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
+                                            cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
+
+        if cfg.get("type") == "bdls_de":
+            df, fetched = _fetch_shed_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
@@ -1577,8 +1688,8 @@ def get_sheet(name):
             return df, None, now_ist
         if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-                                              cfg["date_col"], cfg.get("dayfirst", True),
-                                              cfg.get("static", False))
+                                            cfg["date_col"], cfg.get("dayfirst", True),
+                                            cfg.get("static", False))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
@@ -1613,7 +1724,7 @@ def _card(slot, title, value, desc, color, date_text=None, error=False, extra=No
     date_html = f'<div class="kpi-date">📅 {date_text}</div>' if date_text else ""
     safe = str(desc).replace('"', "'").replace("<", "&lt;")
     desc_html = (f'<div class="kpi-err" style="color:{color};" title="{safe}">{safe}</div>' if error else
-                 f'<div class="kpi-desc" style="color:{color};" title="{safe}">{safe}</div>')
+                f'<div class="kpi-desc" style="color:{color};" title="{safe}">{safe}</div>')
     extra_html = (f'<div class="kpi-date" style="color:#0F172A;">Σ {extra}</div>') if extra else ""
     slot.markdown(
         f"""
@@ -1631,7 +1742,7 @@ def _card(slot, title, value, desc, color, date_text=None, error=False, extra=No
 
 def _disabled_date(title, key):
     st.date_input(f"{title} date", datetime.datetime.now(IST).date(), key=key,
-                  label_visibility="collapsed", format="DD/MM/YYYY", disabled=True)
+                label_visibility="collapsed", format="DD/MM/YYYY", disabled=True)
 
 
 def render_kpi(dept_key, idx, title, desc):
@@ -1644,7 +1755,7 @@ def render_kpi(dept_key, idx, title, desc):
         if not spec:
             _disabled_date(title, key)
             _card(slot, title, "Not connected", MISSING_SOURCE.get((dept_key, title), DEFAULT_MISSING),
-                  GREY, error=True)
+                GREY, error=True)
             return
         try:
             _card(slot, title, "Loading…", "Fetching data", GREY)
@@ -1660,21 +1771,37 @@ def render_kpi(dept_key, idx, title, desc):
             else:
                 dates = available_dates(df)
 
-            # --- MONTH + DATE dropdown ---
-            # --- MONTH + DATE dropdown ---
-            months = sorted({(d.year, d.month) for d in dates}, reverse=True)
+    # --- MONTH + DATE dropdown (Saare mahine dikhane ke liye) ---
+            all_months = set()
+            for d in dates:
+                all_months.add((d.year, d.month))
+            current_year = datetime.datetime.now(IST).year
+            for m in range(1, 13):
+                all_months.add((current_year, m))
+                all_months.add((current_year - 1, m))
             
-            # Yahan columns me gap diya gaya hai taaki dono box alag dikhein
-            mcol, dcol = st.columns([1, 1], gap="medium") 
+            # NAYA FIX: Jin mahino mein data hai wo upar dikhein, baaki neeche
+            months_with_data = sorted({(d.year, d.month) for d in dates}, reverse=True)
+            other_months = sorted([m for m in all_months if m not in months_with_data], reverse=True)
+            months = months_with_data + other_months
+            
+            mcol, dcol = st.columns([1, 1], gap="small")
             chosen_m = mcol.selectbox(
                 f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
-                format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%Y"),
+                format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
             )
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
+            
+            # NAYA FIX: Agar selected month mein koi date nahi hai, toh error na de
+            if not month_dates:
+                _disabled_date(title, key)
+                _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
+                return
+                
             chosen = dcol.selectbox(
                 f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
                 label_visibility="collapsed",
-                format_func=lambda d: d.strftime(DATE_FMT),
+                format_func=lambda d: d.strftime("%d-%m-%y"),
             )
             st.session_state[key] = chosen      # Diagnostics panel ke liye
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
@@ -1769,7 +1896,7 @@ def render_explorer():
                 st.write(f"Tab **{tab_name}** · gid **{gid}** · {total} rows")
                 width = max((len(r) for r in rows), default=0)
                 st.dataframe(pd.DataFrame([r + [""] * (width - len(r)) for r in rows]),
-                             use_container_width=True, hide_index=True)
+                            use_container_width=True, hide_index=True)
 
 
 def render_diagnostics():
@@ -1814,7 +1941,7 @@ def render_diagnostics():
                         st.caption(r["formula"])
                         st.write("Columns used:", r["columns"])
                         st.write(f"**{r['open_pos']} open POs / {r['open_lines']} open lines.** "
-                                 f"Outstanding qty: {r['qty_by_uom']}")
+                                f"Outstanding qty: {r['qty_by_uom']}")
                         rec = r["recon"]
                         ok = rec["checked"] - len(rec["mismatch"])
                         st.write(f"Cross-check against the sheet's own Balance Qty: {ok} of {rec['checked']} lines agree.")
@@ -1833,7 +1960,7 @@ def render_diagnostics():
                         st.write(f"Total: **{_inr(r['value'])}** from {len(r['table'])} rows")
                         if r["warn_items"]:
                             st.warning("These items have rates that differ more than "
-                                       f"{MIXED_RATE_RATIO}x elsewhere in the sheet (mixed currencies?): {r['warn_items']}")
+                                    f"{MIXED_RATE_RATIO}x elsewhere in the sheet (mixed currencies?): {r['warn_items']}")
                         for i in r["issues"]:
                             st.warning(i)
                         st.dataframe(r["table"], use_container_width=True)
