@@ -1506,8 +1506,8 @@ SHEETS = {
     },
     "m_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
-        "sheet_name": "M-Shed",  # <--- YEH 0 SE "M-Shed" KAR DEIN
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed.xlsx",  # <-- Yahan apni M-Shed.xlsx ka Raw Link daalein
+        "sheet_name": 0,  # <-- Alag file hai, toh pehla tab (0) hi M-Shed hoga
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
