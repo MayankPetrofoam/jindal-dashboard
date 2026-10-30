@@ -812,7 +812,7 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
         ptype = spec.get("type")
-        
+
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
@@ -826,24 +826,25 @@ def compute_kpi(df, spec, day):
             # --- YIELD: F-Shed sheet, DATE dropdown se ---
             f_day = f_df[f_df["_date"] == day]
             day_yield = float(_num(_pcol(f_day, "F-SHED")).sum()) if not f_day.empty else 0.0
+
             f_mon = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
             month_yield = float(_num(_pcol(f_mon, "F-SHED")).sum()) if not f_mon.empty else 0.0
 
-            # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
             # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
             t = PROD_TYPES["rollpack"]
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
             w_mon = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-            
-        if w_mon.empty:
+
+            if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
-                # Direct numeric conversion
-                sheets = pd.to_numeric(w_mon["SHEET"], errors='coerce').fillna(0).sum() if "SHEET" in w_mon.columns else 0
-                weight = pd.to_numeric(w_mon["WEIGHT"], errors='coerce').fillna(0).sum() if "WEIGHT" in w_mon.columns else 0
-                bdls = pd.to_numeric(w_mon["BDLS"], errors='coerce').fillna(0).sum() if "BDLS" in w_mon.columns else 0
-                
+                sheets = pd.to_numeric(w_mon["SHEET"], errors="coerce").fillna(0).sum() \
+                    if "SHEET" in w_mon.columns else 0
+                weight = pd.to_numeric(w_mon["WEIGHT"], errors="coerce").fillna(0).sum() \
+                    if "WEIGHT" in w_mon.columns else 0
+                bdls = pd.to_numeric(w_mon["BDLS"], errors="coerce").fillna(0).sum() \
+                    if "BDLS" in w_mon.columns else 0
                 if bdls == 0:
                     bdls = sheets
 
@@ -862,75 +863,48 @@ def compute_kpi(df, spec, day):
                 "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
             }
 
-         # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
-        # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
         # 2. TOTAL ke liye logic
         elif ptype == "total":
             t = PROD_TYPES["total"]
             df_prod = df.copy()
 
-            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
-            
-            # BDLS column 0 hai, isliye use hata kar SHEET aur WEIGHT ka sum lein
-            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
-            month_start = day.replace(day=1)
-            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-            month_end = next_month - datetime.timedelta(days=1)
 
-            mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
-            
-            # Direct column names use karein
-            sheet_col = "SHEET" if "SHEET" in mtd_data.columns else "SHEET"
-            weight_col = "WEIGHT" if "WEIGHT" in mtd_data.columns else "WEIGHT"
-            bdls_col = "BDLS" if "BDLS" in mtd_data.columns else "BDLS."
-            
-         # Direct column names use karein aur directly numeric mein convert karein
-            # Direct column names use karein aur directly numeric mein convert karein
             mtd_sheets = 0
             mtd_weight = 0
             mtd_bdls = 0
-            
+
             if not mtd_data.empty:
-                # SHEET column (SHEET ya SHEET ✓)
                 if "SHEET" in mtd_data.columns:
                     mtd_sheets = pd.to_numeric(mtd_data["SHEET"], errors='coerce').fillna(0).sum()
                 elif "SHEET ✓" in mtd_data.columns:
                     mtd_sheets = pd.to_numeric(mtd_data["SHEET ✓"], errors='coerce').fillna(0).sum()
-                
-                # WEIGHT column (WEIGHT ya WEIGHT ✓)
+
                 if "WEIGHT" in mtd_data.columns:
                     mtd_weight = pd.to_numeric(mtd_data["WEIGHT"], errors='coerce').fillna(0).sum()
                 elif "WEIGHT ✓" in mtd_data.columns:
                     mtd_weight = pd.to_numeric(mtd_data["WEIGHT ✓"], errors='coerce').fillna(0).sum()
-                
-                # BDLS column (BDLS ya BDLS ✓ ya BDLS.)
+
                 if "BDLS" in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS"], errors='coerce').fillna(0).sum()
                 elif "BDLS ✓" in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS ✓"], errors='coerce').fillna(0).sum()
                 elif "BDLS." in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS."], errors='coerce').fillna(0).sum()
-                
-                # Agar BDLS 0 hai, toh SHEET ko hi Bdls maan lo
+
                 if mtd_bdls == 0:
                     mtd_bdls = mtd_sheets
-            
-            mtd_qty = mtd_sheets
-            
-            # Agar BDLS 0 hai, toh SHEET ko hi Bdls maan lo
-            if mtd_bdls == 0:
-                mtd_bdls = mtd_sheets
+
             mtd_qty = mtd_sheets
 
             # Saari shed files se Daily Yield nikaalo
             total_yield = 0.0
             mtd_yield = 0.0
-            
+
             for shed in ["m_shed", "f_shed"]:
                 s_df, _, _ = get_sheet(shed)
                 if s_df is not None:
@@ -940,7 +914,7 @@ def compute_kpi(df, spec, day):
                         if s_day.empty:
                             s_day = s_df[s_df["_date"] <= day].sort_values("_date").tail(1)
                         total_yield += float(_num(s_day[yield_col]).sum()) if not s_day.empty else 0.0
-                        
+
                         s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day)]
                         mtd_yield += float(_num(s_mtd[yield_col]).sum()) if not s_mtd.empty else 0.0
 
@@ -949,7 +923,7 @@ def compute_kpi(df, spec, day):
                 if s_df is not None and "val" in s_df.columns:
                     s_day = s_df[(s_df["_date"] == day) & (s_df["type"] == "PRODUCTION")]
                     total_yield += float(_num(s_day["val"]).sum()) if not s_day.empty else 0.0
-                    
+
                     s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day) & (s_df["type"] == "PRODUCTION")]
                     mtd_yield += float(_num(s_mtd["val"]).sum()) if not s_mtd.empty else 0.0
 
@@ -960,7 +934,7 @@ def compute_kpi(df, spec, day):
                 "extra": None
             }
 
-        # 3. MATTRESS ke liye logic (Production Prod. Sheet se + Yield M-Shed se)
+        # 3. MATTRESS ke liye logic
         elif ptype == "mattress":
             t = PROD_TYPES["mattress"]
             df_prod = df.copy()
@@ -970,21 +944,18 @@ def compute_kpi(df, spec, day):
                 m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
                 df_prod = df_prod[m]
 
-            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
-            
-            # Yahan dhyan dein: BDLS 0 hai, isliye use hata kar SHEET aur WEIGHT ka sum lein
+
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
             mtd_weight = _num(_pcol(mtd_data, "WEIGHT")).sum() if not mtd_data.empty else 0
 
-            # Agar BDLS 0 hai, toh "SHEET" column ke sum ko hi Bdls maan lein
             if mtd_bdls == 0:
-                mtd_bdls = mtd_qty  # SHEET = Bdls (approx)
+                mtd_bdls = mtd_qty
 
             m_df, err_m, _ = get_sheet("m_shed")
             if m_df is not None:
@@ -993,52 +964,21 @@ def compute_kpi(df, spec, day):
                     m_day = m_df[m_df["_date"] == day]
                     if m_day.empty:
                         m_day = m_df[m_df["_date"] <= day].sort_values("_date").tail(1)
-                    
+
                     day_yield = float(_num(m_day[m_col]).sum()) if not m_day.empty else 0.0
                     m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
                     mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
-                    
+
                     return {
                         "value": f"{day_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
                         "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
                         "color": BLUE,
                         "extra": None
                     }
-            
+
             return {
                 "value": f"0 Yield | {mtd_qty:,.0f} Sheets",
                 "desc": f"Month-to-date: {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
-                "color": BLUE,
-                "extra": None
-            }
-            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
-            return {
-                "value": f"{mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
-                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
-                "color": BLUE,
-                "extra": None
-            }
-            
-            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
-            return {
-                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
-                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
-                "color": BLUE,
-                "extra": None
-            }
-            
-            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
-            return {
-                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
-                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
-                "color": BLUE,
-                "extra": None
-            }
-            
-            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
-            return {
-                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
-                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
                 "color": BLUE,
                 "extra": None
             }
@@ -1054,20 +994,23 @@ def compute_kpi(df, spec, day):
                 if d.empty:
                     return 0, 0.0
                 bdl = int(_num(_pcol(d, "BDLS")).sum())
-                qty = float(_num(_pcol(d, "SHEET")).sum()) 
+                qty = float(_num(_pcol(d, "SHEET")).sum())
                 return bdl, qty
 
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
             month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-            
+
             month_b, month_q = agg_pillow(month_data)
 
             return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
                     "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                     "color": BLUE,
                     "extra": None}
+
+        else:
+            return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
         # ---------- FINANCE: TOTAL DRS & CRS ----------
     if calc == "finance_total_drs_crs":
