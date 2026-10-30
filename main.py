@@ -1305,6 +1305,14 @@ def compute_kpi(df, spec, day):
                 "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
                 "color": BLUE,
                 "extra": None} 
+        # ---------- FOAMING: STATIC VALUES (Temporary) ----------
+    if calc == "static_value":
+        return {
+            "value": spec.get("value", "0"),
+            "desc": spec.get("desc", ""),
+            "color": BLUE
+        }
+
         
     # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
@@ -1925,11 +1933,26 @@ KPI_SOURCES = {
         "calc": "sum_consumption",
         "col": "CONS"                 # <--- Excel me column ka naam CONS hai
     },
-    ("foaming", "TDI Balance"): {
-        "sheet": "foaming_chemicals",
-        "calc": "last_balance",
-        "col": "TDI_Balance"          # (Isko baad me theek karenge)
+
+        ("foaming", "Poly Stock"): {
+        "sheet": "manual", # Iska matlab hai ki data kisi sheet se nahi aayega
+        "calc": "static_value",
+        "value": "234,000 Kg",
+        "desc": "Polyol stock (Temporary fixed value)",
     },
+    ("foaming", "TDI Balance"): {
+        "sheet": "manual",
+        "calc": "static_value",
+        "value": "42,250 Kg",
+        "desc": "TDI Balance (Temporary fixed value)",
+    },
+    ("foaming", "Pop Polymer"): {
+        "sheet": "manual",
+        "calc": "static_value",
+        "value": "29,490 Kg",
+        "desc": "Pop Polymer stock (Temporary fixed value)",
+    },
+
     # <<< YAHAN TAK >>>
 }
 # Shown on KPI blocks that have no source yet, so "Not connected" always says why.
@@ -1975,6 +1998,7 @@ DEPARTMENTS = [
             ("Poly Stock", "Chemical stock"),
             ("POL Stock", "Chemical stock"),
             ("TDI Balance", "Chemical balance"),
+            ("Pop Polymer", "Pop polymer stock"), # <-- Naya block yahan add kiya
         ],
         "links": [
             ("📊 Tonnage Dashboard (Power BI)", None),
