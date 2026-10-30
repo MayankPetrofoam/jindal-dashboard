@@ -1044,16 +1044,24 @@ def compute_kpi(df, spec, day):
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         if calc == "sales_daily":
-            # Us mahine ka data filter karo (Yahan .dt ki jagah .apply use kiya hai)
+            # Us mahine ka data filter karo
             month_data = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
             if month_data.empty:
                 return {"value": "No Data", "desc": f"No records for {day.strftime('%b-%Y')}", "color": GREY}
             
-            # Us mahine ki sabse last date nikalna
-            last_day = month_data["_date"].max()
-            sub = month_data[month_data["_date"] == last_day]
+            # Us mahine ki sabse last date nikalna jisme data bhara ho (amount 0 na ho)
+            valid_data = month_data[month_data.apply(lambda r: _num(pd.Series([r.get("TOTAL SALE AMOUNT", "")])).iloc[0] > 0, axis=1)]
             
-            # Columns dhoondho (TOTAL SALE AMOUNT aur PARTIES COUNT)
+            if valid_data.empty:
+                # Agar poore mahine mein koi data nahi hai, toh last date uthao
+                last_day = month_data["_date"].max()
+                sub = month_data[month_data["_date"] == last_day]
+            else:
+                # Agar data hai, toh uski sabse last date uthao
+                last_day = valid_data["_date"].max()
+                sub = valid_data[valid_data["_date"] == last_day]
+            
+            # Columns dhoondho
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
             party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None)
             
