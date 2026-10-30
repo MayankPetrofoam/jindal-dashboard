@@ -1906,8 +1906,8 @@ KPI_SOURCES = {
         "calc": "sales_last_month", # Yeh function ab asli Excel se calculate karega
     },
     ("sales", "T/O in This Month"): {
-        "sheet": "sales_report",
-        "calc": "sales_mtd",
+        "sheet": "daily_sales_report",  # <-- Nayi sheet ka naam
+        "calc": "sales_daily_mtd",      # <-- Sahi calculation logic ka naam
     },
     ("sales", "Category Mix"): {
         "sheet": "sales_report",
