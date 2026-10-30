@@ -850,11 +850,12 @@ def compute_kpi(df, spec, day):
             }
 
          # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
+        # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
         elif ptype == "total":
             t = PROD_TYPES["total"]
             df_prod = df.copy()
 
-            # Production (BDLS / Sheets) ke liye MONTHLY data filter karo
+            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
@@ -862,13 +863,12 @@ def compute_kpi(df, spec, day):
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+            mtd_weight = _num(_pcol(mtd_data, "WEIGHT")).sum() if not mtd_data.empty else 0
 
             # Saari shed files se Daily Yield nikaalo
             total_yield = 0.0
             mtd_yield = 0.0
-            sheds = ["m_shed", "f_shed", "bdls_de", "rolls_bc"]  # D/E B/C ke liye alag logic hoga
-
-            # M-Shed aur F-Shed se Yield
+            
             for shed in ["m_shed", "f_shed"]:
                 s_df, _, _ = get_sheet(shed)
                 if s_df is not None:
@@ -882,7 +882,6 @@ def compute_kpi(df, spec, day):
                         s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day)]
                         mtd_yield += float(_num(s_mtd[yield_col]).sum()) if not s_mtd.empty else 0.0
 
-            # D-Shed / E-Shed / B-Shed / C-Shed (Production val) se Yield
             for shed_key in ["bdls_de", "rolls_bc"]:
                 s_df, _, _ = get_sheet(shed_key)
                 if s_df is not None and "val" in s_df.columns:
@@ -893,8 +892,8 @@ def compute_kpi(df, spec, day):
                     mtd_yield += float(_num(s_mtd["val"]).sum()) if not s_mtd.empty else 0.0
 
             return {
-                "value": f"{total_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
-                "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
+                "value": f"{total_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
+                "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
                 "color": BLUE,
                 "extra": None
             }
@@ -2096,16 +2095,18 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = available_dates(df)
 
             # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
+            # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
             if spec.get("type") == "mattress":
                 _m, _e, _t = get_sheet("m_shed")
                 if _m is not None:
                     dates = sorted(set(dates) | set(_m["_date"].dropna().unique()), reverse=True)
 
-            # Rollpack ke liye F-shed ki dates bhi jodo
-            if spec.get("type") == "rollpack":
-                _f, _e, _t = get_sheet("f_shed")
-                if _f is not None:
-                    dates = sorted(set(dates) | set(_f["_date"].dropna().unique()), reverse=True)
+            # TOTAL ke liye bhi saari sheds ki dates jodo
+            if spec.get("type") == "total":
+                for shed_key in ["m_shed", "f_shed", "bdls_de", "rolls_bc"]:
+                    _s, _e, _t = get_sheet(shed_key)
+                    if _s is not None and "_date" in _s.columns:
+                        dates = sorted(set(dates) | set(_s["_date"].dropna().unique()), reverse=True)
 
             # --- MONTH dropdown ---
             all_months = set()
