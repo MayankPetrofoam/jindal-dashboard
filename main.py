@@ -68,9 +68,9 @@ st.markdown(
     .kpi-value { font-size: 16px; font-weight: 800; color: #0F172A; line-height: 1.2; }
     .kpi-desc  { font-size: 10px; font-weight: 500; line-height: 1.3;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .kpi-date  { font-size: 10px; font-weight: 700; color: #1E3A8A; line-height: 1.3; }
-    .kpi-err   { font-size: 10px; font-weight: 500; line-height: 1.3; color: #dc2626;
-                max-height: 3.9em; overflow: hidden; }
+    .kpi-date  { font-size: 12px; font-weight: 700; color: #1E3A8A; line-height: 1.3; } /* 10px se 12px kiya */
+    .kpi-err   { font-size: 11px; font-weight: 500; line-height: 1.3; color: #dc2626;
+                max-height: 4.5em; overflow: hidden; } /* 10px se 11px kiya */
     .kpi-wrap { padding-bottom: 1.1rem; }
 
     /* compact per-KPI date dropdown (original design) */
