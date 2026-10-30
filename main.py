@@ -836,7 +836,7 @@ def compute_kpi(df, spec, day):
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
             w_mon = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
             
-             if w_mon.empty:
+        if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
                 # Direct numeric conversion
