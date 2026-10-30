@@ -889,27 +889,39 @@ def compute_kpi(df, spec, day):
             if ptype == "mattress":
                 m_df, err_m, _ = get_sheet("m_shed")
                 if m_df is not None:
-                    # M-Shed mein column dhoondho (M-SHED / MSHED)
                     m_col = next((c for c in m_df.columns if "M-SHED" in str(c).upper() or "MSHED" in str(c).upper()), None)
                     if m_col:
-                        # Daily Yield (aaj ke din ka)
                         m_day = m_df[m_df["_date"] == day]
                         if m_day.empty:
-                            # Agar aaj ka data nahi hai, toh latest available date utha lo
                             m_day = m_df[m_df["_date"] <= day].sort_values("_date").tail(1)
                         
                         day_yield = float(_num(m_day[m_col]).sum()) if not m_day.empty else 0.0
-                        
-                        # MTD Yield (1st se aaj tak ka)
                         m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
                         mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
                         
+                        # Yahan mtd_bdls aur mtd_qty (Prod. Sheet se) use ho rahe hain
                         return {
-                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",  # <--- Yahan mtd_bdls (Monthly Production) dikhaya hai
+                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",
                             "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
                             "color": BLUE,
                             "extra": None
                         }
+            
+            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
+            return {
+                "value": f"{mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                "color": BLUE,
+                "extra": None
+            }
+            
+            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
+            return {
+                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
+                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                "color": BLUE,
+                "extra": None
+            }
             
             # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
             return {
@@ -1517,8 +1529,8 @@ SHEETS = {
     },
     "m_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- YAHAN M-SHED (4).xlsx KA LINK DAALEIN
-        "sheet_name": 0,  # <-- ALAG FILE HAI, TOH PEHLA TAB (0) HI M-SHED HOGA
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- M-Shed (4).xlsx KA SAHI LINK
+        "sheet_name": "M-Shed",  # <-- Sheet tab ka naam "M-Shed" hi hai
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
