@@ -830,6 +830,7 @@ def compute_kpi(df, spec, day):
             month_yield = float(_num(_pcol(f_mon, "F-SHED")).sum()) if not f_mon.empty else 0.0
 
             # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
+            # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
             t = PROD_TYPES["rollpack"]
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
@@ -838,9 +839,17 @@ def compute_kpi(df, spec, day):
             if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
-                bdls = int(_pcol(w_mon, "BDLS").astype(str).str.strip().ne("").sum())
-                sheets = float(_num(_pcol(w_mon, "SHEET")).sum())
-                weight = float(_num(_pcol(w_mon, "WEIGHT")).sum())
+                # Direct column names use karein
+                sheet_col = "SHEET" if "SHEET" in w_mon.columns else "SHEET ✓"
+                weight_col = "WEIGHT" if "WEIGHT" in w_mon.columns else "WEIGHT ✓"
+                bdls_col = "BDLS" if "BDLS" in w_mon.columns else "BDLS ✓"
+                
+                bdls = _num(w_mon[bdls_col]).sum() if bdls_col in w_mon.columns else 0
+                sheets = _num(w_mon[sheet_col]).sum() if sheet_col in w_mon.columns else 0
+                weight = _num(w_mon[weight_col]).sum() if weight_col in w_mon.columns else 0
+                
+                if bdls == 0:
+                    bdls = sheets
 
             if not f_mon.empty:
                 top = (f_mon.assign(_v=_num(_pcol(f_mon, "F-SHED")))
@@ -872,11 +881,25 @@ def compute_kpi(df, spec, day):
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             
             # BDLS column 0 hai, isliye use hata kar SHEET aur WEIGHT ka sum lein
-            mtd_sheets = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
-            mtd_weight = _num(_pcol(mtd_data, "WEIGHT")).sum() if not mtd_data.empty else 0
+            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
+            month_start = day.replace(day=1)
+            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+            month_end = next_month - datetime.timedelta(days=1)
+
+            mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             
-            # SHEET ko hi Bdls maan lo
-            mtd_bdls = mtd_sheets
+            # Direct column names use karein
+            sheet_col = "SHEET" if "SHEET" in mtd_data.columns else "SHEET"
+            weight_col = "WEIGHT" if "WEIGHT" in mtd_data.columns else "WEIGHT"
+            bdls_col = "BDLS" if "BDLS" in mtd_data.columns else "BDLS."
+            
+            mtd_sheets = _num(mtd_data[sheet_col]).sum() if sheet_col in mtd_data.columns else 0
+            mtd_weight = _num(mtd_data[weight_col]).sum() if weight_col in mtd_data.columns else 0
+            mtd_bdls = _num(mtd_data[bdls_col]).sum() if bdls_col in mtd_data.columns else 0
+            
+            # Agar BDLS 0 hai, toh SHEET ko hi Bdls maan lo
+            if mtd_bdls == 0:
+                mtd_bdls = mtd_sheets
             mtd_qty = mtd_sheets
 
             # Saari shed files se Daily Yield nikaalo
