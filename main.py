@@ -1013,34 +1013,84 @@ def compute_kpi(df, spec, day):
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
         # ---------- SALES CALCULATIONS ----------
+    # ---------- SALES CALCULATIONS ----------
     if calc and str(calc).startswith("sales_"):
-        # AMT. aur BDLS. columns ko numeric bana rahe hain (₹ aur commas hata kar)
-        amt_col = _pcol(df, "AMT.")
-        bdls_col = _pcol(df, "BDLS.")
-        df["_amt"] = _num(amt_col)
-        df["_bdls"] = _num(bdls_col)
+        # Safe column picker (taaki crash na ho)
+        def safe_pcol(column_name):
+            try:
+                return _pcol(df, column_name)
+            except Exception:
+                for c in df.columns:
+                    if column_name.lower() in str(c).lower().replace(".", "").replace(" ", ""):
+                        return df[c]
+                return pd.Series([""] * len(df))
+
+        amt_col = safe_pcol("AMT")
+        bdls_col = safe_pcol("BDLS")
+        df["_amt"] = _num(amt_col).fillna(0)
+        df["_bdls"] = _num(bdls_col).fillna(0)
+
+        # Helper function jo selected month ka exact match dhundega
+        def get_selected_month_data():
+            # Yahan .dt.month ki galti sudhaar di gayi hai
+            mask = df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)
+            return df[mask]
 
         if calc == "sales_last_month":
-            last_day = df[df["_date"] <= day]
-            if last_day.empty:
-                return {"value": "No Data", "desc": "No sales found till this date", "color": GREY}
+            # Pehle check karo ki selected mahine mein data hai ya nahi
+            month_sub = get_selected_month_data()
+            if month_sub.empty:
+                return {"value": "No Data", "desc": f"No records found for {day.strftime('%b-%Y')}", "color": GREY}
             
-            # Sabse latest date nikalna
-            actual_last_date = last_day["_date"].max()
-            sub = last_day[last_day["_date"] == actual_last_date]
+            # Agar data hai, toh us mahine ki sabse badi date nikalo
+            actual_last_date = month_sub["_date"].max()
+            sub = month_sub[month_sub["_date"] == actual_last_date]
             
             total_amt = sub["_amt"].sum()
             total_bdls = sub["_bdls"].sum()
             
-            # Agar amount 0 hai (jaise kuch rows mein hota hai), toh sirf bdls dikhayein
-            if total_amt > 0:
-                val_str = f"{_inr(total_amt)} | {total_bdls:,.0f} Bdls"
-            else:
-                val_str = f"{total_bdls:,.0f} Bdls"
+            val_str = f"{_inr(total_amt)} | {total_bdls:,.0f} Bdls" if total_amt > 0 else f"{total_bdls:,.0f} Bdls"
                 
             return {
                 "value": val_str,
                 "desc": f"Last recorded sale on {actual_last_date.strftime('%d-%b-%Y')}",
+                "color": BLUE
+            }
+
+        elif calc == "sales_mtd":
+            # Selected date ke mahine ka data (Helper function use kiya)
+            sub = get_selected_month_data()
+            if sub.empty:
+                return {"value": "₹0", "desc": f"No sales in {day.strftime('%b-%Y')}", "color": GREY}
+            
+            total_amt = sub["_amt"].sum()
+            total_bdls = sub["_bdls"].sum()
+            return {
+                "value": _inr(total_amt),
+                "desc": f"Month-to-date: {total_bdls:,.0f} Bdls",
+                "color": BLUE
+            }
+
+        elif calc == "sales_category_mix":
+            sub = get_selected_month_data()
+            if sub.empty:
+                return {"value": "No Data", "desc": f"No category data for {day.strftime('%b-%Y')}", "color": GREY}
+            
+            cat_col = safe_pcol("ST. CODE")
+            df["_cat"] = cat_col.astype(str).str.strip()
+            
+            # ST. CODE ke hisaab se amount joda
+            mix = sub.groupby("_cat")["_amt"].sum().sort_values(ascending=False)
+            mix = mix[(mix.index != "") & (mix.index != "nan")] # Blank hatao
+            
+            if mix.empty:
+                return {"value": "No Data", "desc": "No category data", "color": GREY}
+
+            top = mix.head(2)
+            txt = " | ".join(f"{k}: {_inr(v)}" for k, v in top.items())
+            return {
+                "value": f"{len(mix)} Categories",
+                "desc": txt,
                 "color": BLUE
             }
 
