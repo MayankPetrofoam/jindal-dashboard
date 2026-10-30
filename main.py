@@ -1041,36 +1041,51 @@ def compute_kpi(df, spec, day):
             mask = df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)
             return df[mask]
 
-        if calc == "sales_last_month":
-            month_sub = get_selected_month_data()
-            if month_sub.empty:
-                return {"value": "No Data", "desc": f"Records not available for {day.strftime('%b-%Y')}", "color": GREY}
+        # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
+        if calc == "sales_daily":
+            # Us mahine ka data filter karo
+            month_data = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year)]
+            if month_data.empty:
+                return {"value": "No Data", "desc": f"No records for {day.strftime('%b-%Y')}", "color": GREY}
             
-            # Us month ki sabse last date nikalna
-            actual_last_date = month_sub["_date"].max()
-            sub = month_sub[month_sub["_date"] == actual_last_date]
+            # Us mahine ki sabse last date nikalna
+            last_day = month_data["_date"].max()
+            sub = month_data[month_data["_date"] == last_day]
             
-            total_amt = sub["_amt"].sum()
-            total_bdls = sub["_bdls"].sum()
+            # Columns dhoondho (TOTAL SALE AMOUNT aur ARTIES COUNT)
+            amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
+            party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None) # Aapki sheet mein ARTIES likha hai
             
-            val_str = f"{_inr(total_amt)} | {total_bdls:,.0f} Bdls" if total_amt > 0 else f"{total_bdls:,.0f} Bdls"
+            if not amt_col:
+                return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
                 
+            total_amt = _num(sub[amt_col]).sum()
+            total_parties = _num(sub[party_col]).sum() if party_col else 0
+            
             return {
-                "value": val_str,
-                "desc": f"Last recorded sale on {actual_last_date.strftime('%d-%b-%Y')}",
+                "value": _inr(total_amt),
+                "desc": f"Last recorded sale on {last_day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
                 "color": BLUE
             }
 
-        elif calc == "sales_mtd":
-            sub = get_selected_month_data()
+        elif calc == "sales_daily_mtd":
+            # Selected mahine ka poora data (1st se aaj tak)
+            sub = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year) & (df["_date"] <= day)]
             if sub.empty:
                 return {"value": "₹0", "desc": f"No sales in {day.strftime('%b-%Y')}", "color": GREY}
             
-            total_amt = sub["_amt"].sum()
-            total_bdls = sub["_bdls"].sum()
+            amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
+            party_col = next((c for c in df.columns if "ARTIES" in str(c).upper()), None)
+            
+            if not amt_col:
+                return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
+                
+            total_amt = _num(sub[amt_col]).sum()
+            total_parties = _num(sub[party_col]).sum() if party_col else 0
+            
             return {
                 "value": _inr(total_amt),
-                "desc": f"Month-to-date: {total_bdls:,.0f} Bdls",
+                "desc": f"Month-to-date | {total_parties:,.0f} Parties",
                 "color": BLUE
             }
 
@@ -1638,12 +1653,20 @@ SHEETS = {
         "ignore_cols": ["Status"],               # dropdown-only column (not used to detect blank rows)
     },
     # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
-        "sales_report": {
+    # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
+    "sales_report": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx", # <-- Yahan apni file ka exact naam/path daalein
-        "sheet_name": "Sales Data",  # Aapke screenshot ke hisaab se tab ka naam
-        "date_col": "MONTH",         # Aapki sheet me date ka column
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx", # <-- Purani Sheet ka Link
+        "sheet_name": "Sales Data",  # <-- Purani Sheet ka Tab (Jisme ST. CODE hai)
+        "date_col": "MONTH",         
         "dayfirst": True,
+    },
+    "daily_sales_report": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY_BASIS_SALES.xlsx", # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
+        "sheet_name": "LAST DAY SALE",  # <-- Nayi Sheet ka Tab name
+        "date_col": "DATE",             
+        "dayfirst": True,               
     },
     # Add more tabs/sheets here, each with ITS OWN date_col.
         "production_logs": {
@@ -1879,7 +1902,7 @@ KPI_SOURCES = {
 # <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
         # <<< SALES DATA SOURCE >>>
     ("sales", "Last Day Sale (Value & Bdls)"): {
-        "sheet": "sales_report",
+        "sheet": "daily_sales_report",
         "calc": "sales_last_month", # Yeh function ab asli Excel se calculate karega
     },
     ("sales", "T/O in This Month"): {
