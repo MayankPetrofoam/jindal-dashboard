@@ -1228,13 +1228,14 @@ def compute_kpi(df, spec, day):
         }
 
     # --- ORDERS LEFT (No. / Qty) ---
+    # --- ORDERS LEFT (No. / Qty) ---
     if calc == "order_pending":
         total_orders = len(pending_df)
         total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
         
-        if "TAB_GID" in  pending_df.columns:
+        if "TAB_GID" in pending_df.columns:
             # Dono sheets ke tabs alag-alag dikhane ke liye
-            per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in sub.groupby("TAB_GID"))
+            per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in pending_df.groupby("TAB_GID")) # <-- Changed 'sub' to 'pending_df'
         else:
             per_tab = ""
             
@@ -1803,7 +1804,7 @@ SHEETS = {
     "order_management_2": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml", # <-- YAHAN SHEET 2 KA LINK DAALEIN
         "worksheet": ["0", "648729418"], # <-- YAHAN SHEET 2 KE GIDS DAALEIN (jaise Sachin ka gid 0, Raman ka gid 12345)
-        "date_col": "DATE",
+        "date_col": "ORDER DATE",
         "dayfirst": False,
         "ignore_cols": ["REASON", "FINANCE"],
     },
