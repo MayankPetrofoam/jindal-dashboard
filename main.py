@@ -839,14 +839,10 @@ def compute_kpi(df, spec, day):
             if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
-                # Direct column names use karein
-                sheet_col = "SHEET" if "SHEET" in w_mon.columns else "SHEET ✓"
-                weight_col = "WEIGHT" if "WEIGHT" in w_mon.columns else "WEIGHT ✓"
-                bdls_col = "BDLS" if "BDLS" in w_mon.columns else "BDLS ✓"
-                
-                bdls = _num(w_mon[bdls_col]).sum() if bdls_col in w_mon.columns else 0
-                sheets = _num(w_mon[sheet_col]).sum() if sheet_col in w_mon.columns else 0
-                weight = _num(w_mon[weight_col]).sum() if weight_col in w_mon.columns else 0
+                # Direct numeric conversion
+                sheets = pd.to_numeric(w_mon["SHEET"], errors='coerce').fillna(0).sum() if "SHEET" in w_mon.columns else 0
+                weight = pd.to_numeric(w_mon["WEIGHT"], errors='coerce').fillna(0).sum() if "WEIGHT" in w_mon.columns else 0
+                bdls = pd.to_numeric(w_mon["BDLS"], errors='coerce').fillna(0).sum() if "BDLS" in w_mon.columns else 0
                 
                 if bdls == 0:
                     bdls = sheets
@@ -893,9 +889,34 @@ def compute_kpi(df, spec, day):
             weight_col = "WEIGHT" if "WEIGHT" in mtd_data.columns else "WEIGHT"
             bdls_col = "BDLS" if "BDLS" in mtd_data.columns else "BDLS."
             
-            mtd_sheets = _num(mtd_data[sheet_col]).sum() if sheet_col in mtd_data.columns else 0
-            mtd_weight = _num(mtd_data[weight_col]).sum() if weight_col in mtd_data.columns else 0
-            mtd_bdls = _num(mtd_data[bdls_col]).sum() if bdls_col in mtd_data.columns else 0
+                        # Direct column names use karein aur directly numeric mein convert karein
+            mtd_sheets = 0
+            mtd_weight = 0
+            mtd_bdls = 0
+            
+            if not mtd_data.empty:
+                if "SHEET" in mtd_data.columns:
+                    mtd_sheets = pd.to_numeric(mtd_data["SHEET"], errors='coerce').fillna(0).sum()
+                elif "SHEET" in mtd_data.columns:
+                    mtd_sheets = pd.to_numeric(mtd_data["SHEET ✓"], errors='coerce').fillna(0).sum()
+                
+                if "WEIGHT" in mtd_data.columns:
+                    mtd_weight = pd.to_numeric(mtd_data["WEIGHT"], errors='coerce').fillna(0).sum()
+                elif "WEIGHT" in mtd_data.columns:
+                    mtd_weight = pd.to_numeric(mtd_data["WEIGHT ✓"], errors='coerce').fillna(0).sum()
+                
+                if "BDLS" in mtd_data.columns:
+                    mtd_bdls = pd.to_numeric(mtd_data["BDLS"], errors='coerce').fillna(0).sum()
+                elif "BDLS." in mtd_data.columns:
+                    mtd_bdls = pd.to_numeric(mtd_data["BDLS ✓"], errors='coerce').fillna(0).sum()
+                elif "BDLS." in mtd_data.columns:
+                    mtd_bdls = pd.to_numeric(mtd_data["BDLS."], errors='coerce').fillna(0).sum()
+                
+                # Agar BDLS 0 hai, toh SHEET ko hi Bdls maan lo
+                if mtd_bdls == 0:
+                    mtd_bdls = mtd_sheets
+            
+            mtd_qty = mtd_sheets
             
             # Agar BDLS 0 hai, toh SHEET ko hi Bdls maan lo
             if mtd_bdls == 0:
