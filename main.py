@@ -1353,6 +1353,47 @@ def compute_kpi(df, spec, day):
                 "desc": f"{len(dead):,} items, {days}+ din se koi movement nahi ({pct} of stock)",
                 "color": RED if len(dead) else BLUE,
                 "extra": txt or "Koi dead stock nahi"}
+
+        # ---------- MAINTENANCE ----------
+    if calc == "generic_count":
+        col = spec.get("col")
+        where = spec.get("where", {})
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return {"value": "0", "desc": "No records found till this date", "color": BLUE}
+        
+        # Filter lagana (Jaise Issue Resolved blank hona chahiye)
+        for c, val in where.items():
+            if c in sub.columns:
+                sub = sub[sub[c].astype(str).str.strip() == str(val).strip()]
+        
+        count = len(sub)
+        return {
+            "value": f"{count} Machines",
+            "desc": "Currently under breakdown / repair",
+            "color": RED if count > 0 else BLUE
+        }
+
+    if calc == "maintenance_pct":
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return {"value": "0%", "desc": "No maintenance records", "color": GREY}
+        
+        # "Issue Resolved" column dhoondho (agar column ka naam thoda alag ho toh)
+        res_col = next((c for c in sub.columns if "RESOLVED" in str(c).upper()), None)
+        if not res_col:
+            return {"value": "No Column", "desc": "Issue Resolved column not found", "color": GREY}
+
+        total = len(sub)
+        resolved = sub[res_col].astype(str).str.strip().str.lower().isin(["yes", "y", "resolved", "done", "true"]).sum()
+        
+        pct = (resolved / total) * 100 if total > 0 else 0
+        
+        return {
+            "value": f"{pct:.1f}%",
+            "desc": f"{resolved} Resolved / {total} Total Breakdowns",
+            "color": BLUE if pct > 80 else AMBER
+        }
     
         # ---------- PRODUCTION: BDLS (D + E Shed) ----------
     if calc == "bdls_de":
