@@ -908,13 +908,21 @@ def compute_kpi(df, spec, day):
                 m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
                 df_prod = df_prod[m]
 
+            # Production (BDLS / Sheets / Weight) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
+            
+            # Yahan dhyan dein: BDLS 0 hai, isliye use hata kar SHEET aur WEIGHT ka sum lein
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+            mtd_weight = _num(_pcol(mtd_data, "WEIGHT")).sum() if not mtd_data.empty else 0
+
+            # Agar BDLS 0 hai, toh "SHEET" column ke sum ko hi Bdls maan lein
+            if mtd_bdls == 0:
+                mtd_bdls = mtd_qty  # SHEET = Bdls (approx)
 
             m_df, err_m, _ = get_sheet("m_shed")
             if m_df is not None:
@@ -2101,6 +2109,7 @@ def render_kpi(dept_key, idx, title, desc):
                 if _m is not None:
                     dates = sorted(set(dates) | set(_m["_date"].dropna().unique()), reverse=True)
 
+            # TOTAL ke liye bhi saari sheds ki dates jodo
             # TOTAL ke liye bhi saari sheds ki dates jodo
             if spec.get("type") == "total":
                 for shed_key in ["m_shed", "f_shed", "bdls_de", "rolls_bc"]:
