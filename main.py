@@ -1663,7 +1663,7 @@ SHEETS = {
     },
     "daily_sales_report": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY_BASIS_SALES.xlsx", # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx", # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
         "sheet_name": "LAST DAY SALE",  # <-- Nayi Sheet ka Tab name
         "date_col": "DATE",             
         "dayfirst": True,               
@@ -1906,8 +1906,8 @@ KPI_SOURCES = {
         "calc": "sales_last_month", # Yeh function ab asli Excel se calculate karega
     },
     ("sales", "T/O in This Month"): {
-        "sheet": "daily_sales_report",  # <-- Nayi sheet ka naam
-        "calc": "sales_daily_mtd",      # <-- Sahi calculation logic ka naam
+        "sheet": "daily_sales_report",  # <-- Nayi sheet
+        "calc": "sales_daily_mtd",      # <-- YEH "sales_daily_mtd" HONA CHAHIYE
     },
     ("sales", "Category Mix"): {
         "sheet": "sales_report",
