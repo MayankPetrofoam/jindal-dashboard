@@ -836,7 +836,7 @@ def compute_kpi(df, spec, day):
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
             w_mon = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
             
-            if w_mon.empty:
+             if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
                 # Direct numeric conversion
@@ -889,25 +889,29 @@ def compute_kpi(df, spec, day):
             weight_col = "WEIGHT" if "WEIGHT" in mtd_data.columns else "WEIGHT"
             bdls_col = "BDLS" if "BDLS" in mtd_data.columns else "BDLS."
             
-                        # Direct column names use karein aur directly numeric mein convert karein
+         # Direct column names use karein aur directly numeric mein convert karein
+            # Direct column names use karein aur directly numeric mein convert karein
             mtd_sheets = 0
             mtd_weight = 0
             mtd_bdls = 0
             
             if not mtd_data.empty:
+                # SHEET column (SHEET ya SHEET ✓)
                 if "SHEET" in mtd_data.columns:
                     mtd_sheets = pd.to_numeric(mtd_data["SHEET"], errors='coerce').fillna(0).sum()
-                elif "SHEET" in mtd_data.columns:
+                elif "SHEET ✓" in mtd_data.columns:
                     mtd_sheets = pd.to_numeric(mtd_data["SHEET ✓"], errors='coerce').fillna(0).sum()
                 
+                # WEIGHT column (WEIGHT ya WEIGHT ✓)
                 if "WEIGHT" in mtd_data.columns:
                     mtd_weight = pd.to_numeric(mtd_data["WEIGHT"], errors='coerce').fillna(0).sum()
-                elif "WEIGHT" in mtd_data.columns:
+                elif "WEIGHT ✓" in mtd_data.columns:
                     mtd_weight = pd.to_numeric(mtd_data["WEIGHT ✓"], errors='coerce').fillna(0).sum()
                 
+                # BDLS column (BDLS ya BDLS ✓ ya BDLS.)
                 if "BDLS" in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS"], errors='coerce').fillna(0).sum()
-                elif "BDLS." in mtd_data.columns:
+                elif "BDLS ✓" in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS ✓"], errors='coerce').fillna(0).sum()
                 elif "BDLS." in mtd_data.columns:
                     mtd_bdls = pd.to_numeric(mtd_data["BDLS."], errors='coerce').fillna(0).sum()
