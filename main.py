@@ -886,6 +886,7 @@ def compute_kpi(df, spec, day):
             day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
 
             # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
+            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
             if ptype == "mattress":
                 m_df, err_m, _ = get_sheet("m_shed")
                 if m_df is not None:
@@ -899,10 +900,10 @@ def compute_kpi(df, spec, day):
                         m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
                         mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
                         
-                        # Yahan mtd_bdls aur mtd_qty (Prod. Sheet se) use ho rahe hain
+                        # Yahan mtd_qty (Sheets/Pcs) use karein, mtd_bdls ki jagah
                         return {
-                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",
-                            "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                            "value": f"{day_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
+                            "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
                             "color": BLUE,
                             "extra": None
                         }
