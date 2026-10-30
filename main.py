@@ -938,20 +938,29 @@ def compute_kpi(df, spec, day):
         qty_col = None
         for c in df_ord.columns:
             n = _norm(c)
-            if "total" in n and ("bcl" in n or "bdl" in n or "bundle" in n):
+            # TOTAL BCLS / BUNDLES / QTY (ORDER) dhoondho
+            if ("total" in n and "bcl" in n) or ("qty" in n and "order" in n):
                 qty_col = c
                 break
-            if "qty" in n and "order" in n:
-                qty_col = c
-                break
+        
         if not qty_col:
-            qty_col = next((c for c in df_ord.columns if "TOTAL" in str(c).upper() or "QTY" in str(c).upper()), None)
+            # Fallback
+            for c in df_ord.columns:
+                n = str(c).upper()
+                if "TOTAL" in n or "QTY" in n:
+                    qty_col = c
+                    break
 
-        # 2. Pending filter (Finance APPROVED nahi hai toh pending hai)
+        # 2. Pending filter (Finance APPROVED nahi hai ya NOT APPROVED/PENDING hai toh pending hai)
+         # 2. Pending filter (Sirf APPROVED hi resolved hai, baaki sab pending hai)
         fin_col = next((c for c in df_ord.columns if "FINANCE" in str(c).upper()), None)
         if fin_col:
             fin_val = df_ord[fin_col].astype(str).str.strip().str.upper()
-            df_ord["_is_pending"] = ~fin_val.str.contains("APPROVED", na=False) & (fin_val != "") & (fin_val != "NAN")
+            
+            # Agar cell mein "APPROVED" hai AUR "NOT" nahi hai -> Resolved
+            # Baaki sab (NOT APPROVED, PAYMENT PENDING, blank) -> Pending
+            is_approved = fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False)
+            df_ord["_is_pending"] = ~is_approved
         else:
             df_ord["_is_pending"] = True
 
