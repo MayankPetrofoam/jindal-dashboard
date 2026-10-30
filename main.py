@@ -930,40 +930,106 @@ def compute_kpi(df, spec, day):
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
-        # ---------- ORDER MANAGEMENT: AGEING (DIN KE HISAAB SE) ----------
+    if calc and str(calc).startswith("order_"):
+        df_ord = df.copy()
+        
+        # 1. Qty Column dhoondho
+        qty_col = next((c for c in df_ord.columns if "TOTAL BCLS" in str(c).upper() or "QTY (ORDER)" in str(c).upper()), None)
+        if not qty_col:
+            for c in df_ord.columns:
+                n = _norm(c)
+                if "total" in n and ("bcl" in n or "bdl" in n or "bundle" in n):
+                    qty_col = c
+                    break
+
+        # 2. Pending filter (Finance APPROVED nahi hai toh pending hai)
+        fin_col = next((c for c in df_ord.columns if "FINANCE" in str(c).upper()), None)
+        if fin_col:
+            fin_val = df_ord[fin_col].astype(str).str.strip().str.upper()
+            df_ord["_is_pending"] = ~fin_val.str.contains("APPROVED", na=False) & (fin_val != "") & (fin_val != "NAN")
+        else:
+            df_ord["_is_pending"] = True
+
+        # 3. Age calculation (Selected date ke hisaab se)
+        df_ord["_age_days"] = df_ord["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 999)
+        pending_df = df_ord[df_ord["_is_pending"]]
+
+    # --- AGEING BLOCKS (0-7, 7-14, 14-21, 21+) ---
     if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
-        # Aaj ki date nikalenge comparison ke liye
-        today = datetime.date.today()
-        
-        # Har order ka age (din mein) nikaalenge
-        df_age = df.copy()
-        df_age["_age_days"] = df_age["_date"].apply(lambda x: (today - x).days if pd.notna(x) else 999)
-        
-        # Condition ke hisaab se filter karenge
         if calc == "order_age_0_7":
-            sub = df_age[(df_age["_age_days"] >= 0) & (df_age["_age_days"] <= 7)]
+            sub = pending_df[(pending_df["_age_days"] >= 0) & (pending_df["_age_days"] <= 7)]
             label = "0-7 Days"
             color = BLUE
         elif calc == "order_age_7_14":
-            sub = df_age[(df_age["_age_days"] > 7) & (df_age["_age_days"] <= 14)]
+            sub = pending_df[(pending_df["_age_days"] > 7) & (pending_df["_age_days"] <= 14)]
             label = "7-14 Days"
             color = BLUE
         elif calc == "order_age_14_21":
-            sub = df_age[(df_age["_age_days"] > 14) & (df_age["_age_days"] <= 21)]
+            sub = pending_df[(pending_df["_age_days"] > 14) & (pending_df["_age_days"] <= 21)]
             label = "14-21 Days"
             color = AMBER
         elif calc == "order_age_21_plus":
-            sub = df_age[df_age["_age_days"] > 21]
+            sub = pending_df[pending_df["_age_days"] > 21]
             label = "21+ Days (Critical)"
             color = RED
-        
+
         total_orders = len(sub)
+        total_qty = _num(sub[qty_col]).sum() if qty_col else 0
         
         return {
             "value": f"{total_orders} Orders",
-            "desc": f"{label} pending orders",
+            "desc": f"{label} pending | Qty: {total_qty:,.0f}",
             "color": color
         }
+
+    # --- ORDERS LEFT (No. / Qty) ---
+    if calc == "order_pending":
+        total_orders = len(pending_df)
+        total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
+        
+        # Tab wise breakdown
+        if "TAB_GID" in pending_df.columns:
+            per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in pending_df.groupby("TAB_GID"))
+        else:
+            per_tab = ""
+            
+        return {
+            "value": f"{total_orders} Orders",
+            "desc": f"Total Qty: {total_qty:,.0f}",
+            "color": RED if total_orders > 0 else BLUE,
+            "extra": per_tab
+        }
+
+    # --- CURRENT SCHEDULE (Aaj ki date ka data) ---
+    if calc == "order_current_schedule":
+        today_df = df_ord[df_ord["_date"] == day]
+        if today_df.empty:
+            return {"value": "0 Orders", "desc": "No orders scheduled", "color": GREY}
+        
+        total_orders = len(today_df)
+        total_qty = _num(today_df[qty_col]).sum() if qty_col else 0
+        pending_today = today_df[today_df["_is_pending"]]
+        
+        return {
+            "value": f"{total_orders} Orders",
+            "desc": f"Today's Qty: {total_qty:,.0f} | Pending: {len(pending_today)}",
+            "color": BLUE
+        }
+
+    # --- SERVICEABILITY % ---
+    if calc == "order_serviceability":
+        total = len(df_ord)
+        if total == 0:
+            return None
+        approved = len(df_ord[~df_ord["_is_pending"]])
+        pct = (approved / total) * 100
+        
+        return {
+            "value": f"{pct:.1f}%",
+            "desc": f"{approved} Approved / {total} Total",
+            "color": BLUE if pct > 80 else AMBER
+        }
+        
 
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
     if calc == "prod_log" and spec.get("type") == "pillow":
@@ -1457,22 +1523,15 @@ KPI_SOURCES = {
         "calc": "maintenance_pct",
     },
         # <<< Yahan se naye Order Ageing blocks shuru >>>
-    ("order", "Orders 0-7 Days Old"): {
-        "sheet": "order_management",
-        "calc": "order_age_0_7",
-    },
-    ("order", "Orders 7-14 Days Old"): {
-        "sheet": "order_management",
-        "calc": "order_age_7_14",
-    },
-    ("order", "Orders 14-21 Days Old"): {
-        "sheet": "order_management",
-        "calc": "order_age_14_21",
-    },
-    ("order", "Orders 21+ Days Old"): {
-        "sheet": "order_management",
-        "calc": "order_age_21_plus",
-    },
+    # <<< ORDER MANAGEMENT DATA SOURCE >>>
+    ("order", "Orders 0-7 Days Old"): {"sheet": "order_management", "calc": "order_age_0_7"},
+    ("order", "Orders 7-14 Days Old"): {"sheet": "order_management", "calc": "order_age_7_14"},
+    ("order", "Orders 14-21 Days Old"): {"sheet": "order_management", "calc": "order_age_14_21"},
+    ("order", "Orders 21+ Days Old"): {"sheet": "order_management", "calc": "order_age_21_plus"},
+    ("order", "Orders Left (No. / Qty)"): {"sheet": "order_management", "calc": "order_pending"},
+    ("order", "Current Schedule"): {"sheet": "order_management", "calc": "order_current_schedule"},
+    ("order", "Serviceability %"): {"sheet": "order_management", "calc": "order_serviceability"},
+    
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
         "sheet": "finance_svp",
@@ -1515,19 +1574,6 @@ KPI_SOURCES = {
         "sheet": "foaming_chemicals",
         "calc": "last_balance",
         "col": "TDI_Balance"          # (Isko baad me theek karenge)
-    },
-        # <<< ORDER MANAGEMENT DATA SOURCE >>>
-    ("order", "Orders Left (No. / Qty)"): {
-        "sheet": "order_management",
-        "calc": "order_pending",
-    },
-    ("order", "Current Schedule"): {
-        "sheet": "order_management",
-        "calc": "order_current_schedule",
-    },
-    ("order", "Serviceability %"): {
-        "sheet": "order_management",
-        "calc": "order_serviceability",
     },
     # <<< YAHAN TAK >>>
 }
@@ -1598,7 +1644,7 @@ DEPARTMENTS = [
             ("📋 Plant Logs Register (Google Sheets)", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(4).xlsx"),
         ],
     },
-    {
+     {
         "key": "order",
         "icon": "📦",
         "name": "ORDER MANAGEMENT",
@@ -1607,7 +1653,9 @@ DEPARTMENTS = [
             ("Orders 7-14 Days Old", "Pending 7 to 14 days"),
             ("Orders 14-21 Days Old", "Pending 14 to 21 days"),
             ("Orders 21+ Days Old", "Critical: Pending > 21 days"),
-            ("Current Schedule", "Today's orders"),
+            ("Orders Left (No. / Qty)", "Total pending combined"),
+            ("Current Schedule", "Aaj ke orders"),
+            ("Serviceability %", "Approved vs Total"),
         ],
         "links": [
             ("📊 Order Dispatch Console (Power BI)", None),
