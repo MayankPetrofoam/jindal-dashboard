@@ -1614,7 +1614,6 @@ DEPARTMENTS = [
             ("📋 Booking Tracker (Google Sheets)", None),
         ],
     },
-    },
     {
         "key": "sales",
         "icon": "💰",
