@@ -1091,6 +1091,26 @@ def compute_kpi(df, spec, day):
             }
 
         # Agar koi aur sales calc ho toh yahan se pehle wala purana code hata dein
+
+        # ---------- OTHERS: FREIGHT ----------
+    if calc == "freight_mtd":
+        sub = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
+        if sub.empty:
+            return {"value": "₹0", "desc": "No freight data this month", "color": GREY}
+        
+        # Freight ka total (ACT. RATE column uthayenge)
+        act_rate_col = next((c for c in sub.columns if "ACT" in str(c).upper()), None)
+        if not act_rate_col:
+            return {"value": "Config error", "desc": "ACT. RATE column nahi mila", "color": RED}
+            
+        total_amt = _num(sub[act_rate_col]).sum()
+        total_inv = sub["INV. NO."].nunique() if "INV. NO." in sub.columns else len(sub)
+        
+        return {
+            "value": _inr(total_amt),
+            "desc": f"Month-to-date: {total_inv} Invoices",
+            "color": BLUE
+        }
  # ---------- FINANCE: TOTAL DRS & CRS ----------
     if calc == "finance_total_drs_crs":
         cb_col = _pcol(df, "CB")
@@ -1713,6 +1733,13 @@ SHEETS = {
         "url":  "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/STOCK.xlsx",
         "sheet_name": "Inventory Data",
     },
+        "freight_data": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3meZTQ5PvgX63s8_3Nc87WfD-RzNXc9fu8t_hmlZZ2g3VAffZn01a__L7WtKTTPPbuTRFOwZC-mLh/pubhtml",
+        "worksheet": "1511781172",  # Aapki screenshot ke hisaab se GID
+        "date_col": "DATE",         # Freight sheet mein date wala column
+        "dayfirst": False,          # 22-Oct-26 format ke liye
+        "ignore_cols": ["MONTH"],   # MONTH column ko filter karne ke liye
+    },
 
     "hr_manpower": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4PjMPwxSrMxWE010j_3E4TXjUmmHo9nERPYUcTKfrHE9C_NeR-HbC50QrpKc8Yw/pubhtml",
@@ -1800,6 +1827,12 @@ KPI_SOURCES = {
     ("production", "Mattress & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "mattress"},
     ("production", "Pillow & Yield"):    {"sheet": "production_logs", "calc": "prod_log", "type": "pillow"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
+
+    # <<< FREIGHT DATA SOURCE >>>
+    ("other", "Freight Report"): {
+        "sheet": "freight_data",
+        "calc": "freight_mtd",
+    },
 
     # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
