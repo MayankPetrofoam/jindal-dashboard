@@ -1232,7 +1232,7 @@ def compute_kpi(df, spec, day):
         total_orders = len(pending_df)
         total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
         
-        if "TAB_GID" in sub.columns:
+        if "TAB_GID" in  pending_df.columns:
             # Dono sheets ke tabs alag-alag dikhane ke liye
             per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in sub.groupby("TAB_GID"))
         else:
