@@ -1012,6 +1012,70 @@ def compute_kpi(df, spec, day):
         else:
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
+        # ---------- SALES CALCULATIONS ----------
+    if calc and str(calc).startswith("sales_"):
+        # AMT. aur BDLS. columns ko numeric bana rahe hain (₹ aur commas hata kar)
+        amt_col = _pcol(df, "AMT.")
+        bdls_col = _pcol(df, "BDLS.")
+        df["_amt"] = _num(amt_col)
+        df["_bdls"] = _num(bdls_col)
+
+        if calc == "sales_last_month":
+            last_day = df[df["_date"] <= day]
+            if last_day.empty:
+                return {"value": "No Data", "desc": "No sales found till this date", "color": GREY}
+            
+            # Sabse latest date nikalna
+            actual_last_date = last_day["_date"].max()
+            sub = last_day[last_day["_date"] == actual_last_date]
+            
+            total_amt = sub["_amt"].sum()
+            total_bdls = sub["_bdls"].sum()
+            
+            # Agar amount 0 hai (jaise kuch rows mein hota hai), toh sirf bdls dikhayein
+            if total_amt > 0:
+                val_str = f"{_inr(total_amt)} | {total_bdls:,.0f} Bdls"
+            else:
+                val_str = f"{total_bdls:,.0f} Bdls"
+                
+            return {
+                "value": val_str,
+                "desc": f"Last recorded sale on {actual_last_date.strftime('%d-%b-%Y')}",
+                "color": BLUE
+            }
+
+        elif calc == "sales_mtd":
+            # Selected date ke mahine ka data
+            sub = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year) & (df["_date"] <= day)]
+            if sub.empty:
+                return {"value": "₹0", "desc": "No sales this month", "color": GREY}
+            
+            total_amt = sub["_amt"].sum()
+            total_bdls = sub["_bdls"].sum()
+            return {
+                "value": _inr(total_amt),
+                "desc": f"Month-to-date: {total_bdls:,.0f} Bdls",
+                "color": BLUE
+            }
+
+        elif calc == "sales_category_mix":
+            sub = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year) & (df["_date"] <= day)]
+            if sub.empty:
+                return None
+            
+            # ST. CODE ke basis par group karke amount sum karna
+            cat_col = _pcol(df, "ST. CODE")
+            mix = sub.groupby(cat_col)["_amt"].sum().sort_values(ascending=False)
+            top = mix.head(2)
+            
+            txt = " | ".join(f"{k}: {_inr(v)}" for k, v in top.items())
+            return {
+                "value": f"{len(mix)} Categories",
+                "desc": txt,
+                "color": BLUE
+            }
+
+
         # ---------- FINANCE: TOTAL DRS & CRS ----------
     if calc == "finance_total_drs_crs":
         cb_col = _pcol(df, "CB")
