@@ -875,7 +875,6 @@ def compute_kpi(df, spec, day):
             day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
 
             # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
-            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
             if ptype == "mattress":
                 m_df, err_m, _ = get_sheet("m_shed")
                 if m_df is not None:
@@ -895,7 +894,7 @@ def compute_kpi(df, spec, day):
                         mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
                         
                         return {
-                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",
+                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",  # <--- Yahan mtd_bdls (Monthly Production) dikhaya hai
                             "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
                             "color": BLUE,
                             "extra": None
@@ -1505,10 +1504,10 @@ SHEETS = {
         "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
         "ignore_cols": ["REASON", "FINANCE"],
     },
-     "m_shed": {
+    "m_shed": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
-        "sheet_name": 0,  # <--- YEH "M-Shed" KI JAGAH 0 KAR DEIN
+        "sheet_name": "M-Shed",  # <--- YEH 0 SE "M-Shed" KAR DEIN
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
