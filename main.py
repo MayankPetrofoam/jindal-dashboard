@@ -1013,36 +1013,36 @@ def compute_kpi(df, spec, day):
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
         # ---------- SALES CALCULATIONS ----------
+        # ---------- SALES CALCULATIONS ----------
     # ---------- SALES CALCULATIONS ----------
     if calc and str(calc).startswith("sales_"):
-        # Safe column picker (taaki crash na ho)
+        # 1. Column Picker (Exact match taaki ST. CODE mil sake)
         def safe_pcol(column_name):
-            try:
-                return _pcol(df, column_name)
-            except Exception:
-                for c in df.columns:
-                    if column_name.lower() in str(c).lower().replace(".", "").replace(" ", ""):
-                        return df[c]
-                return pd.Series([""] * len(df))
+            for c in df.columns:
+                if re.sub(r"[^A-Z]", "", str(c).upper()) == re.sub(r"[^A-Z]", "", column_name.upper()):
+                    return df[c]
+            return pd.Series([""] * len(df))
 
         amt_col = safe_pcol("AMT")
         bdls_col = safe_pcol("BDLS")
+        cat_col = safe_pcol("ST. CODE")
+        
         df["_amt"] = _num(amt_col).fillna(0)
         df["_bdls"] = _num(bdls_col).fillna(0)
+        df["_cat"] = cat_col.astype(str).str.strip()
 
-        # Helper function jo selected month ka exact match dhundega
+        # 2. Selected Month aur SAAL (Year) ka exact data nikalne ka function
         def get_selected_month_data():
-            # Yahan .dt.month ki galti sudhaar di gayi hai
+            # Yahan humne month aur YEAR dono match kiye hain
             mask = df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)
             return df[mask]
 
         if calc == "sales_last_month":
-            # Pehle check karo ki selected mahine mein data hai ya nahi
             month_sub = get_selected_month_data()
             if month_sub.empty:
-                return {"value": "No Data", "desc": f"No records found for {day.strftime('%b-%Y')}", "color": GREY}
+                return {"value": "No Data", "desc": f"Records not available for {day.strftime('%b-%Y')}", "color": GREY}
             
-            # Agar data hai, toh us mahine ki sabse badi date nikalo
+            # Us month ki sabse last date nikalna
             actual_last_date = month_sub["_date"].max()
             sub = month_sub[month_sub["_date"] == actual_last_date]
             
@@ -1058,7 +1058,6 @@ def compute_kpi(df, spec, day):
             }
 
         elif calc == "sales_mtd":
-            # Selected date ke mahine ka data (Helper function use kiya)
             sub = get_selected_month_data()
             if sub.empty:
                 return {"value": "₹0", "desc": f"No sales in {day.strftime('%b-%Y')}", "color": GREY}
@@ -1076,12 +1075,9 @@ def compute_kpi(df, spec, day):
             if sub.empty:
                 return {"value": "No Data", "desc": f"No category data for {day.strftime('%b-%Y')}", "color": GREY}
             
-            cat_col = safe_pcol("ST. CODE")
-            df["_cat"] = cat_col.astype(str).str.strip()
-            
-            # ST. CODE ke hisaab se amount joda
+            # ST. CODE ke hisaab se group karna
             mix = sub.groupby("_cat")["_amt"].sum().sort_values(ascending=False)
-            mix = mix[(mix.index != "") & (mix.index != "nan")] # Blank hatao
+            mix = mix[(mix.index != "") & (mix.index != "nan") & (mix.index != "0")] # Blank hatao
             
             if mix.empty:
                 return {"value": "No Data", "desc": "No category data", "color": GREY}
@@ -1094,39 +1090,8 @@ def compute_kpi(df, spec, day):
                 "color": BLUE
             }
 
-        elif calc == "sales_mtd":
-            # Selected date ke mahine ka data
-            sub = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year) & (df["_date"] <= day)]
-            if sub.empty:
-                return {"value": "₹0", "desc": "No sales this month", "color": GREY}
-            
-            total_amt = sub["_amt"].sum()
-            total_bdls = sub["_bdls"].sum()
-            return {
-                "value": _inr(total_amt),
-                "desc": f"Month-to-date: {total_bdls:,.0f} Bdls",
-                "color": BLUE
-            }
-
-        elif calc == "sales_category_mix":
-            sub = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year) & (df["_date"] <= day)]
-            if sub.empty:
-                return None
-            
-            # ST. CODE ke basis par group karke amount sum karna
-            cat_col = _pcol(df, "ST. CODE")
-            mix = sub.groupby(cat_col)["_amt"].sum().sort_values(ascending=False)
-            top = mix.head(2)
-            
-            txt = " | ".join(f"{k}: {_inr(v)}" for k, v in top.items())
-            return {
-                "value": f"{len(mix)} Categories",
-                "desc": txt,
-                "color": BLUE
-            }
-
-
-        # ---------- FINANCE: TOTAL DRS & CRS ----------
+        # Agar koi aur sales calc ho toh yahan se pehle wala purana code hata dein
+ # ---------- FINANCE: TOTAL DRS & CRS ----------
     if calc == "finance_total_drs_crs":
         cb_col = _pcol(df, "CB")
         cb_vals = _num(cb_col).dropna()
@@ -2262,12 +2227,18 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # --- PILLOW KE LIYE SIRF MONTH, DATE HIDDEN ---
+            # Purana:
+            # is_finance = str(spec.get("calc", "")).startswith("finance_")
+            # if is_pillow or is_finance:
+
+            # Naya (Isko copy-paste karein):
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
             is_finance = str(spec.get("calc", "")).startswith("finance_")
+            is_sales = str(spec.get("calc", "")).startswith("sales_") # <-- YEH ADD KAREIN
 
-            if is_pillow or is_finance:
+            if is_pillow or is_finance or is_sales: # <-- Yahan is_sales add karein
                 chosen = month_dates[0]
-                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow else "As on date"
+                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or is_sales else "As on date"
             else:
                 chosen = dcol.selectbox(
                     f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
