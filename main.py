@@ -1043,23 +1043,12 @@ def compute_kpi(df, spec, day):
 
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
-        if calc == "sales_daily":
-            # Us mahine ka data filter karo
-            month_data = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
-            if month_data.empty:
-                return {"value": "No Data", "desc": f"No records for {day.strftime('%b-%Y')}", "color": GREY}
+     if calc == "sales_daily":
+            # Us din ka exact data filter karo
+            day_data = df[df["_date"] == day]
             
-            # Us mahine ki sabse last date nikalna jisme data bhara ho (amount 0 na ho)
-            valid_data = month_data[month_data.apply(lambda r: _num(pd.Series([r.get("TOTAL SALE AMOUNT", "")])).iloc[0] > 0, axis=1)]
-            
-            if valid_data.empty:
-                # Agar poore mahine mein koi data nahi hai, toh last date uthao
-                last_day = month_data["_date"].max()
-                sub = month_data[month_data["_date"] == last_day]
-            else:
-                # Agar data hai, toh uski sabse last date uthao
-                last_day = valid_data["_date"].max()
-                sub = valid_data[valid_data["_date"] == last_day]
+            if day_data.empty:
+                return {"value": "No Data", "desc": f"No records for {day.strftime('%d-%b-%Y')}", "color": GREY}
             
             # Columns dhoondho
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
@@ -1068,12 +1057,16 @@ def compute_kpi(df, spec, day):
             if not amt_col:
                 return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
                 
-            total_amt = _num(sub[amt_col]).sum()
-            total_parties = _num(sub[party_col]).sum() if party_col else 0
+            total_amt = _num(day_data[amt_col]).sum()
+            total_parties = _num(day_data[party_col]).sum() if party_col else 0
+            
+            # Agar amount 0 hai (jaisa 27 Oct ka hai)
+            if total_amt == 0:
+                return {"value": "₹0", "desc": f"No sale recorded on {day.strftime('%d-%b-%Y')}", "color": GREY}
             
             return {
                 "value": _inr(total_amt),
-                "desc": f"Last recorded sale on {last_day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
+                "desc": f"Last recorded sale on {day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
                 "color": BLUE
             }
 
