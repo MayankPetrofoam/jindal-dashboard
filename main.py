@@ -846,7 +846,7 @@ def compute_kpi(df, spec, day):
                 "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
             }
 
-        # 2. TOTAL aur MATTRESS ke liye generic logic (Production Logs sheet se)
+        # 2. TOTAL aur MATTRESS ke liye logic
         elif ptype in ["total", "mattress"]:
             t = PROD_TYPES[ptype]
             df_prod = df.copy()
@@ -858,16 +858,57 @@ def compute_kpi(df, spec, day):
                     m = m & ~s.str.contains("|".join(map(re.escape, t["not"])), na=False)
                 df_prod = df_prod[m]
 
+            # Production (BDLS / Sheets) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
+            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+            month_end = next_month - datetime.timedelta(days=1)
             
-            day_data = df_prod[df_prod["_date"] == day]
-            day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
-            day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
-            
+            # MTD (Month-to-date) production
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+            
+            # Daily production (aaj ke din ka)
+            day_data = df_prod[df_prod["_date"] == day]
+            day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
+            day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
 
+            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
+            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
+            if ptype == "mattress":
+                m_df, err_m, _ = get_sheet("m_shed")
+                if m_df is not None:
+                    # M-Shed mein column dhoondho (M-SHED / MSHED)
+                    m_col = next((c for c in m_df.columns if "M-SHED" in str(c).upper() or "MSHED" in str(c).upper()), None)
+                    if m_col:
+                        # Daily Yield (aaj ke din ka)
+                        m_day = m_df[m_df["_date"] == day]
+                        if m_day.empty:
+                            # Agar aaj ka data nahi hai, toh latest available date utha lo
+                            m_day = m_df[m_df["_date"] <= day].sort_values("_date").tail(1)
+                        
+                        day_yield = float(_num(m_day[m_col]).sum()) if not m_day.empty else 0.0
+                        
+                        # MTD Yield (1st se aaj tak ka)
+                        m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
+                        mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
+                        
+                        return {
+                            "value": f"{day_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls",
+                            "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                            "color": BLUE,
+                            "extra": None
+                        }
+            
+            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
+            return {
+                "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
+                "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
+                "color": BLUE,
+                "extra": None
+            }
+            
+            # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
             return {
                 "value": f"{day_bdls:,.0f} Bdls | {day_qty:,.1f} Prod",
                 "desc": f"Month-to-date: {mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
@@ -1462,6 +1503,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
         "ignore_cols": ["REASON", "FINANCE"],
+    },
+        "m_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
+        "sheet_name": "M-Shed",
+        "date_col": "DATE",
+        "dayfirst": True,
     },
         "f_shed": {
         "type": "excel",
