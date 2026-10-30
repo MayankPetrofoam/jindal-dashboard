@@ -814,6 +814,7 @@ def compute_kpi(df, spec, day):
         ptype = spec.get("type")
 
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
+        # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
             if f_df is None:
@@ -823,14 +824,19 @@ def compute_kpi(df, spec, day):
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
-            # --- YIELD: F-Shed sheet, DATE dropdown se ---
-            f_day = f_df[f_df["_date"] == day]
+            # --- YIELD: F-Shed sheet se selected month ki latest date nikalna ---
+            f_month_data = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
+            
+            if not f_month_data.empty:
+                actual_date = f_month_data["_date"].max() # Us mahine ki sabse latest date
+                f_day = f_month_data[f_month_data["_date"] == actual_date]
+            else:
+                f_day = pd.DataFrame() # Agar us mahine ka data nahi hai
+
             day_yield = float(_num(_pcol(f_day, "F-SHED")).sum()) if not f_day.empty else 0.0
+            month_yield = float(_num(_pcol(f_month_data, "F-SHED")).sum()) if not f_month_data.empty else 0.0
 
-            f_mon = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
-            month_yield = float(_num(_pcol(f_mon, "F-SHED")).sum()) if not f_mon.empty else 0.0
-
-            # --- BDLS / SHEET / WEIGHT: production sheet, MONTH dropdown se ---
+            # --- BDLS / SHEET / WEIGHT ---
             t = PROD_TYPES["rollpack"]
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
@@ -839,18 +845,16 @@ def compute_kpi(df, spec, day):
             if w_mon.empty:
                 bdls, sheets, weight = 0, 0.0, 0.0
             else:
-                sheets = pd.to_numeric(w_mon["SHEET"], errors="coerce").fillna(0).sum() \
-                    if "SHEET" in w_mon.columns else 0
-                weight = pd.to_numeric(w_mon["WEIGHT"], errors="coerce").fillna(0).sum() \
-                    if "WEIGHT" in w_mon.columns else 0
-                bdls = pd.to_numeric(w_mon["BDLS"], errors="coerce").fillna(0).sum() \
-                    if "BDLS" in w_mon.columns else 0
+                sheets = pd.to_numeric(w_mon["SHEET"], errors="coerce").fillna(0).sum() if "SHEET" in w_mon.columns else 0
+                weight = pd.to_numeric(w_mon["WEIGHT"], errors="coerce").fillna(0).sum() if "WEIGHT" in w_mon.columns else 0
+                bdls = pd.to_numeric(w_mon["BDLS"], errors="coerce").fillna(0).sum() if "BDLS" in w_mon.columns else 0
                 if bdls == 0:
                     bdls = sheets
 
-            if not f_mon.empty:
-                top = (f_mon.assign(_v=_num(_pcol(f_mon, "F-SHED")))
-                       .groupby(_pcol(f_mon, "ITEM").astype(str).str.strip())["_v"].sum()
+            # Categories
+            if not f_month_data.empty:
+                top = (f_month_data.assign(_v=_num(_pcol(f_month_data, "F-SHED")))
+                       .groupby(_pcol(f_month_data, "ITEM").astype(str).str.strip())["_v"].sum()
                        .sort_values(ascending=False).head(4))
                 cats = " | ".join(f"{k}: {v:,.1f}" for k, v in top.items())
             else:
@@ -2259,6 +2263,14 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = _hr_dates(df)
             else:
                 dates = available_dates(df)
+
+            # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
+            if spec.get("type") == "rollpack":
+                _f, _e, _t = get_sheet("f_shed")
+                if _f is not None and "_date" in _f.columns:
+                    dates = sorted(set(dates) | set(_f["_date"].dropna().unique()), reverse=True)
+
+            # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
 
             # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
             # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
