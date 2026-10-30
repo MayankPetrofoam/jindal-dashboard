@@ -682,7 +682,6 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
         raise DataError(f"'{date_col}' column mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
-
 def _pcol(df, name):
     import re
     # Sirf letters aur numbers rakho (spaces aur symbols hatao)
@@ -885,6 +884,7 @@ def compute_kpi(df, spec, day):
             day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
             day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
 
+            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
             # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
             # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
             if ptype == "mattress":
