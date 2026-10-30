@@ -684,25 +684,17 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
 
 def _pcol(df, name):
     import re
-    # Sirf letters aur numbers rakho (spaces aur symbols hatao)
     want = re.sub(r"[^A-Z0-9]", "", name.upper())
     cols = [(c, re.sub(r"[^A-Z0-9]", "", str(c).upper())) for c in df.columns]
-    
-    # Exact match
     for c, n in cols:
         if n == want:
             return df[c]
-    
-    # Startswith match (jaise SHEET ✓ -> SHEET)
     for c, n in cols:
         if n.startswith(want) and not str(c).startswith("_"):
             return df[c]
-            
-    # Endswith match
     for c, n in cols:
         if n.endswith(want) and not str(c).startswith("_"):
             return df[c]
-            
     raise DataError(f"Column '{name}' nahi mila. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
 def _hr_daily(df):
     """Har (date, department) ka ek row. Ek department ke kai rows (SHEET/MM/WEIGHT/BDL) mein
@@ -857,56 +849,99 @@ def compute_kpi(df, spec, day):
                 "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
             }
 
-        # 2. TOTAL aur MATTRESS ke liye logic
-        elif ptype in ["total", "mattress"]:
-            t = PROD_TYPES[ptype]
+         # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
+        elif ptype == "total":
+            t = PROD_TYPES["total"]
             df_prod = df.copy()
-            
-            if t["col"]:
-                s = _pcol(df_prod, t["col"]).astype(str).str.upper()
-                m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
-                if t.get("not"):
-                    m = m & ~s.str.contains("|".join(map(re.escape, t["not"])), na=False)
-                df_prod = df_prod[m]
 
             # Production (BDLS / Sheets) ke liye MONTHLY data filter karo
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
-            
-            # MTD (Month-to-date) production
+
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
             mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
             mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
-            
-            # Daily production (aaj ke din ka)
-            day_data = df_prod[df_prod["_date"] == day]
-            day_bdls = _num(_pcol(day_data, "BDLS")).sum() if not day_data.empty else 0
-            day_qty = _num(_pcol(day_data, "SHEET")).sum() if not day_data.empty else 0
 
-            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
-            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
-            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
-            # --- AGAR MATTRESS HAI TOH M-SHED SE YIELD NIKALO (DAILY) ---
-            if ptype == "mattress":
-                m_df, err_m, _ = get_sheet("m_shed")
-                if m_df is not None:
-                    m_col = next((c for c in m_df.columns if "M-SHED" in str(c).upper() or "MSHED" in str(c).upper()), None)
-                    if m_col:
-                        m_day = m_df[m_df["_date"] == day]
-                        if m_day.empty:
-                            m_day = m_df[m_df["_date"] <= day].sort_values("_date").tail(1)
+            # Saari shed files se Daily Yield nikaalo
+            total_yield = 0.0
+            mtd_yield = 0.0
+            sheds = ["m_shed", "f_shed", "bdls_de", "rolls_bc"]  # D/E B/C ke liye alag logic hoga
+
+            # M-Shed aur F-Shed se Yield
+            for shed in ["m_shed", "f_shed"]:
+                s_df, _, _ = get_sheet(shed)
+                if s_df is not None:
+                    yield_col = next((c for c in s_df.columns if "M-SHED" in str(c).upper() or "F-SHED" in str(c).upper()), None)
+                    if yield_col:
+                        s_day = s_df[s_df["_date"] == day]
+                        if s_day.empty:
+                            s_day = s_df[s_df["_date"] <= day].sort_values("_date").tail(1)
+                        total_yield += float(_num(s_day[yield_col]).sum()) if not s_day.empty else 0.0
                         
-                        day_yield = float(_num(m_day[m_col]).sum()) if not m_day.empty else 0.0
-                        m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
-                        mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
-                        
-                        return {
-                            "value": f"{day_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
-                            "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
-                            "color": BLUE,
-                            "extra": None
-                        }
+                        s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day)]
+                        mtd_yield += float(_num(s_mtd[yield_col]).sum()) if not s_mtd.empty else 0.0
+
+            # D-Shed / E-Shed / B-Shed / C-Shed (Production val) se Yield
+            for shed_key in ["bdls_de", "rolls_bc"]:
+                s_df, _, _ = get_sheet(shed_key)
+                if s_df is not None and "val" in s_df.columns:
+                    s_day = s_df[(s_df["_date"] == day) & (s_df["type"] == "PRODUCTION")]
+                    total_yield += float(_num(s_day["val"]).sum()) if not s_day.empty else 0.0
+                    
+                    s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day) & (s_df["type"] == "PRODUCTION")]
+                    mtd_yield += float(_num(s_mtd["val"]).sum()) if not s_mtd.empty else 0.0
+
+            return {
+                "value": f"{total_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
+                "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
+                "color": BLUE,
+                "extra": None
+            }
+
+        # 3. MATTRESS ke liye logic (Production Prod. Sheet se + Yield M-Shed se)
+        elif ptype == "mattress":
+            t = PROD_TYPES["mattress"]
+            df_prod = df.copy()
+
+            if t["col"]:
+                s = _pcol(df_prod, t["col"]).astype(str).str.upper()
+                m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
+                df_prod = df_prod[m]
+
+            month_start = day.replace(day=1)
+            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+            month_end = next_month - datetime.timedelta(days=1)
+
+            mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
+            mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
+            mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+
+            m_df, err_m, _ = get_sheet("m_shed")
+            if m_df is not None:
+                m_col = next((c for c in m_df.columns if "M-SHED" in str(c).upper()), None)
+                if m_col:
+                    m_day = m_df[m_df["_date"] == day]
+                    if m_day.empty:
+                        m_day = m_df[m_df["_date"] <= day].sort_values("_date").tail(1)
+                    
+                    day_yield = float(_num(m_day[m_col]).sum()) if not m_day.empty else 0.0
+                    m_mtd = m_df[(m_df["_date"] >= month_start) & (m_df["_date"] <= day)]
+                    mtd_yield = float(_num(m_mtd[m_col]).sum()) if not m_mtd.empty else 0.0
+                    
+                    return {
+                        "value": f"{day_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets",
+                        "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
+                        "color": BLUE,
+                        "extra": None
+                    }
+            
+            return {
+                "value": f"0 Yield | {mtd_qty:,.0f} Sheets",
+                "desc": f"Month-to-date: {mtd_qty:,.0f} Sheets | {mtd_bdls:,.0f} Bdls",
+                "color": BLUE,
+                "extra": None
+            }
             # Agar M-Shed ka data nahi mila ya Total hai, toh default logic
             return {
                 "value": f"{mtd_bdls:,.0f} Bdls | {mtd_qty:,.1f} Prod",
@@ -1459,6 +1494,46 @@ SHEETS = {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
         "sheet_name": "FY2026-27 Prod. Sheet",
+        "date_col": "DATE",
+        "dayfirst": True,
+    },
+        # F-Shed (Yield ke liye)
+    "f_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx",
+        "sheet_name": "F-Shed",
+        "date_col": "DATE",
+        "dayfirst": True,
+    },
+    # D-Shed (Yield ke liye)
+    "d_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-D%20Bdls%2BProd%20(1).xlsx",
+        "sheet_name": "Shed-D Bdls+Prod",
+        "date_col": "DATE",
+        "dayfirst": True,
+    },
+    # E-Shed (Yield ke liye)
+    "e_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-E%20Bdls%2BProd.xlsx",
+        "sheet_name": "Shed-E Bdls+Prod",
+        "date_col": "DATE",
+        "dayfirst": True,
+    },
+    # B-Shed (Yield ke liye)
+    "b_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed%20Mtrs%2BRolls%2BProd.xlsx",
+        "sheet_name": "B-Shed Mtrs+Rolls+Prod",
+        "date_col": "DATE",
+        "dayfirst": True,
+    },
+    # C-Shed (Yield ke liye)
+    "c_shed": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd%20(1).xlsx",
+        "sheet_name": "C-Shed Mtrs+Rolls+Prod",
         "date_col": "DATE",
         "dayfirst": True,
     },
