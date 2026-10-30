@@ -1043,7 +1043,7 @@ def compute_kpi(df, spec, day):
 
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
-     if calc == "sales_daily":
+        if calc == "sales_daily":
             # Us din ka exact data filter karo
             day_data = df[df["_date"] == day]
             
