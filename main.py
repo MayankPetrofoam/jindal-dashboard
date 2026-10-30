@@ -684,6 +684,7 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
 
 
 def _pcol(df, name):
+    # Name se special characters hata kar match karo (jaise BDLS. -> BDLS)
     want = re.sub(r"[^A-Z0-9]", "", name.upper())
     cols = [(c, re.sub(r"[^A-Z0-9]", "", str(c).upper())) for c in df.columns]
     for c, n in cols:
@@ -1504,12 +1505,13 @@ SHEETS = {
         "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
         "ignore_cols": ["REASON", "FINANCE"],
     },
-        "m_shed": {
+     "m_shed": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
-        "sheet_name": "M-Shed",
+        "sheet_name": 0,  # <--- YEH "M-Shed" KI JAGAH 0 KAR DEIN
         "date_col": "DATE",
         "dayfirst": True,
+        "ignore_cols": ["MON"],
     },
         "f_shed": {
         "type": "excel",
@@ -1990,10 +1992,17 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # Main Dates nikalne ka code
+            # Main Dates nikalne ka code
             if str(spec.get("calc", "")).startswith("hr_"):
                 dates = _hr_dates(df)
             else:
                 dates = available_dates(df)
+
+            # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
+            if spec.get("type") == "mattress":
+                _m, _e, _t = get_sheet("m_shed")
+                if _m is not None:
+                    dates = sorted(set(dates) | set(_m["_date"].dropna().unique()), reverse=True)
 
             # Rollpack ke liye F-shed ki dates bhi jodo
             if spec.get("type") == "rollpack":
