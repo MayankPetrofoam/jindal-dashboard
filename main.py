@@ -930,17 +930,22 @@ def compute_kpi(df, spec, day):
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
     # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
+    # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
     if calc and str(calc).startswith("order_"):
         df_ord = df.copy()
         
-        # 1. Qty Column dhoondho
-        qty_col = next((c for c in df_ord.columns if "TOTAL BCLS" in str(c).upper() or "QTY (ORDER)" in str(c).upper()), None)
+        # 1. Qty Column dhoondho (Teeno tabs ke liye)
+        qty_col = None
+        for c in df_ord.columns:
+            n = _norm(c)
+            if "total" in n and ("bcl" in n or "bdl" in n or "bundle" in n):
+                qty_col = c
+                break
+            if "qty" in n and "order" in n:
+                qty_col = c
+                break
         if not qty_col:
-            for c in df_ord.columns:
-                n = _norm(c)
-                if "total" in n and ("bcl" in n or "bdl" in n or "bundle" in n):
-                    qty_col = c
-                    break
+            qty_col = next((c for c in df_ord.columns if "TOTAL" in str(c).upper() or "QTY" in str(c).upper()), None)
 
         # 2. Pending filter (Finance APPROVED nahi hai toh pending hai)
         fin_col = next((c for c in df_ord.columns if "FINANCE" in str(c).upper()), None)
@@ -950,7 +955,7 @@ def compute_kpi(df, spec, day):
         else:
             df_ord["_is_pending"] = True
 
-        # 3. Age calculation (Selected date ke hisaab se)
+        # 3. Age calculation (Ek hi baar karna hai)
         df_ord["_age_days"] = df_ord["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 999)
         pending_df = df_ord[df_ord["_is_pending"]]
 
@@ -987,7 +992,6 @@ def compute_kpi(df, spec, day):
         total_orders = len(pending_df)
         total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
         
-        # Tab wise breakdown
         if "TAB_GID" in pending_df.columns:
             per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in pending_df.groupby("TAB_GID"))
         else:
@@ -1000,7 +1004,7 @@ def compute_kpi(df, spec, day):
             "extra": per_tab
         }
 
-    # --- CURRENT SCHEDULE (Aaj ki date ka data) ---
+    # --- CURRENT SCHEDULE ---
     if calc == "order_current_schedule":
         today_df = df_ord[df_ord["_date"] == day]
         if today_df.empty:
@@ -1447,7 +1451,7 @@ SHEETS = {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
         "date_col": "DATE",
-        "dayfirst": True,
+        "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
         "ignore_cols": ["REASON", "FINANCE"],
     },
         "f_shed": {
