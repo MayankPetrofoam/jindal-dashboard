@@ -1999,7 +1999,6 @@ DEPARTMENTS = [
             ("Tonnage Foaming", "Month-to-date production"),
             ("LB Stock", "Long block: Qty / Weight"),
             ("Poly Stock", "Chemical stock"),
-            ("POL Stock", "Chemical stock"),
             ("TDI Balance", "Chemical balance"),
             ("Pop Polymer", "Pop polymer stock"), # <-- Naya block yahan add kiya
         ],
