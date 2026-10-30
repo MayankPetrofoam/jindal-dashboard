@@ -684,15 +684,26 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
 
 
 def _pcol(df, name):
-    # Name se special characters hata kar match karo (jaise BDLS. -> BDLS)
+    import re
+    # Sirf letters aur numbers rakho (spaces aur symbols hatao)
     want = re.sub(r"[^A-Z0-9]", "", name.upper())
     cols = [(c, re.sub(r"[^A-Z0-9]", "", str(c).upper())) for c in df.columns]
+    
+    # Exact match
     for c, n in cols:
         if n == want:
             return df[c]
+    
+    # Startswith match (jaise SHEET ✓ -> SHEET)
     for c, n in cols:
         if n.startswith(want) and not str(c).startswith("_"):
             return df[c]
+            
+    # Endswith match
+    for c, n in cols:
+        if n.endswith(want) and not str(c).startswith("_"):
+            return df[c]
+            
     raise DataError(f"Column '{name}' nahi mila. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
 def _hr_daily(df):
     """Har (date, department) ka ek row. Ek department ke kai rows (SHEET/MM/WEIGHT/BDL) mein
@@ -1506,8 +1517,8 @@ SHEETS = {
     },
     "m_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- Yahan exact link daala hai
-        "sheet_name": 0,  # <-- Alag file hai, isliye pehla tab (0) hi M-Shed hoga
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx", # <-- YEH WAPAS SAHI LINK KAR DEIN
+        "sheet_name": "M-Shed",  # <-- YEH "M-Shed" HI RAHEGA (kyunki tab ka naam yahi hai)
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
