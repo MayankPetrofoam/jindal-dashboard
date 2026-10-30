@@ -1517,13 +1517,13 @@ SHEETS = {
     },
     "m_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx", # <-- YEH WAPAS SAHI LINK KAR DEIN
-        "sheet_name": "M-Shed",  # <-- YEH "M-Shed" HI RAHEGA (kyunki tab ka naam yahi hai)
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- YAHAN M-SHED (4).xlsx KA LINK DAALEIN
+        "sheet_name": 0,  # <-- ALAG FILE HAI, TOH PEHLA TAB (0) HI M-SHED HOGA
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
     },
-        "f_shed": {
+    "f_shed": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx", 
         "sheet_name": "F-Shed",
