@@ -66,7 +66,7 @@ st.markdown(
     .kpi-title { font-size: 10.5px; font-weight: 700; color: #334155;
                 text-transform: uppercase; line-height: 1.15; }
     .kpi-value { font-size: 16px; font-weight: 800; color: #0F172A; line-height: 1.2; }
-    .kpi-desc  { font-size: 10px; font-weight: 500; line-height: 1.3;
+    .kpi-desc  { font-size: 12px; font-weight: 600; line-height: 1.3;
                 white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .kpi-date  { font-size: 12px; font-weight: 700; color: #1E3A8A; line-height: 1.3; } /* 10px se 12px kiya */
     .kpi-err   { font-size: 11px; font-weight: 500; line-height: 1.3; color: #dc2626;
