@@ -2346,9 +2346,10 @@ def render_kpi(dept_key, idx, title, desc):
             # Naya (Isko copy-paste karein):
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
             is_finance = str(spec.get("calc", "")).startswith("finance_")
+            is_foaming = str(spec.get("calc", "")).startswith("sum_consumption") # <-- YEH ADD KAREIN
             
             # Sirf un blocks ke liye month dikhao jahan show_date True na ho
-            hide_date = is_pillow or is_finance or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
+            hide_date = is_pillow or is_finance or is_foaming or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date")) # <-- Yahan is_foaming add karein
 
             if hide_date: 
                 chosen = month_dates[0]
