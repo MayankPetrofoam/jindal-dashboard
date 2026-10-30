@@ -684,17 +684,25 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
 
 def _pcol(df, name):
     import re
+    # Sirf letters aur numbers rakho
     want = re.sub(r"[^A-Z0-9]", "", name.upper())
     cols = [(c, re.sub(r"[^A-Z0-9]", "", str(c).upper())) for c in df.columns]
+    
+    # Exact match (SHEET -> SHEET)
     for c, n in cols:
         if n == want:
             return df[c]
+    
+    # Startswith match (SHEET ✓ -> SHEET)
     for c, n in cols:
         if n.startswith(want) and not str(c).startswith("_"):
             return df[c]
+            
+    # Endswith match
     for c, n in cols:
         if n.endswith(want) and not str(c).startswith("_"):
             return df[c]
+            
     raise DataError(f"Column '{name}' nahi mila. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
 def _hr_daily(df):
     """Har (date, department) ka ek row. Ek department ke kai rows (SHEET/MM/WEIGHT/BDL) mein
@@ -851,6 +859,7 @@ def compute_kpi(df, spec, day):
 
          # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
         # 2. TOTAL ke liye logic (Production Prod. Sheet se + Yield saari sheds se)
+        # 2. TOTAL ke liye logic
         elif ptype == "total":
             t = PROD_TYPES["total"]
             df_prod = df.copy()
@@ -861,9 +870,14 @@ def compute_kpi(df, spec, day):
             month_end = next_month - datetime.timedelta(days=1)
 
             mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
-            mtd_bdls = _num(_pcol(mtd_data, "BDLS")).sum() if not mtd_data.empty else 0
-            mtd_qty = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
+            
+            # BDLS column 0 hai, isliye use hata kar SHEET aur WEIGHT ka sum lein
+            mtd_sheets = _num(_pcol(mtd_data, "SHEET")).sum() if not mtd_data.empty else 0
             mtd_weight = _num(_pcol(mtd_data, "WEIGHT")).sum() if not mtd_data.empty else 0
+            
+            # SHEET ko hi Bdls maan lo
+            mtd_bdls = mtd_sheets
+            mtd_qty = mtd_sheets
 
             # Saari shed files se Daily Yield nikaalo
             total_yield = 0.0
