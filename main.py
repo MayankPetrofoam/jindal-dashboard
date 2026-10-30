@@ -1232,8 +1232,9 @@ def compute_kpi(df, spec, day):
         total_orders = len(pending_df)
         total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
         
-        if "TAB_GID" in pending_df.columns:
-            per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in pending_df.groupby("TAB_GID"))
+        if "TAB_GID" in sub.columns:
+            # Dono sheets ke tabs alag-alag dikhane ke liye
+            per_tab = " | ".join(f"Tab {t}: {len(g)}" for t, g in sub.groupby("TAB_GID"))
         else:
             per_tab = ""
             
@@ -1798,6 +1799,14 @@ SHEETS = {
         "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
         "ignore_cols": ["REASON", "FINANCE"],
     },
+        # --- ORDER MANAGEMENT SHEET 2 (Raman, Sachin) ---
+    "order_management_2": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml", # <-- YAHAN SHEET 2 KA LINK DAALEIN
+        "worksheet": ["0", "648729418"], # <-- YAHAN SHEET 2 KE GIDS DAALEIN (jaise Sachin ka gid 0, Raman ka gid 12345)
+        "date_col": "DATE",
+        "dayfirst": False,
+        "ignore_cols": ["REASON", "FINANCE"],
+    },
     "m_shed": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- M-Shed (4).xlsx KA SAHI LINK
@@ -1889,13 +1898,13 @@ KPI_SOURCES = {
     },
         # <<< Yahan se naye Order Ageing blocks shuru >>>
     # <<< ORDER MANAGEMENT DATA SOURCE >>>
-    ("order", "Orders 0-7 Days Old"): {"sheet": "order_management", "calc": "order_age_0_7"},
-    ("order", "Orders 7-14 Days Old"): {"sheet": "order_management", "calc": "order_age_7_14"},
-    ("order", "Orders 14-21 Days Old"): {"sheet": "order_management", "calc": "order_age_14_21"},
-    ("order", "Orders 21+ Days Old"): {"sheet": "order_management", "calc": "order_age_21_plus"},
-    ("order", "Orders Left (No. / Qty)"): {"sheet": "order_management", "calc": "order_pending"},
-    ("order", "Current Schedule"): {"sheet": "order_management", "calc": "order_current_schedule"},
-    ("order", "Serviceability %"): {"sheet": "order_management", "calc": "order_serviceability"},
+    ("order", "Orders 0-7 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_0_7"},
+    ("order", "Orders 7-14 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_7_14"},
+    ("order", "Orders 14-21 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_14_21"},
+    ("order", "Orders 21+ Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_21_plus"},
+    ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
+    ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
+    ("order", "Serviceability %"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_serviceability"},
     
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
@@ -2194,6 +2203,17 @@ def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
 
 def get_sheet(name):
     """-> (DataFrame or None, error text or None, fetched-at or None)."""
+    # Agar name ek list hai (jaise ["order_management_1", "order_management_2"])
+    if isinstance(name, (list, tuple)):
+        frames = []
+        for n in name:
+            df, err, fetched = get_sheet(n)
+            if df is not None:
+                frames.append(df)
+        if not frames:
+            return None, "No data from any sheet", None
+        return pd.concat(frames, ignore_index=True, sort=False), None, fetched
+
     cfg = SHEETS.get(name)
     if not cfg or not cfg.get("url"):
         return None, f"sheet '{name}' has no link in SHEETS", None
