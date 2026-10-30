@@ -1827,6 +1827,9 @@ SHEETS = {
         "sheet_name": "svp",
         "date_col": "PARTY NAME",
     },
+        "manual": {
+        "url": "manual",
+    },
 }
 # ====================================================================
 # 5b. KPI_SOURCES  (key = (department key, KPI title exactly as on screen))
@@ -2309,8 +2312,8 @@ def render_kpi(dept_key, idx, title, desc):
 
             # Main Dates nikalne ka code
             # Main Dates nikalne ka code
-            if str(spec.get("calc", "")).startswith("hr_"):
-                dates = _hr_dates(df)
+            if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
+                dates = [datetime.datetime.now(IST).date()] # <-- Manual ke liye aaj ki date
             else:
                 dates = available_dates(df)
 
