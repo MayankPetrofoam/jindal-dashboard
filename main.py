@@ -1042,9 +1042,10 @@ def compute_kpi(df, spec, day):
             return df[mask]
 
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
+        # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         if calc == "sales_daily":
-            # Us mahine ka data filter karo
-            month_data = df[(df["_date"].dt.month == day.month) & (df["_date"].dt.year == day.year)]
+            # Us mahine ka data filter karo (Yahan .dt ki jagah .apply use kiya hai)
+            month_data = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
             if month_data.empty:
                 return {"value": "No Data", "desc": f"No records for {day.strftime('%b-%Y')}", "color": GREY}
             
@@ -1052,9 +1053,9 @@ def compute_kpi(df, spec, day):
             last_day = month_data["_date"].max()
             sub = month_data[month_data["_date"] == last_day]
             
-            # Columns dhoondho (TOTAL SALE AMOUNT aur ARTIES COUNT)
+            # Columns dhoondho (TOTAL SALE AMOUNT aur PARTIES COUNT)
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
-            party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None) # Aapki sheet mein ARTIES likha hai
+            party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None)
             
             if not amt_col:
                 return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
