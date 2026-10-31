@@ -754,6 +754,88 @@ def _fetch_stock_cached(url, sheet_name):
         raise DataError("Stock sheet mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+# ====================================================================
+# GRADE YIELD  (Prod. Summary file, sheet "DATA")
+# yield % = (grade ka weight / us month ka TOTAL weight) x 100
+# ====================================================================
+# 1st Grade = TOTAL weight minus ye items. (Total mein sab kuch ginta hai.)
+FIRST_GRADE_EXCLUDE = ["BONDED BLOCK", "PEELING 2ND GRADE", "PEELING 3RD GRADE",
+                       "PU FOAM 2ND GRADE", "PU FOAM 3RD GRADE", "QUILTING SCRAP"]
+# 2nd Grade = sirf ye items.
+SECOND_GRADE_ITEMS = ["PU FOAM 2ND GRADE", "PEELING 2ND GRADE", "BONDED BLOCK", "QUILTING SCRAP"]
+
+_YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
+                       "%d-%b-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d/%m/%y"]
+
+
+@st.cache_data(ttl=900, show_spinner="Production summary load ho rahi hai (badi file hai)...")
+def _fetch_yield_cached(url, sheet_name):
+    """DATE, ITEM NAME, KGS columns padhta hai (xlsx ya csv)."""
+    norm = lambda c: re.sub(r"\s+", " ", str(c).strip().upper())
+    want = {"DATE", "ITEM NAME", "KGS"}
+    if re.match(r"^https?://", url or ""):
+        data = _http_get(_direct_url(url))
+        is_csv = url.lower().split("?")[0].endswith(".csv")
+        if not is_csv and data[:2] != b"PK":
+            raise PermissionError("Link se Excel file nahi mili.")
+        src = io.BytesIO(data)
+    else:
+        src, is_csv = url, str(url).lower().endswith(".csv")
+    if is_csv:
+        raw = pd.read_csv(src, usecols=lambda c: norm(c) in want, dtype=str)
+    else:
+        raw = pd.read_excel(src, sheet_name=sheet_name, usecols=lambda c: norm(c) in want,
+                            dtype=object, engine="openpyxl")
+    raw.columns = [norm(c) for c in raw.columns]
+    missing = want - set(raw.columns)
+    if missing:
+        raise DataError(f"Production summary mein column {sorted(missing)} nahi mila. Columns: {list(raw.columns)}")
+
+    txt = raw["DATE"].astype(str).str.strip()
+    d = pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
+    for fmt in _YIELD_DATE_FORMATS:          # file mein 2 date formats mile hue hain
+        m = d.isna()
+        if not m.any():
+            break
+        d[m] = pd.to_datetime(txt[m], format=fmt, errors="coerce")
+    bad = int(d.isna().sum())
+    if bad:
+        log.warning("production summary: %d rows with unreadable DATE skipped", bad)
+
+    df = pd.DataFrame({
+        "_date": d.dt.date,
+        "ym": d.dt.year * 100 + d.dt.month,
+        "item": raw["ITEM NAME"].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
+        "kg": _num(raw["KGS"]).fillna(0.0),
+    })
+    df = df[d.notna()].copy()
+    if df.empty:
+        raise DataError("Production summary mein koi valid date nahi mili")
+    return df, datetime.datetime.now(IST)
+
+
+def grade_yield_text(day):
+    """Selected date ke MONTH ki poori 1st / 2nd grade yield."""
+    try:
+        y_df, err, _ = get_sheet("prod_summary")
+        if y_df is None:
+            return f"Grade yield: data unavailable ({err})"
+        m = y_df[y_df["ym"] == day.year * 100 + day.month]
+        if m.empty:
+            return f"Grade yield: {day:%b-%y} ka data nahi hai"
+        total = float(m["kg"].sum())
+        if total <= 0:
+            return f"Grade yield: {day:%b-%y} ka total weight 0 hai"
+        first = total - float(m.loc[m["item"].isin(FIRST_GRADE_EXCLUDE), "kg"].sum())
+        second = float(m.loc[m["item"].isin(SECOND_GRADE_ITEMS), "kg"].sum())
+        return (f"{day:%b-%y} Yield: 1st Grade {first / total * 100:.2f}% ({first / 1000:,.1f} T) | "
+                f"2nd Grade {second / total * 100:.2f}% ({second / 1000:,.1f} T) | "
+                f"Total {total / 1000:,.1f} T")
+    except Exception as exc:
+        log.exception("grade yield failed")
+        return f"Grade yield error: {type(exc).__name__}: {exc}"
+
+
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def _fetch_shed_cached(files):
     """D/E shed jaisi files (Date=col C, Type=col D, Value=col E) jodta hai."""
@@ -935,7 +1017,7 @@ def compute_kpi(df, spec, day):
                 "value": f"{total_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
                 "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
                 "color": BLUE,
-                "extra": None
+                "extra": grade_yield_text(day)
             }
 
         # 3. MATTRESS ke liye logic
@@ -1749,6 +1831,12 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
+    # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
+    "prod_summary": {
+        "type": "yield",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx",  # <-- GitHub par jo naam rakhoge wahi likho
+        "sheet_name": "DATA",
+    },
     "m_shed": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- M-Shed (4).xlsx KA SAHI LINK
@@ -2304,6 +2392,12 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+        if cfg.get("type") == "yield":
+            df, fetched = _fetch_yield_cached(cfg["url"], cfg.get("sheet_name", "DATA"))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
+
         if cfg.get("type") == "stock":
             df, fetched = _fetch_stock_cached(cfg["url"], cfg["sheet_name"])
             good[name] = (df, fetched)
