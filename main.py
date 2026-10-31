@@ -804,6 +804,8 @@ def _fetch_yield_cached(url, sheet_name):
         "ym": d.dt.year * 100 + d.dt.month,
         "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
         "kg": _num(raw[kg_col]).fillna(0.0),
+        # Naya line yahan add kiya hai:
+        "bundles": raw[next((c for c in raw.columns if "BUNDLE" in c), "BUNDLES")].astype(str).str.strip()
     })
     df = df[d.notna()].copy()
     if df.empty:
@@ -978,22 +980,20 @@ def compute_kpi(df, spec, day):
             breakdown_txt = f"1st: {first_pct:.2f}% | 2nd: {second_pct:.2f}% | 3rd: {third_pct:.2f}%"
 
             # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
+            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
             year_data = y_df[y_df["_date"] >= datetime.date(2026, 4, 1)]
             year_total_kg = year_data["kg"].sum()
 
-            # --- NAYA: YEARLY BUNDLES & GRADE-WISE COUNT (Aapke diye numbers ke hisaab se) ---
-            # Unique Bundles count karna (kyunki ek bundle mein multiple rows hoti hain)
+            # --- NAYA: YEARLY BUNDLES & GRADE-WISE COUNT ---
+            # Unique Bundles count karna
             if "bundles" in year_data.columns:
-                year_total_bundles = year_data["bundles"].astype(str).str.strip().nunique()
+                # Empty strings hatao taaki count sahi aaye
+                valid_bundles = year_data["bundles"][year_data["bundles"] != ""]
+                year_total_bundles = valid_bundles.nunique()
                 
                 # Grade wise bundles count (Items ke basis par)
-                # 1st Grade: Jo items exclude list mein nahi hain
-                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["bundles"].astype(str).str.strip().nunique()
-                
-                # 2nd Grade: Jo SECOND_GRADE_ITEMS mein hain
-                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["bundles"].astype(str).str.strip().nunique()
-                
-                # 3rd Grade: Jo na 1st mein na 2nd mein
+                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["bundles"].nunique()
+                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["bundles"].nunique()
                 third_grade_bundles = year_total_bundles - first_grade_bundles - second_grade_bundles
                 
                 bundles_txt = f"Total Prod: {year_total_bundles:,} | 1st: {first_grade_bundles:,} | 2nd: {second_grade_bundles:,} | 3rd: {third_grade_bundles:,}"
@@ -1001,10 +1001,9 @@ def compute_kpi(df, spec, day):
                 bundles_txt = "Bundles data not found in sheet"
 
             return {
-                "value": f"{first_pct:,.2f} %",       # Upar 1st Grade Yield
-                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", # Neeche month ka total
+                "value": f"{first_pct:,.2f} %",       
+                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", 
                 "color": BLUE,
-                # Yahan humne Extra mein Yearly Total ke saath Bundles bhi jod diya hai
                 "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T | {bundles_txt}"
             }
 
