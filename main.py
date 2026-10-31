@@ -1169,7 +1169,7 @@ def compute_kpi(df, spec, day):
 order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
         
         # 2. Qty Column dhoondho
-        qty_col = None
+qty_col = None
         for q in ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]:
             for c in df_ord.columns:
                 if str(c).upper().strip() == q:
