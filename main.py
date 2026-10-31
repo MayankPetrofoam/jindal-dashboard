@@ -755,14 +755,17 @@ def _fetch_stock_cached(url, sheet_name):
     return df, datetime.datetime.now(IST)
 
 # ====================================================================
-# GRADE YIELD  (Prod. Summary file, sheet "DATA")
-# yield % = (grade ka weight / us month ka TOTAL weight) x 100
+# GRADE YIELD  (Prod. Summary file)
+#   yield % = (grade ka weight / us period ka TOTAL weight) x 100
+#   Item ka naam (ITEM NAME column) hi grade decide karta hai.
 # ====================================================================
-# 1st Grade = TOTAL weight minus ye items. (Total mein sab kuch ginta hai.)
-FIRST_GRADE_EXCLUDE = ["BONDED BLOCK", "PEELING 2ND GRADE", "PEELING 3RD GRADE",
-                       "PU FOAM 2ND GRADE", "PU FOAM 3RD GRADE", "QUILTING SCRAP"]
-# 2nd Grade = sirf ye items.
-SECOND_GRADE_ITEMS = ["PU FOAM 2ND GRADE", "PEELING 2ND GRADE", "BONDED BLOCK", "QUILTING SCRAP"]
+SECOND_GRADE_ITEMS = ["PEELING 2ND GRADE", "PU FOAM 2ND GRADE", "PU FOAM A GRADE",
+                      "A GRADE", "PU FOAM DC GRADE"]            # <-- DC GRADE yahan hai (neeche note dekho)
+THIRD_GRADE_ITEMS = ["PEELING 3RD GRADE", "PU FOAM 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]
+# 1st Grade = BAAKI SAB items (mattress, pillow, bonded sheet, peeling roll, pu foam sheet ...)
+FIRST_GRADE_EXCLUDE = SECOND_GRADE_ITEMS + THIRD_GRADE_ITEMS
+BUNDLES_ONLY_WITH_WEIGHT = True      # True: jis row mein weight 0 hai (mattress) wo bundle count mein nahi
+YIELD_START = datetime.date(2026, 4, 1)   # saal ki shuruaat (April)
 
 _YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
                        "%d-%b-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d/%m/%y"]
@@ -770,69 +773,109 @@ _YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
 
 @st.cache_data(ttl=900, show_spinner="Production summary load ho rahi hai (badi file hai)...")
 def _fetch_yield_cached(url, sheet_name):
-    """DATE, ITEM NAME, KGS columns padhta hai (xlsx ya csv)."""
+    """Columns: DATE, ITEM NAME, BUNDLES, KGS  ->  _date, ym, item, kg, BUNDLES, grade (1/2/3)."""
+    is_csv = str(url).lower().split("?")[0].endswith(".csv")
     if re.match(r"^https?://", url or ""):
-        data = _http_get(_direct_url(url))
-        src = io.BytesIO(data)
+        src = io.BytesIO(_http_get(_direct_url(url)))
     else:
         src = url
-        
-    # Aapki file ka sheet name "Prod. Summary 26-27" hai
-    raw = pd.read_excel(src, sheet_name=sheet_name, engine="openpyxl", dtype=object)
-    
-    # Column names ko clean karo
+    if is_csv:
+        raw = pd.read_csv(src, dtype=str)
+    else:
+        xl = pd.ExcelFile(src, engine="openpyxl")
+        tab = sheet_name if sheet_name in xl.sheet_names else ("DATA" if "DATA" in xl.sheet_names else xl.sheet_names[0])
+        raw = xl.parse(tab, dtype=object)
     raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
-    
-    # Column locate karo (kuch bhi ho, ye pakad lega)
-    date_col = next((c for c in raw.columns if "DATE" in c), None)
-    item_col = next((c for c in raw.columns if "ITEM" in c or "NAME" in c), None)
-    kg_col = next((c for c in raw.columns if "KG" in c or "WEIGHT" in c or "TOTAL" in c), None)
-    
-    if not all([date_col, item_col, kg_col]):
-        raise DataError(f"Columns nahi mile. Mile hue columns: {list(raw.columns)}")
 
-    # Date parsing
+    def pick(exact, *contains):
+        if exact in raw.columns:
+            return exact
+        return next((c for c in raw.columns if any(w in c for w in contains)), None)
+
+    date_col = pick("DATE", "DATE")
+    item_col = pick("ITEM NAME", "ITEM", "NAME")
+    kg_col = pick("KGS", "KG", "WEIGHT")
+    bdl_col = pick("BUNDLES", "BUNDLE", "BDL")
+    if not all([date_col, item_col, kg_col]):
+        raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS). Mile hue: {list(raw.columns)}")
+
     txt = raw[date_col].astype(str).str.strip()
     d = pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
-    for fmt in ["%d-%b-%y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y"]:
+    for fmt in _YIELD_DATE_FORMATS:                    # file mein 2 date formats mile hue hain
         m = d.isna()
-        if not m.any(): break
+        if not m.any():
+            break
         d[m] = pd.to_datetime(txt[m], format=fmt, errors="coerce")
 
+    item = raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True)
     df = pd.DataFrame({
         "_date": d.dt.date,
         "ym": d.dt.year * 100 + d.dt.month,
-        "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
+        "item": item,
         "kg": _num(raw[kg_col]).fillna(0.0),
-        "BUNDLES": raw[next((c for c in raw.columns if "BUNDLE" in c), "BUNDLES")].astype(str).str.strip()
+        "BUNDLES": raw[bdl_col].astype(str).str.strip().replace({"nan": "", "None": ""}) if bdl_col else "",
     })
-    # Upar wali line mein BUNDLES column add kar diya gaya hai
+    df["grade"] = 1
+    df.loc[df["item"].isin(SECOND_GRADE_ITEMS), "grade"] = 2
+    df.loc[df["item"].isin(THIRD_GRADE_ITEMS), "grade"] = 3
     df = df[d.notna()].copy()
     if df.empty:
         raise DataError("Production summary mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
 
-def grade_yield_text(day):
-    """Selected date ke MONTH ki poori 1st / 2nd grade yield."""
-    try:
-        y_df, err, _ = get_sheet("prod_summary")
-        if y_df is None:
-            return f"Grade yield: data unavailable ({err})"
-        m = y_df[y_df["ym"] == day.year * 100 + day.month]
-        if m.empty:
-            return f"Grade yield: {day:%b-%y} ka data nahi hai"
-        total = float(m["kg"].sum())
-        if total <= 0:
-            return f"Grade yield: {day:%b-%y} ka total weight 0 hai"
-        first = total - float(m.loc[m["item"].isin(FIRST_GRADE_EXCLUDE), "kg"].sum())
-        second = float(m.loc[m["item"].isin(SECOND_GRADE_ITEMS), "kg"].sum())
-        return (f"{day:%b-%y} Yield: 1st Grade {first / total * 100:.2f}% ({first / 1000:,.1f} T) | "
-                f"2nd Grade {second / total * 100:.2f}% ({second / 1000:,.1f} T) | "
-                f"Total {total / 1000:,.1f} T")
-    except Exception as exc:
-        log.exception("grade yield failed")
-        return f"Grade yield error: {type(exc).__name__}: {exc}"
+def _grade_table(frame):
+    """Ek period ka data -> weight, yield % aur bundles (1st / 2nd / 3rd)."""
+    kg = frame.groupby("grade")["kg"].sum()
+    total = float(kg.sum())
+    b = frame[frame["BUNDLES"] != ""]
+    if BUNDLES_ONLY_WITH_WEIGHT:
+        b = b[b["kg"] > 0]
+    bd = b.groupby("grade").size()
+    return {
+        "total": total,
+        "kg": {g: float(kg.get(g, 0.0)) for g in (1, 2, 3)},
+        "pct": {g: (float(kg.get(g, 0.0)) / total * 100 if total else 0.0) for g in (1, 2, 3)},
+        "bdl": {g: int(bd.get(g, 0)) for g in (1, 2, 3)},
+        "bdl_total": int(bd.sum()),
+    }
+
+
+def yield_card(day):
+    """Total Production & Yield button. Bada text = selected month ki 1st grade yield %."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "0.00 %", "desc": f"Data error: {err}", "color": RED}
+
+    ym = day.year * 100 + day.month
+    month = y_df[y_df["ym"] == ym]                      # selected month (poora)
+    if month.empty or month["kg"].sum() == 0:
+        return {"value": "0.00 %", "desc": f"No data for {day:%b-%Y}", "color": GREY}
+    mt = _grade_table(month)
+
+    upto = y_df[(y_df["ym"] <= ym) & (y_df["_date"] >= YIELD_START)]     # April se selected month tak
+    yt = _grade_table(upto)
+
+    months = []
+    for k in sorted(upto["ym"].unique()):
+        t = _grade_table(upto[upto["ym"] == k])
+        months.append(f"{datetime.date(int(k // 100), int(k % 100), 1):%b} {t['pct'][1]:.1f}%")
+
+    p, b = mt["pct"], mt["bdl"]
+    extra = (
+        f"{day:%b-%y}: 1st {p[1]:.2f}% | 2nd {p[2]:.2f}% | 3rd {p[3]:.2f}%"
+        f"<br>Bundles: {mt['bdl_total']:,} (1st {b[1]:,} | 2nd {b[2]:,} | 3rd {b[3]:,})"
+        f"<br>Year Total (till {day:%b-%y}): {yt['total'] / 1000:,.1f} T | 1st {yt['pct'][1]:.2f}% | "
+        f"2nd {yt['pct'][2]:.2f}% | 3rd {yt['pct'][3]:.2f}%"
+        f"<br>Total Bundles: {yt['bdl_total']:,} (1st {yt['bdl'][1]:,} | 2nd {yt['bdl'][2]:,} | 3rd {yt['bdl'][3]:,})"
+        f"<br>Month-wise 1st: {' | '.join(months)}"
+    )
+    return {
+        "value": f"{p[1]:,.2f} %",                               # bada text: 1st grade yield
+        "desc": f"{day:%b-%y} Production: {mt['total'] / 1000:,.1f} T",
+        "color": BLUE,
+        "extra": extra,
+    }
 
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
@@ -948,67 +991,10 @@ def compute_kpi(df, spec, day):
                 "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
             }
 
-        # 2. TOTAL ke liye logic
-        # 2. TOTAL ke liye logic (Prod Summary file se)
-        # 2. TOTAL ke liye logic (Prod Summary file se)
-        # 2. TOTAL ke liye logic (Prod Summary file se)
+        # 2. TOTAL ke liye logic (Prod Summary file se: 1st/2nd/3rd grade yield + bundles)
         elif ptype == "total":
-            y_df, err, _ = get_sheet("prod_summary")
-            if y_df is None:
-                return {"value": "0.00%", "desc": f"Data error: {err}", "color": RED}
+            return yield_card(day)
 
-            # 1. Selected Month ka Data (Poora Mahina)
-            month_data = y_df[y_df["ym"] == day.year * 100 + day.month]
-            month_total_kg = month_data["kg"].sum()
-
-            if month_total_kg == 0:
-                return {"value": "0.00 %", "desc": f"No data for {day.strftime('%b-%Y')}", "color": GREY}
-
-            # --- MONTH CALCULATIONS ---
-            # 1st Grade = Total - (2nd + 3rd + Scrap)
-            first_grade_kg = month_total_kg - month_data[month_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
-            first_pct = (first_grade_kg / month_total_kg) * 100
-
-            # 2nd Grade
-            second_grade_kg = month_data[month_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
-            second_pct = (second_grade_kg / month_total_kg) * 100
-
-            # Baaki sab (3rd grade, scrap, etc.)
-            third_pct = 100.0 - first_pct - second_pct
-
-            # Format text: "1st: 79.48% | 2nd: 8.13% | 3rd: 12.39%"
-            breakdown_txt = f"1st: {first_pct:.2f}% | 2nd: {second_pct:.2f}% | 3rd: {third_pct:.2f}%"
-
-            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
-            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
-            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
-            year_data = y_df[y_df["_date"] >= datetime.date(2026, 4, 1)]
-            year_total_kg = year_data["kg"].sum()
-
-            # --- NAYA: YEARLY BUNDLES & GRADE-WISE COUNT ---
-            # Check karo ki 'BUNDLES' column (capital) exist karta hai ya nahi
-            if "BUNDLES" in year_data.columns:
-                # Empty strings hatao taaki count sahi aaye
-                valid_bundles = year_data["BUNDLES"][year_data["BUNDLES"].astype(str).str.strip() != ""]
-                year_total_bundles = valid_bundles.nunique()
-                
-                # Grade wise bundles count (Items ke basis par)
-                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["BUNDLES"].nunique()
-                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["BUNDLES"].nunique()
-                third_grade_bundles = year_total_bundles - first_grade_bundles - second_grade_bundles
-                
-                bundles_txt = f"Total Prod: {year_total_bundles:,} | 1st: {first_grade_bundles:,} | 2nd: {second_grade_bundles:,} | 3rd: {third_grade_bundles:,}"
-            else:
-                # Agar phir bhi na mile toh error dikhado debugging ke liye
-                bundles_txt = f"Bundles Col Missing. Cols: {list(year_data.columns)[:5]}"
-
-            return {
-                "value": f"{first_pct:,.2f} %",       # Upar 1st Grade Yield
-                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", # Neeche month ka total
-                "color": BLUE,
-                # Yahan humne Extra mein Yearly Total ke saath Bundles bhi jod diya hai
-                "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T | {bundles_txt}"
-            }
         # 3. MATTRESS ke liye logic
         elif ptype == "mattress":
             t = PROD_TYPES["mattress"]
