@@ -1165,8 +1165,8 @@ def compute_kpi(df, spec, day):
     if calc and str(calc).startswith("order_"):
         df_ord = df.copy()
 
-        # 1. Order No Column dhoondho
-        order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper()), None)
+        # 1. Order No Column dhoondho (Sheet 1: ORDER NO. | Sheet 2: ORDER NO)
+order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
         
         # 2. Qty Column dhoondho
         qty_col = None
@@ -1798,15 +1798,15 @@ SHEETS = {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
         "date_col": "DATE",
-        "dayfirst": True,             # <-- YEH CHANGE KAREIN (False se True)
-        "ignore_cols": ["REASON", "FIN"],
+        "dayfirst": True,
+        "ignore_cols": ["REASON", "FIN", "RATE"],
     },
     "order_management_2": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
-        "worksheet": ["648729418"],   # <-- YEH CHANGE KAREIN (0 hata dein, sirf yeh rakhein)
+        "worksheet": ["648729418"],
         "date_col": "ORDER DATE",
         "dayfirst": True,
-        "ignore_cols": ["REASON", "FIN"],
+        "ignore_cols": ["REASON", "FIN", "RATE"],
     },
     "m_shed": {
         "type": "excel",
