@@ -1165,11 +1165,12 @@ def compute_kpi(df, spec, day):
     if calc and str(calc).startswith("order_"):
         df_ord = df.copy()
 
-        # 1. Order No aur Qty Column dhoondho
+        # 1. Order No Column dhoondho (Sachin sheet mein 'ORDER NO', Raman sheet mein 'ORDER NO.' ho sakta hai)
         order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper()), None)
+        
+        # 2. Qty Column dhoondho
         qty_col = next((c for c in df_ord.columns if str(c).upper().strip() in
-                        ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL"]), None)
-
+                        ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]), None)
         if not qty_col:
             for c in df_ord.columns:
                 n = str(c).upper()
@@ -1177,20 +1178,21 @@ def compute_kpi(df, spec, day):
                     qty_col = c
                     break
 
-        # 2. Pending filter (Sirf APPROVED resolved hai, baaki sab pending)
-        fin_col = next((c for c in df_ord.columns if "FINANCE" in str(c).upper()), None)
+        # 3. FINANCE column dhoondho (FINA... ya FINANCE 1 jo bhi ho)
+        fin_col = next((c for c in df_ord.columns if "FIN" in str(c).upper()), None)
         if fin_col:
             fin_val = df_ord[fin_col].astype(str).str.strip().str.upper()
+            # Agar cell mein "APPROVED" hai AUR "NOT" nahi hai -> Resolved
             is_approved = fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False)
             df_ord["_is_pending"] = ~is_approved
         else:
-            df_ord["_is_pending"] = True
+            df_ord["_is_pending"] = True  # Agar FINANCE column hi nahi mila, toh sab pending maan lo
 
-        # 3. Age calculation
+        # 4. Age calculation
         df_ord["_age_days"] = df_ord["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 999)
         pending_df = df_ord[df_ord["_is_pending"]].copy()
 
-        # Helper: unique orders count karne ke liye (Order No ke basis par)
+        # Helper: Unique Order No count karne ke liye
         def _unique_orders(frame):
             if order_no_col and order_no_col in frame.columns:
                 return frame[order_no_col].astype(str).str.strip().replace("", pd.NA).nunique()
