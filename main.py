@@ -1160,89 +1160,62 @@ def compute_kpi(df, spec, day):
         return {"value": f"₹{amt_90_plus:,.0f}",
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
-    # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
-    # ---------- ORDER MANAGEMENT (Google Sheet, saare tabs) ----------
+    # ---------- ORDER MANAGEMENT (har ORDER NO = ek order; data _fetch_orders_cached se aata hai) ----------
     if calc and str(calc).startswith("order_"):
-        df_ord = df.copy()
+        if "ORDER NO" not in df.columns or "FINANCE" not in df.columns:
+            return {"value": "Error", "desc": "ORDER NO / FINANCE column nahi mila", "color": RED}
 
-        # Direct Order No column dhoondho
-        order_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
-        if not order_col:
-            return {"value": "Error", "desc": "ORDER NO column not found", "color": RED}
+        orders = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
+        approved_mask = orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED")
 
-        # Finance column dhoondho
-        fin_col = next((c for c in df_ord.columns if "FIN" in str(c).upper()), None)
+        def _n(frame):
+            """Unique order numbers (5361+5362 pehle hi 2 rows ban chuke hain)."""
+            return frame["ORDER NO"].astype(str).str.strip().nunique()
 
-        # Sirf un rows ko rakho jahan ORDER NO actually likha hua hai
-        valid_orders = df_ord[df_ord[order_col].astype(str).str.strip() != ""].copy()
-        
-        # Finance check karo (Pending hai ya Approved)
-        if fin_col:
-            fin_val = valid_orders[fin_col].astype(str).str.strip().str.upper()
-            is_pending = ~(fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False))
-            pending_df = valid_orders[is_pending].copy()
-        else:
-            pending_df = valid_orders.copy()
+        # age in days (date na ho to NaN)
+        age = pd.to_numeric(orders["_date"].apply(lambda x: (day - x).days if pd.notna(x) else None),
+                            errors="coerce")
 
-        # Helper function: Unique Order No count (Comma aur Plus wale numbers bhi alag count honge)
-        def _unique_orders(frame):
-            return frame[order_col].astype(str).str.strip().replace("", pd.NA).nunique()
-
-        # --- AGEING BLOCKS ---
+        # --- AGEING BLOCKS (saare orders, finance status se matlab nahi) ---
         if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
-            sub = pending_df.copy()
-            
-            if "_date" in sub.columns and sub["_date"].notna().any():
-                sub["_age_days"] = sub["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 0)
-                if calc == "order_age_0_7": sub = sub[(sub["_age_days"] >= 0) & (sub["_age_days"] <= 7)]
-                elif calc == "order_age_7_14": sub = sub[(sub["_age_days"] > 7) & (sub["_age_days"] <= 14)]
-                elif calc == "order_age_14_21": sub = sub[(sub["_age_days"] > 14) & (sub["_age_days"] <= 21)]
-                else: sub = sub[sub["_age_days"] > 21]
-
-            total_orders = _unique_orders(sub)
-            return {"value": f"{total_orders} Orders", "desc": "Pending", "color": BLUE}
-
-        # --- ORDERS LEFT (Total Pending) ---
-        if calc == "order_pending":
-            total_orders = _unique_orders(pending_df)
-            
-            per_tab = ""
-            if "TAB_GID" in pending_df.columns:
-                tab_counts = []
-                for t, g in pending_df.groupby("TAB_GID"):
-                    tab_counts.append(f"Tab {t}: {_unique_orders(g)}")
-                per_tab = " | ".join(tab_counts)
-
-            return {"value": f"{total_orders} Orders", "desc": "Total Pending", "color": RED if total_orders > 0 else BLUE, "extra": per_tab}
-
-        # --- CURRENT SCHEDULE ---
-        if calc == "order_current_schedule":
-            if "_date" in valid_orders.columns:
-                today_df = valid_orders[valid_orders["_date"] == day]
+            if calc == "order_age_0_7":
+                m = (age >= 0) & (age <= 7)
+            elif calc == "order_age_7_14":
+                m = (age > 7) & (age <= 14)
+            elif calc == "order_age_14_21":
+                m = (age > 14) & (age <= 21)
             else:
-                today_df = pd.DataFrame()
+                m = age > 21
+            return {"value": f"{_n(orders[m])} Orders", "desc": "Pending", "color": BLUE}
 
+        # --- ORDERS LEFT (saare orders) ---
+        if calc == "order_pending":
+            total_orders = _n(orders)
+            tab_col = "TAB_NAME" if "TAB_NAME" in orders.columns else "TAB_GID"
+            parts = [f"{t}: {_n(g)}" for t, g in orders.groupby(tab_col)]
+            no_date = int(age.isna().sum())
+            if no_date:
+                parts.append(f"Bina date: {no_date}")
+            return {"value": f"{total_orders} Orders", "desc": "Total Pending",
+                    "color": RED if total_orders > 0 else BLUE, "extra": " | ".join(parts)}
+
+        # --- CURRENT SCHEDULE (selected date ke orders) ---
+        if calc == "order_current_schedule":
+            today_df = orders[orders["_date"] == day]
             if today_df.empty:
                 return {"value": "0 Orders", "desc": "No orders scheduled today", "color": GREY}
+            not_ok = _n(today_df[~approved_mask.loc[today_df.index]])
+            return {"value": f"{_n(today_df)} Orders", "desc": f"Finance pending: {not_ok}", "color": BLUE}
 
-            total_orders = _unique_orders(today_df)
-            if fin_col:
-                fin_val = today_df[fin_col].astype(str).str.strip().str.upper()
-                pending_today = ~(fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False))
-                pending_count = _unique_orders(today_df[pending_today])
-            else:
-                pending_count = total_orders
-
-            return {"value": f"{total_orders} Orders", "desc": f"Today's Pending: {pending_count}", "color": BLUE}
-
-        # --- SERVICEABILITY % ---
+        # --- SERVICEABILITY % = approved / total ---
         if calc == "order_serviceability":
-            total = _unique_orders(valid_orders)
-            approved = _unique_orders(valid_orders[~valid_orders.index.isin(pending_df.index)])
-            if total == 0: return None
-            pct = (approved / total) * 100
-            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total} Total", "color": BLUE if pct > 80 else AMBER}
-        
+            total = _n(orders)
+            approved = _n(orders[approved_mask])
+            if total == 0:
+                return None
+            pct = approved / total * 100
+            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total} Total",
+                    "color": BLUE if pct > 80 else AMBER}
 
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
     if calc == "prod_log" and spec.get("type") == "pillow":
@@ -1761,6 +1734,7 @@ SHEETS = {
         "static": True, 
     },
     "order_management_1":  {
+        "type": "orders",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
         "date_col": "DATE", 
@@ -1768,6 +1742,7 @@ SHEETS = {
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
     "order_management_2": {
+        "type": "orders",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
         "worksheet": ["648729418"],
         "date_col": "ORDER DATE",
@@ -2187,6 +2162,105 @@ def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
     return out, datetime.datetime.now(IST)
 
 
+# ---- ORDER SHEETS: order-number based loader ----
+_SPLIT = re.compile(r"[+,/&]")
+
+
+def _key(s):
+    return re.sub(r"[^A-Z]", "", str(s).upper())
+
+
+def parse_order_date(s):
+    """02/07/26, 13/7/26, 30.09.2026, 3.10.2026 and the typos 22.102.2026 / 15.10.206 -> date or None."""
+    m = re.match(r"^\s*(\d{1,2})[./-](\d{1,3})[./-](\d{2,4})\s*$", str(s))
+    if not m:
+        return None
+    d, mo, y = int(m[1]), m[2], int(m[3])
+    mo = int(mo[:2]) if len(mo) == 3 else int(mo)      # 102 -> 10
+    if y < 100:
+        y += 2000
+    elif y == 206:                                     # 206 -> 2026
+        y = 2026
+    try:
+        return datetime.date(y, mo, d)
+    except ValueError:
+        return None
+
+
+def order_tokens(cell):
+    """'5253+5257+5258' -> ['5253','5257','5258'];  '5280-5321' stays ONE token (flagged by caller)."""
+    out = []
+    for p in _SPLIT.split(str(cell)):
+        p = p.strip()
+        if re.fullmatch(r"\d{3,5}(\s*-\s*\d{3,5})?", p):
+            out.append(re.sub(r"\s+", "", p))
+    return out
+
+
+def order_tab_to_df(rows, gid):
+    """rows = csv rows of ONE tab. Returns DataFrame[ORDER NO, FINANCE, _date, TAB_GID, PARTY, RAW_ORDER]."""
+    rows = [[str(c).strip() for c in r] for r in rows]
+    hdr = next((i for i, r in enumerate(rows) if any(_key(c) == "ORDERNO" for c in r)), None)
+    if hdr is None:
+        raise ValueError(f"tab {gid}: no 'ORDER NO' header row found")
+    h = rows[hdr]
+    oc = next(j for j, c in enumerate(h) if _key(c) == "ORDERNO")
+    fc = next((j for j, c in enumerate(h) if _key(c).startswith("FINANCE")), None)
+    # date header may sit on the row above (SAJID tab: 'ORDER DATE' is on row 2, 'ORDER NO' on row 3)
+    dc = None
+    for rr in (rows[hdr], *(rows[max(0, hdr - 2):hdr][::-1])):
+        dc = next((j for j, c in enumerate(rr) if "DATE" in _key(c)), None)
+        if dc is not None:
+            break
+    pc = next((j for j, c in enumerate(h) if "PARTY" in _key(c)), None)
+
+    def cell(r, j):
+        return r[j] if j is not None and j < len(r) else ""
+
+    out = []
+    for r in rows[hdr + 1:]:
+        toks = order_tokens(cell(r, oc))          # header repeats / titles / blanks give no tokens
+        if not toks:
+            continue
+        fin = cell(r, fc).upper()
+        fin = "APPROVED" if fin == "APPROVED" else "NOT APPROVED" if fin == "NOT APPROVED" else ""
+        dt = parse_order_date(cell(r, dc))
+        for t in toks:
+            out.append({"ORDER NO": t, "FINANCE": fin, "_date": dt, "TAB_GID": str(gid),
+                        "PARTY": cell(r, pc), "RAW_ORDER": cell(r, oc)})
+    return pd.DataFrame(out, columns=["ORDER NO", "FINANCE", "_date", "TAB_GID", "PARTY", "RAW_ORDER"])
+
+
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_orders_cached(url, gids):
+    """Order workbook: SAARE tabs alag-alag padho, har ORDER NO ek row.
+    `gids` sirf fallback hain; tabs pubhtml se apne aap dhoondhe jaate hain (koi tab chhootega nahi)."""
+    tabs = {str(g): f"Tab {g}" for g in gids}
+    try:
+        for tab_name, gid in discover_tabs(url):
+            tabs[str(gid)] = tab_name
+    except Exception as exc:
+        log.warning("tab discovery failed for order sheet: %s", exc)
+    base = url.split("/pub")[0]
+    frames, problems = [], []
+    for gid, tab_name in tabs.items():
+        try:
+            data = _http_get(f"{base}/pub?output=csv&gid={gid}")
+            if data.lstrip()[:1] == b"<":
+                raise PermissionError("tab is not published as CSV")
+            rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
+            d = order_tab_to_df(rows, gid)
+            d["TAB_NAME"] = tab_name
+            frames.append(d)
+        except Exception as exc:
+            problems.append(f"{tab_name} (gid {gid}): {type(exc).__name__}: {exc}")
+    if problems:
+        log.warning("order tabs skipped: %s", " | ".join(problems))
+    if not frames:
+        raise DataError("Kisi bhi order tab se data nahi mila. " + " | ".join(problems))
+    return pd.concat(frames, ignore_index=True), datetime.datetime.now(IST)
+
+
 def get_sheet(name):
     """-> (DataFrame or None, error text or None, fetched-at or None)."""
     # Agar name ek list hai (jaise ["order_management_1", "order_management_2"])
@@ -2206,6 +2280,12 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
+        if cfg.get("type") == "orders":
+            df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
+
         if isinstance(cfg.get("worksheet"), (list, tuple)):
             df, fetched = _fetch_multi_cached(cfg["url"], tuple(cfg["worksheet"]), cfg["date_col"],
                                             cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
@@ -2492,7 +2572,8 @@ def render_explorer():
 
 def render_diagnostics():
     with st.expander("🛠 Diagnostics (sources, columns, KPI validation)"):
-        for name in sorted({s["sheet"] for s in KPI_SOURCES.values()}):
+        for name in sorted({n for s in KPI_SOURCES.values()
+                           for n in (s["sheet"] if isinstance(s["sheet"], (list, tuple)) else [s["sheet"]])}):
             df, err, fetched = get_sheet(name)
             st.markdown(f"**Sheet `{name}`**")
             if df is None:
