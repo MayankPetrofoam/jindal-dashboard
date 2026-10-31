@@ -1217,61 +1217,65 @@ def compute_kpi(df, spec, day):
         return {"value": f"₹{amt_90_plus:,.0f}",
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
-    # ---------- ORDER MANAGEMENT (har ORDER NO = ek order; data _fetch_orders_cached se aata hai) ----------
+    # ---------- ORDER MANAGEMENT (ORDER NO = base; har order sirf ek baar ginta hai) ----------
+    # Rule: 0-7 + 7-14 + 14-21 + 21+  =  ORDERS LEFT   (hamesha, kisi bhi date par)
     if calc and str(calc).startswith("order_"):
         if "ORDER NO" not in df.columns or "FINANCE" not in df.columns:
             return {"value": "Error", "desc": "ORDER NO / FINANCE column nahi mila", "color": RED}
 
-        orders = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
-        approved_mask = orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED")
+        orders_all = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
 
-        def _n(frame):
-            """Unique order numbers (5361+5362 pehle hi 2 rows ban chuke hain)."""
-            return frame["ORDER NO"].astype(str).str.strip().nunique()
-
-        # age in days (date na ho to NaN)
-        age = pd.to_numeric(orders["_date"].apply(lambda x: (day - x).days if pd.notna(x) else None),
-                            errors="coerce")
-
-        # --- AGEING BLOCKS (saare orders, finance status se matlab nahi) ---
-        if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
-            if calc == "order_age_0_7":
-                m = (age >= 0) & (age <= 7)
-            elif calc == "order_age_7_14":
-                m = (age > 7) & (age <= 14)
-            elif calc == "order_age_14_21":
-                m = (age > 14) & (age <= 21)
-            else:
-                m = age > 21
-            return {"value": f"{_n(orders[m])} Orders", "desc": "Pending", "color": BLUE}
-
-        # --- ORDERS LEFT (saare orders) ---
-        if calc == "order_pending":
-            total_orders = _n(orders)
-            tab_col = "TAB_NAME" if "TAB_NAME" in orders.columns else "TAB_GID"
-            parts = [f"{t}: {_n(g)}" for t, g in orders.groupby(tab_col)]
-            no_date = int(age.isna().sum())
-            if no_date:
-                parts.append(f"Bina date: {no_date}")
-            return {"value": f"{total_orders} Orders", "desc": "Total Pending",
-                    "color": RED if total_orders > 0 else BLUE, "extra": " | ".join(parts)}
-
-        # --- CURRENT SCHEDULE (selected date ke orders) ---
+        # --- CURRENT SCHEDULE (selected date ke orders; iski calculation pehle jaisi hi hai) ---
         if calc == "order_current_schedule":
-            today_df = orders[orders["_date"] == day]
+            today_df = orders_all[orders_all["_date"] == day]
             if today_df.empty:
                 return {"value": "0 Orders", "desc": "No orders scheduled today", "color": GREY}
-            not_ok = _n(today_df[~approved_mask.loc[today_df.index]])
-            return {"value": f"{_n(today_df)} Orders", "desc": f"Finance pending: {not_ok}", "color": BLUE}
+            ok = today_df["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED")
+            n_all = today_df["ORDER NO"].astype(str).str.strip().nunique()
+            n_pend = today_df.loc[~ok, "ORDER NO"].astype(str).str.strip().nunique()
+            return {"value": f"{n_all} Orders", "desc": f"Finance pending: {n_pend}", "color": BLUE}
 
-        # --- SERVICEABILITY % = approved / total ---
+        # --- baaki sab blocks: ek order number = ek order (duplicate number sirf ek baar, purani date wala) ---
+        orders = orders_all.copy()
+        orders["ORDER NO"] = orders["ORDER NO"].astype(str).str.strip()
+        orders["_sort"] = orders["_date"].apply(lambda x: x if pd.notna(x) else datetime.date.max)
+        orders = orders.sort_values("_sort", kind="stable").drop_duplicates("ORDER NO", keep="first")
+
+        age = pd.to_numeric(orders["_date"].apply(lambda x: (day - x).days if pd.notna(x) else None),
+                            errors="coerce")
+        undated = age.isna()                     # date nahi / samajh nahi aayi -> naya order maanke 0-7 mein
+        age = age.fillna(0)                      # (aur future date wale bhi 0-7 mein; isse koi order chhootta nahi)
+
+        masks = {
+            "order_age_0_7":   age <= 7,
+            "order_age_7_14":  (age > 7) & (age <= 14),
+            "order_age_14_21": (age > 14) & (age <= 21),
+            "order_age_21_plus": age > 21,
+        }
+        counts = {k: int(m.sum()) for k, m in masks.items()}
+        total_left = sum(counts.values())        # ORDERS LEFT = 4 blocks ka sum
+
+        if calc in masks:
+            return {"value": f"{counts[calc]} Orders", "desc": "Pending", "color": BLUE}
+
+        if calc == "order_pending":
+            tab_col = "TAB_NAME" if "TAB_NAME" in orders.columns else "TAB_GID"
+            parts = [f"{t}: {len(g)}" for t, g in orders.groupby(tab_col)]
+            line2 = (f"0-7: {counts['order_age_0_7']} + 7-14: {counts['order_age_7_14']} + "
+                     f"14-21: {counts['order_age_14_21']} + 21+: {counts['order_age_21_plus']} = {total_left}")
+            if int(undated.sum()):
+                by_tab = orders[undated].groupby(tab_col).size()
+                line2 += f"<br>Bina date ({int(undated.sum())}, 0-7 mein ginte): " + ", ".join(
+                    f"{t} {n}" for t, n in by_tab.items())
+            return {"value": f"{total_left} Orders", "desc": "Total Pending",
+                    "color": RED if total_left > 0 else BLUE, "extra": " | ".join(parts) + "<br>" + line2}
+
         if calc == "order_serviceability":
-            total = _n(orders)
-            approved = _n(orders[approved_mask])
-            if total == 0:
+            if total_left == 0:
                 return None
-            pct = approved / total * 100
-            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total} Total",
+            approved = int(orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED").sum())
+            pct = approved / total_left * 100
+            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total_left} Total",
                     "color": BLUE if pct > 80 else AMBER}
 
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
@@ -2279,7 +2283,7 @@ def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
     return out, datetime.datetime.now(IST)
 
 
-# ---- ORDER SHEETS: order-number based loader ----
+# ---- ORDER SHEETS: order-number based loader (1 ORDER NO cell = 1 order) ----
 _SPLIT = re.compile(r"[+,/&]")
 
 
@@ -2288,24 +2292,42 @@ def _key(s):
 
 
 def parse_order_date(s):
-    """02/07/26, 13/7/26, 30.09.2026, 3.10.2026 and the typos 22.102.2026 / 15.10.206 -> date or None."""
-    m = re.match(r"^\s*(\d{1,2})[./-](\d{1,3})[./-](\d{2,4})\s*$", str(s))
-    if not m:
+    """26.10.2026, 02/07/26, 13/7/26, 3.10.2026, 2026-10-26, 26-Oct-26, 9/30/2026 (US format) aur
+    typos (22.102.2026, 15.10.206) -> date. Samajh na aaye to None."""
+    s = str(s).strip()
+    if not s or s.lower() in ("nan", "none", "nat"):
         return None
-    d, mo, y = int(m[1]), m[2], int(m[3])
-    mo = int(mo[:2]) if len(mo) == 3 else int(mo)      # 102 -> 10
-    if y < 100:
-        y += 2000
-    elif y == 206:                                     # 206 -> 2026
-        y = 2026
     try:
+        m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)                        # 2026-10-26 (time ho to bhi)
+        if m:
+            return datetime.date(int(m[1]), int(m[2]), int(m[3]))
+        m = re.match(r"^(\d{1,2})[ ./-]+([A-Za-z]{3,9})[ ./,-]+(\d{2,4})$", s)    # 26-Oct-26 / 26 Oct 2026
+        if m:
+            mon = datetime.datetime.strptime(m[2][:3].title(), "%b").month
+            y = int(m[3]) + (2000 if int(m[3]) < 100 else 0)
+            return datetime.date(y, mon, int(m[1]))
+        m = re.match(r"^(\d{1,2})[./-](\d{1,3})[./-](\d{2,4})(?:\s.*)?$", s)       # 26.10.2026 / 26/10/26
+        if not m:
+            return None
+        d, mo, y = int(m[1]), m[2], int(m[3])
+        mo = int(mo[:2]) if len(mo) == 3 else int(mo)      # 102 -> 10
+        if y < 100:
+            y += 2000
+        elif y == 206:                                     # 206 -> 2026
+            y = 2026
+        if mo > 12 and d <= 12:                            # 9/30/2026 (month/day) -> swap
+            d, mo = mo, d
         return datetime.date(y, mo, d)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
+
+
+_DATE_LIKE = re.compile(r"^\d{1,2}[./-]\d{1,3}[./-]\d{2,4}$")
 
 
 def order_tokens(cell):
-    """'5253+5257+5258' -> ['5253','5257','5258'];  '5280-5321' stays ONE token (flagged by caller)."""
+    """Cell mein order number hai ya nahi: '5253+5257+5258' -> ['5253','5257','5258'], '5280-5321' -> ['5280-5321'].
+    Khali / header text / 'ORDER NO.' -> []. (Ginti ke liye poori cell = 1 order, tokens sirf pehchan ke liye.)"""
     out = []
     for p in _SPLIT.split(str(cell)):
         p = p.strip()
@@ -2315,7 +2337,10 @@ def order_tokens(cell):
 
 
 def order_tab_to_df(rows, gid):
-    """rows = csv rows of ONE tab. Returns DataFrame[ORDER NO, FINANCE, _date, TAB_GID, PARTY, RAW_ORDER]."""
+    """Ek tab ki csv rows -> ek row per ORDER NO cell.
+    * Ek cell mein 2-3 number (5354+5355) = EK order.
+    * Date column header se nahi, DATA dekh ke pehchana jata hai (header khali/badla ho tab bhi chale).
+    * Khali rows, dobara aaye headers, section titles (HARD, PRINCE ORDER ...) order nahi bante."""
     rows = [[str(c).strip() for c in r] for r in rows]
     hdr = next((i for i, r in enumerate(rows) if any(_key(c) == "ORDERNO" for c in r)), None)
     if hdr is None:
@@ -2323,28 +2348,39 @@ def order_tab_to_df(rows, gid):
     h = rows[hdr]
     oc = next(j for j, c in enumerate(h) if _key(c) == "ORDERNO")
     fc = next((j for j, c in enumerate(h) if _key(c).startswith("FINANCE")), None)
-    # date header may sit on the row above (SAJID tab: 'ORDER DATE' is on row 2, 'ORDER NO' on row 3)
-    dc = None
-    for rr in (rows[hdr], *(rows[max(0, hdr - 2):hdr][::-1])):
-        dc = next((j for j, c in enumerate(rr) if "DATE" in _key(c)), None)
-        if dc is not None:
-            break
     pc = next((j for j, c in enumerate(h) if "PARTY" in _key(c)), None)
 
     def cell(r, j):
         return r[j] if j is not None and j < len(r) else ""
 
+    data = [r for r in rows[hdr + 1:] if order_tokens(cell(r, oc))]
+
+    # date column = jis column mein in order-rows ki sabse zyada dates parse hoti hain
+    width = max((len(r) for r in rows), default=0)
+    dc, best = None, 0
+    for j in range(width):
+        n = sum(1 for r in data if parse_order_date(cell(r, j)) is not None)
+        if n > best:
+            dc, best = j, n
+    if dc is None:                                   # fallback: header mein DATE dhoondho
+        for rr in (rows[hdr], *(rows[max(0, hdr - 2):hdr][::-1])):
+            dc = next((j for j, c in enumerate(rr) if "DATE" in _key(c)), None)
+            if dc is not None:
+                break
+
     out = []
-    for r in rows[hdr + 1:]:
-        toks = order_tokens(cell(r, oc))          # header repeats / titles / blanks give no tokens
-        if not toks:
-            continue
-        fin = cell(r, fc).upper()
-        fin = "APPROVED" if fin == "APPROVED" else "NOT APPROVED" if fin == "NOT APPROVED" else ""
+    for r in data:
         dt = parse_order_date(cell(r, dc))
-        for t in toks:
-            out.append({"ORDER NO": t, "FINANCE": fin, "_date": dt, "TAB_GID": str(gid),
-                        "PARTY": cell(r, pc), "RAW_ORDER": cell(r, oc)})
+        if dt is None:                               # chuni hui column mein na ho to row mein kahin bhi date jaisa text
+            for c in r:
+                if _DATE_LIKE.match(c) and parse_order_date(c):
+                    dt = parse_order_date(c)
+                    break
+        fin = cell(r, fc).strip().upper()
+        fin = "APPROVED" if fin == "APPROVED" else "NOT APPROVED" if fin == "NOT APPROVED" else ""
+        raw = cell(r, oc)
+        out.append({"ORDER NO": re.sub(r"\s+", "", raw).upper(), "FINANCE": fin, "_date": dt,
+                    "TAB_GID": str(gid), "PARTY": cell(r, pc), "RAW_ORDER": raw})
     return pd.DataFrame(out, columns=["ORDER NO", "FINANCE", "_date", "TAB_GID", "PARTY", "RAW_ORDER"])
 
 
