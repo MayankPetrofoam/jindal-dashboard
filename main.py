@@ -771,42 +771,39 @@ _YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
 @st.cache_data(ttl=900, show_spinner="Production summary load ho rahi hai (badi file hai)...")
 def _fetch_yield_cached(url, sheet_name):
     """DATE, ITEM NAME, KGS columns padhta hai (xlsx ya csv)."""
-    norm = lambda c: re.sub(r"\s+", " ", str(c).strip().upper())
-    want = {"DATE", "ITEM NAME", "KGS"}
     if re.match(r"^https?://", url or ""):
         data = _http_get(_direct_url(url))
-        is_csv = url.lower().split("?")[0].endswith(".csv")
-        if not is_csv and data[:2] != b"PK":
-            raise PermissionError("Link se Excel file nahi mili.")
         src = io.BytesIO(data)
     else:
-        src, is_csv = url, str(url).lower().endswith(".csv")
-    if is_csv:
-        raw = pd.read_csv(src, usecols=lambda c: norm(c) in want, dtype=str)
-    else:
-        raw = pd.read_excel(src, sheet_name=sheet_name, usecols=lambda c: norm(c) in want,
-                            dtype=object, engine="openpyxl")
-    raw.columns = [norm(c) for c in raw.columns]
-    missing = want - set(raw.columns)
-    if missing:
-        raise DataError(f"Production summary mein column {sorted(missing)} nahi mila. Columns: {list(raw.columns)}")
+        src = url
+        
+    # Aapki file ka sheet name "Prod. Summary 26-27" hai
+    raw = pd.read_excel(src, sheet_name=sheet_name, engine="openpyxl", dtype=object)
+    
+    # Column names ko clean karo
+    raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
+    
+    # Column locate karo (kuch bhi ho, ye pakad lega)
+    date_col = next((c for c in raw.columns if "DATE" in c), None)
+    item_col = next((c for c in raw.columns if "ITEM" in c or "NAME" in c), None)
+    kg_col = next((c for c in raw.columns if "KG" in c or "WEIGHT" in c or "TOTAL" in c), None)
+    
+    if not all([date_col, item_col, kg_col]):
+        raise DataError(f"Columns nahi mile. Mile hue columns: {list(raw.columns)}")
 
-    txt = raw["DATE"].astype(str).str.strip()
+    # Date parsing
+    txt = raw[date_col].astype(str).str.strip()
     d = pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
-    for fmt in _YIELD_DATE_FORMATS:          # file mein 2 date formats mile hue hain
+    for fmt in ["%d-%b-%y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y"]:
         m = d.isna()
-        if not m.any():
-            break
+        if not m.any(): break
         d[m] = pd.to_datetime(txt[m], format=fmt, errors="coerce")
-    bad = int(d.isna().sum())
-    if bad:
-        log.warning("production summary: %d rows with unreadable DATE skipped", bad)
 
     df = pd.DataFrame({
         "_date": d.dt.date,
         "ym": d.dt.year * 100 + d.dt.month,
-        "item": raw["ITEM NAME"].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
-        "kg": _num(raw["KGS"]).fillna(0.0),
+        "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
+        "kg": _num(raw[kg_col]).fillna(0.0),
     })
     df = df[d.notna()].copy()
     if df.empty:
@@ -950,53 +947,50 @@ def compute_kpi(df, spec, day):
             }
 
         # 2. TOTAL ke liye logic
-        # 2. TOTAL ke liye logic (Matrix ke hisaab se)
-        # 2. TOTAL ke liye logic (Matrix ke hisaab se)
+        # 2. TOTAL ke liye logic (Prod Summary file se)
         elif ptype == "total":
-            prod_df, _ = parse_production_matrix(df)
-            if prod_df.empty:
-                return {"value": "0.00%", "desc": "No data available", "color": GREY}
+            # Aapki Prod Summary file fetch karo
+            y_df, err, _ = get_sheet("prod_summary")
+            if y_df is None:
+                return {"value": "0.00%", "desc": f"Data error: {err}", "color": RED}
 
-            # Us din ka data (Jo date select ki hai)
-            day_data = prod_df[prod_df["Date"] == day]
+            # 1. Selected Date ka Daily Data
+            day_data = y_df[y_df["_date"] == day]
+            day_total_kg = day_data["kg"].sum()
             
-            # Upar dikhane ke liye: Us din ka Average Yield (%)
-            if not day_data.empty:
-                # Sirf un rows ka average lo jahan Efficiency > 0 ho
-                valid_eff = day_data[day_data["Efficiency"] > 0]["Efficiency"]
-                daily_pct = valid_eff.mean() if not valid_eff.empty else 0.0
+            # 2. Selected Month ka Data (Month-wise)
+            month_data = y_df[y_df["ym"] == day.year * 100 + day.month]
+            month_total_kg = month_data["kg"].sum()
+
+            # 3. Calculation: 1st Grade aur 2nd Grade
+            # (Aapke code mein FIRST_GRADE_EXCLUDE aur SECOND_GRADE_ITEMS ki list pehle se hai)
+            
+            # Daily
+            if day_total_kg > 0:
+                d_first = day_total_kg - day_data[day_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
+                d_second = day_data[day_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
+                daily_pct = (d_first / day_total_kg) * 100
             else:
                 daily_pct = 0.0
 
-            # Month ka data (Jo saal start se aaj tak ka hai)
-            month_data = prod_df[(prod_df["Date"] >= datetime.date(2026, 1, 1)) & (prod_df["Date"] <= day)]
-            
-            if month_data.empty:
-                month_total_pct = 0.0
-                breakdown = "No data this month"
+            # Monthly
+            if month_total_kg > 0:
+                m_first = month_total_kg - month_data[month_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
+                m_second = month_data[month_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
+                month_pct = (m_first / month_total_kg) * 100
+                
+                # Neeche breakdown ke liye top 3 items nikalna
+                top_items = month_data.groupby("item")["kg"].sum().sort_values(ascending=False).head(3)
+                breakdown = f"Month Total: {month_total_kg/1000:,.1f} T | " + " | ".join([f"{k.title()}: {v/1000:,.1f} T" for k, v in top_items.items()])
             else:
-                # Month ka total average percentage
-                valid_month_eff = month_data[month_data["Efficiency"] > 0]["Efficiency"]
-                month_total_pct = valid_month_eff.mean() if not valid_month_eff.empty else 0.0
-                
-                # Grade-wise breakdown nikalna (Top 3)
-                # Yahan hum ActualProduction (G TOT) ko sum kar rahe hain taaki pata chale kis grade ki kitni quantity bani
-                grade_summary = month_data.groupby("Item")["ActualProduction"].sum().sort_values(ascending=False)
-                top_grades = grade_summary.head(3)
-                
-                # Sirf un grades ko dikhana jinki quantity > 0 ho
-                top_grades = top_grades[top_grades > 0]
-                
-                if not top_grades.empty:
-                    breakdown = " | ".join([f"{k}: {v:,.2f} T" for k, v in top_grades.items()])
-                else:
-                    breakdown = "No production recorded"
+                month_pct = 0.0
+                breakdown = "No data this month"
 
             return {
-                "value": f"{daily_pct:,.2f} %",  # Upar bada percentage (Efficiency)
-                "desc": f"Month Total Yield: {month_total_pct:,.2f} %", # Neeche month ka %
+                "value": f"{daily_pct:,.2f} %",       # Upar wala bada %
+                "desc": f"Month Yield: {month_pct:,.2f} %", # Neeche month ka %
                 "color": BLUE,
-                "extra": breakdown # Neeche grade-wise total (G TOT)
+                "extra": breakdown                   # Sabse neeche breakdown
             }
 
         # 3. MATTRESS ke liye logic
@@ -1868,7 +1862,7 @@ SHEETS = {
     "prod_summary": {
         "type": "yield",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx",  # <-- GitHub par jo naam rakhoge wahi likho
-        "sheet_name": "DATA",
+        "sheet_name": "Prod. Summary 26-27",
     },
     "m_shed": {
         "type": "excel",
