@@ -948,49 +948,48 @@ def compute_kpi(df, spec, day):
 
         # 2. TOTAL ke liye logic
         # 2. TOTAL ke liye logic (Prod Summary file se)
+        # 2. TOTAL ke liye logic (Prod Summary file se)
         elif ptype == "total":
-            # Aapki Prod Summary file fetch karo
             y_df, err, _ = get_sheet("prod_summary")
             if y_df is None:
                 return {"value": "0.00%", "desc": f"Data error: {err}", "color": RED}
 
-            # 1. Selected Date ka Daily Data
-            day_data = y_df[y_df["_date"] == day]
-            day_total_kg = day_data["kg"].sum()
-            
-            # 2. Selected Month ka Data (Month-wise)
+            # 1. Selected Month ka Data (Poora Mahina)
             month_data = y_df[y_df["ym"] == day.year * 100 + day.month]
             month_total_kg = month_data["kg"].sum()
 
-            # 3. Calculation: 1st Grade aur 2nd Grade
-            # (Aapke code mein FIRST_GRADE_EXCLUDE aur SECOND_GRADE_ITEMS ki list pehle se hai)
-            
-            # Daily
-            if day_total_kg > 0:
-                d_first = day_total_kg - day_data[day_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
-                d_second = day_data[day_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
-                daily_pct = (d_first / day_total_kg) * 100
-            else:
-                daily_pct = 0.0
+            if month_total_kg == 0:
+                return {"value": "0.00 %", "desc": f"No data for {day.strftime('%b-%Y')}", "color": GREY}
 
-            # Monthly
-            if month_total_kg > 0:
-                m_first = month_total_kg - month_data[month_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
-                m_second = month_data[month_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
-                month_pct = (m_first / month_total_kg) * 100
-                
-                # Neeche breakdown ke liye top 3 items nikalna
-                top_items = month_data.groupby("item")["kg"].sum().sort_values(ascending=False).head(3)
-                breakdown = f"Month Total: {month_total_kg/1000:,.1f} T | " + " | ".join([f"{k.title()}: {v/1000:,.1f} T" for k, v in top_items.items()])
-            else:
-                month_pct = 0.0
-                breakdown = "No data this month"
+            # --- MONTH CALCULATIONS ---
+            # 1st Grade = Total - (2nd + 3rd + Scrap)
+            first_grade_kg = month_total_kg - month_data[month_data["item"].isin(FIRST_GRADE_EXCLUDE)]["kg"].sum()
+            first_pct = (first_grade_kg / month_total_kg) * 100
+
+            # 2nd Grade
+            second_grade_kg = month_data[month_data["item"].isin(SECOND_GRADE_ITEMS)]["kg"].sum()
+            second_pct = (second_grade_kg / month_total_kg) * 100
+
+            # Baaki sab (3rd grade, scrap, etc.)
+            third_pct = 100.0 - first_pct - second_pct
+
+            # Top items nikalna (Grade wise summary)
+            # Hum un items ka sum nikalenge jo 1st grade exclude list mein nahi hain (matlab jo actual items hain)
+            real_items = month_data[~month_data["item"].isin(FIRST_GRADE_EXCLUDE)]
+            top_items = real_items.groupby("item")["kg"].sum().sort_values(ascending=False).head(3)
+            
+            # Format text: "1st Grade: 79.48% (831.2 T) | 2nd Grade: 8.13% (85.0 T) | 3rd Grade: 12.39%"
+            breakdown_txt = f"1st: {first_pct:.2f}% | 2nd: {second_pct:.2f}% | 3rd: {third_pct:.2f}%"
+
+            # 2. YEAR TOTAL (Saare mahino ka total - April se ab tak)
+            year_data = y_df[y_df["_date"] >= datetime.date(2026, 4, 1)]
+            year_total_kg = year_data["kg"].sum()
 
             return {
-                "value": f"{daily_pct:,.2f} %",       # Upar wala bada %
-                "desc": f"Month Yield: {month_pct:,.2f} %", # Neeche month ka %
+                "value": f"{first_pct:,.2f} %",       # Upar 1st Grade Yield
+                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", # Neeche month ka total
                 "color": BLUE,
-                "extra": breakdown                   # Sabse neeche breakdown
+                "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T"
             }
 
         # 3. MATTRESS ke liye logic
