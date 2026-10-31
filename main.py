@@ -1166,17 +1166,19 @@ def compute_kpi(df, spec, day):
         df_ord = df.copy()
 
         # 1. Order No Column dhoondho (Sheet 1: ORDER NO. | Sheet 2: ORDER NO)
-order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
+        order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
         
         # 2. Qty Column dhoondho
-qty_col = None
-for q in ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]:
+        qty_col = None
+        for q in ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]:
             for c in df_ord.columns:
                 if str(c).upper().strip() == q:
                     qty_col = c
                     break
-            if qty_col: break
-    if not qty_col:
+            if qty_col: 
+                break
+                
+        if not qty_col:
             for c in df_ord.columns:
                 if "QTY" in str(c).upper() or "BDL" in str(c).upper():
                     qty_col = c
