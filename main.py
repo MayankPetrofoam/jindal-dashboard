@@ -1165,34 +1165,37 @@ def compute_kpi(df, spec, day):
     if calc and str(calc).startswith("order_"):
         df_ord = df.copy()
 
-        # 1. Order No Column dhoondho (Sachin sheet mein 'ORDER NO', Raman sheet mein 'ORDER NO.' ho sakta hai)
+        # 1. Order No Column dhoondho
         order_no_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper()), None)
         
         # 2. Qty Column dhoondho
-        qty_col = next((c for c in df_ord.columns if str(c).upper().strip() in
-                        ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]), None)
+        qty_col = None
+        for q in ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PCS"]:
+            for c in df_ord.columns:
+                if str(c).upper().strip() == q:
+                    qty_col = c
+                    break
+            if qty_col: break
         if not qty_col:
             for c in df_ord.columns:
-                n = str(c).upper()
-                if "TOTAL" in n or "QTY" in n:
+                if "QTY" in str(c).upper() or "BDL" in str(c).upper():
                     qty_col = c
                     break
 
-        # 3. FINANCE column dhoondho (FINA... ya FINANCE 1 jo bhi ho)
+        # 3. FINANCE column dhoondho (FINA... ya FINANCE 1)
         fin_col = next((c for c in df_ord.columns if "FIN" in str(c).upper()), None)
         if fin_col:
             fin_val = df_ord[fin_col].astype(str).str.strip().str.upper()
-            # Agar cell mein "APPROVED" hai AUR "NOT" nahi hai -> Resolved
             is_approved = fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False)
             df_ord["_is_pending"] = ~is_approved
         else:
-            df_ord["_is_pending"] = True  # Agar FINANCE column hi nahi mila, toh sab pending maan lo
+            df_ord["_is_pending"] = True
 
         # 4. Age calculation
         df_ord["_age_days"] = df_ord["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 999)
         pending_df = df_ord[df_ord["_is_pending"]].copy()
 
-        # Helper: Unique Order No count karne ke liye
+        # 5. Helper: Unique Order No count karne ke liye (Sirf Order No column)
         def _unique_orders(frame):
             if order_no_col and order_no_col in frame.columns:
                 return frame[order_no_col].astype(str).str.strip().replace("", pd.NA).nunique()
@@ -1224,16 +1227,17 @@ def compute_kpi(df, spec, day):
 
         # ---------- ORDERS LEFT (No. / Qty) ----------
         if calc == "order_pending":
+            # Poori sheet ka unique order count (Sab tabs mila kar)
             total_orders = _unique_orders(pending_df)
             total_qty = _num(pending_df[qty_col]).sum() if qty_col else 0
 
+            # Tab-wise breakdown
+            per_tab = ""
             if "TAB_GID" in pending_df.columns:
-                per_tab_counts = {}
+                tab_counts = []
                 for t, g in pending_df.groupby("TAB_GID"):
-                    per_tab_counts[t] = _unique_orders(g)
-                per_tab = " | ".join(f"Tab {t}: {v}" for t, v in per_tab_counts.items())
-            else:
-                per_tab = ""
+                    tab_counts.append(f"Tab {t}: {_unique_orders(g)}")
+                per_tab = " | ".join(tab_counts)
 
             return {
                 "value": f"{total_orders} Orders",
@@ -1790,20 +1794,19 @@ SHEETS = {
         "date_col": "GRADE", 
         "static": True, 
     },
-         "order_management_1":  {
+    "order_management_1":  {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
         "date_col": "DATE",
-        "dayfirst": False,  # <--- YEH TRUE SE FALSE KAR DEIN
-        "ignore_cols": ["REASON", "FINANCE"],
+        "dayfirst": True,             # <-- YEH CHANGE KAREIN (False se True)
+        "ignore_cols": ["REASON", "FIN"],
     },
-        # --- ORDER MANAGEMENT SHEET 2 (Raman, Sachin) ---
     "order_management_2": {
-        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml", # <-- YAHAN SHEET 2 KA LINK DAALEIN
-        "worksheet": ["0", "648729418"], # <-- YAHAN SHEET 2 KE GIDS DAALEIN (jaise Sachin ka gid 0, Raman ka gid 12345)
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
+        "worksheet": ["648729418"],   # <-- YEH CHANGE KAREIN (0 hata dein, sirf yeh rakhein)
         "date_col": "ORDER DATE",
         "dayfirst": True,
-        "ignore_cols": ["REASON", "FINANCE"],
+        "ignore_cols": ["REASON", "FIN"],
     },
     "m_shed": {
         "type": "excel",
@@ -2330,7 +2333,7 @@ def render_kpi(dept_key, idx, title, desc):
             # Main Dates nikalne ka code
             # Main Dates nikalne ka code
             if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
-                dates = [datetime.datetime.now(IST).date()] # <-- Manual ke liye aaj ki date
+                dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
 
