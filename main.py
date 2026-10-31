@@ -981,32 +981,34 @@ def compute_kpi(df, spec, day):
 
             # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
             # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
+            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
             year_data = y_df[y_df["_date"] >= datetime.date(2026, 4, 1)]
             year_total_kg = year_data["kg"].sum()
 
             # --- NAYA: YEARLY BUNDLES & GRADE-WISE COUNT ---
-            # Unique Bundles count karna
-            if "bundles" in year_data.columns:
+            # Check karo ki 'BUNDLES' column (capital) exist karta hai ya nahi
+            if "BUNDLES" in year_data.columns:
                 # Empty strings hatao taaki count sahi aaye
-                valid_bundles = year_data["bundles"][year_data["bundles"] != ""]
+                valid_bundles = year_data["BUNDLES"][year_data["BUNDLES"].astype(str).str.strip() != ""]
                 year_total_bundles = valid_bundles.nunique()
                 
                 # Grade wise bundles count (Items ke basis par)
-                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["bundles"].nunique()
-                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["bundles"].nunique()
+                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["BUNDLES"].nunique()
+                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["BUNDLES"].nunique()
                 third_grade_bundles = year_total_bundles - first_grade_bundles - second_grade_bundles
                 
                 bundles_txt = f"Total Prod: {year_total_bundles:,} | 1st: {first_grade_bundles:,} | 2nd: {second_grade_bundles:,} | 3rd: {third_grade_bundles:,}"
             else:
-                bundles_txt = "Bundles data not found in sheet"
+                # Agar phir bhi na mile toh error dikhado debugging ke liye
+                bundles_txt = f"Bundles Col Missing. Cols: {list(year_data.columns)[:5]}"
 
             return {
-                "value": f"{first_pct:,.2f} %",       
-                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", 
+                "value": f"{first_pct:,.2f} %",       # Upar 1st Grade Yield
+                "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", # Neeche month ka total
                 "color": BLUE,
+                # Yahan humne Extra mein Yearly Total ke saath Bundles bhi jod diya hai
                 "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T | {bundles_txt}"
             }
-
         # 3. MATTRESS ke liye logic
         elif ptype == "mattress":
             t = PROD_TYPES["mattress"]
