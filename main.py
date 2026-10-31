@@ -804,9 +804,9 @@ def _fetch_yield_cached(url, sheet_name):
         "ym": d.dt.year * 100 + d.dt.month,
         "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
         "kg": _num(raw[kg_col]).fillna(0.0),
-        # Naya line yahan add kiya hai:
-        "bundles": raw[next((c for c in raw.columns if "BUNDLE" in c), "BUNDLES")].astype(str).str.strip()
+        "BUNDLES": raw[next((c for c in raw.columns if "BUNDLE" in c), "BUNDLES")].astype(str).str.strip()
     })
+    # Upar wali line mein BUNDLES column add kar diya gaya hai
     df = df[d.notna()].copy()
     if df.empty:
         raise DataError("Production summary mein koi valid date nahi mili")
