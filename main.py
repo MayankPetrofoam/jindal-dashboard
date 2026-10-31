@@ -1176,7 +1176,7 @@ for q in ["BDL", "TOTAL BCLS", "QTY (ORDER)", "QTY", "TOTAL BDL", "BUNDLES", "PC
                     qty_col = c
                     break
             if qty_col: break
-        if not qty_col:
+    if not qty_col:
             for c in df_ord.columns:
                 if "QTY" in str(c).upper() or "BDL" in str(c).upper():
                     qty_col = c
