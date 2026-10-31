@@ -2540,13 +2540,11 @@ def render_kpi(dept_key, idx, title, desc):
                 if _m is not None:
                     dates = sorted(set(dates) | set(_m["_date"].dropna().unique()), reverse=True)
 
-            # TOTAL ke liye bhi saari sheds ki dates jodo
-            # TOTAL ke liye bhi saari sheds ki dates jodo
+            # TOTAL PRODUCTION: dates seedhe Prod. Summary sheet se (isme 30-Oct tak ka data hai)
             if spec.get("type") == "total":
-                for shed_key in ["m_shed", "f_shed", "bdls_de", "rolls_bc"]:
-                    _s, _e, _t = get_sheet(shed_key)
-                    if _s is not None and "_date" in _s.columns:
-                        dates = sorted(set(dates) | set(_s["_date"].dropna().unique()), reverse=True)
+                _y, _e, _t = get_sheet("prod_summary")
+                if _y is not None and "_date" in _y.columns:
+                    dates = sorted(set(_y["_date"].dropna().unique()), reverse=True)
 
             # --- MONTH dropdown ---
             all_months = set()
