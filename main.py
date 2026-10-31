@@ -950,74 +950,53 @@ def compute_kpi(df, spec, day):
             }
 
         # 2. TOTAL ke liye logic
+        # 2. TOTAL ke liye logic (Matrix ke hisaab se)
+        # 2. TOTAL ke liye logic (Matrix ke hisaab se)
         elif ptype == "total":
-            t = PROD_TYPES["total"]
-            df_prod = df.copy()
+            prod_df, _ = parse_production_matrix(df)
+            if prod_df.empty:
+                return {"value": "0.00%", "desc": "No data available", "color": GREY}
 
-            month_start = day.replace(day=1)
-            next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-            month_end = next_month - datetime.timedelta(days=1)
+            # Us din ka data (Jo date select ki hai)
+            day_data = prod_df[prod_df["Date"] == day]
+            
+            # Upar dikhane ke liye: Us din ka Average Yield (%)
+            if not day_data.empty:
+                # Sirf un rows ka average lo jahan Efficiency > 0 ho
+                valid_eff = day_data[day_data["Efficiency"] > 0]["Efficiency"]
+                daily_pct = valid_eff.mean() if not valid_eff.empty else 0.0
+            else:
+                daily_pct = 0.0
 
-            mtd_data = df_prod[(df_prod["_date"] >= month_start) & (df_prod["_date"] <= day)]
-
-            mtd_sheets = 0
-            mtd_weight = 0
-            mtd_bdls = 0
-
-            if not mtd_data.empty:
-                if "SHEET" in mtd_data.columns:
-                    mtd_sheets = pd.to_numeric(mtd_data["SHEET"], errors='coerce').fillna(0).sum()
-                elif "SHEET ✓" in mtd_data.columns:
-                    mtd_sheets = pd.to_numeric(mtd_data["SHEET ✓"], errors='coerce').fillna(0).sum()
-
-                if "WEIGHT" in mtd_data.columns:
-                    mtd_weight = pd.to_numeric(mtd_data["WEIGHT"], errors='coerce').fillna(0).sum()
-                elif "WEIGHT ✓" in mtd_data.columns:
-                    mtd_weight = pd.to_numeric(mtd_data["WEIGHT ✓"], errors='coerce').fillna(0).sum()
-
-                if "BDLS" in mtd_data.columns:
-                    mtd_bdls = pd.to_numeric(mtd_data["BDLS"], errors='coerce').fillna(0).sum()
-                elif "BDLS ✓" in mtd_data.columns:
-                    mtd_bdls = pd.to_numeric(mtd_data["BDLS ✓"], errors='coerce').fillna(0).sum()
-                elif "BDLS." in mtd_data.columns:
-                    mtd_bdls = pd.to_numeric(mtd_data["BDLS."], errors='coerce').fillna(0).sum()
-
-                if mtd_bdls == 0:
-                    mtd_bdls = mtd_sheets
-
-            mtd_qty = mtd_sheets
-
-            # Saari shed files se Daily Yield nikaalo
-            total_yield = 0.0
-            mtd_yield = 0.0
-
-            for shed in ["m_shed", "f_shed"]:
-                s_df, _, _ = get_sheet(shed)
-                if s_df is not None:
-                    yield_col = next((c for c in s_df.columns if "M-SHED" in str(c).upper() or "F-SHED" in str(c).upper()), None)
-                    if yield_col:
-                        s_day = s_df[s_df["_date"] == day]
-                        if s_day.empty:
-                            s_day = s_df[s_df["_date"] <= day].sort_values("_date").tail(1)
-                        total_yield += float(_num(s_day[yield_col]).sum()) if not s_day.empty else 0.0
-
-                        s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day)]
-                        mtd_yield += float(_num(s_mtd[yield_col]).sum()) if not s_mtd.empty else 0.0
-
-            for shed_key in ["bdls_de", "rolls_bc"]:
-                s_df, _, _ = get_sheet(shed_key)
-                if s_df is not None and "val" in s_df.columns:
-                    s_day = s_df[(s_df["_date"] == day) & (s_df["type"] == "PRODUCTION")]
-                    total_yield += float(_num(s_day["val"]).sum()) if not s_day.empty else 0.0
-
-                    s_mtd = s_df[(s_df["_date"] >= month_start) & (s_df["_date"] <= day) & (s_df["type"] == "PRODUCTION")]
-                    mtd_yield += float(_num(s_mtd["val"]).sum()) if not s_mtd.empty else 0.0
+            # Month ka data (Jo saal start se aaj tak ka hai)
+            month_data = prod_df[(prod_df["Date"] >= datetime.date(2026, 1, 1)) & (prod_df["Date"] <= day)]
+            
+            if month_data.empty:
+                month_total_pct = 0.0
+                breakdown = "No data this month"
+            else:
+                # Month ka total average percentage
+                valid_month_eff = month_data[month_data["Efficiency"] > 0]["Efficiency"]
+                month_total_pct = valid_month_eff.mean() if not valid_month_eff.empty else 0.0
+                
+                # Grade-wise breakdown nikalna (Top 3)
+                # Yahan hum ActualProduction (G TOT) ko sum kar rahe hain taaki pata chale kis grade ki kitni quantity bani
+                grade_summary = month_data.groupby("Item")["ActualProduction"].sum().sort_values(ascending=False)
+                top_grades = grade_summary.head(3)
+                
+                # Sirf un grades ko dikhana jinki quantity > 0 ho
+                top_grades = top_grades[top_grades > 0]
+                
+                if not top_grades.empty:
+                    breakdown = " | ".join([f"{k}: {v:,.2f} T" for k, v in top_grades.items()])
+                else:
+                    breakdown = "No production recorded"
 
             return {
-                "value": f"{total_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
-                "desc": f"Month-to-date: {mtd_yield:,.1f} Yield | {mtd_bdls:,.0f} Bdls | {mtd_qty:,.0f} Sheets | {mtd_weight:,.1f} Wt",
+                "value": f"{daily_pct:,.2f} %",  # Upar bada percentage (Efficiency)
+                "desc": f"Month Total Yield: {month_total_pct:,.2f} %", # Neeche month ka %
                 "color": BLUE,
-                "extra": grade_yield_text(day)
+                "extra": breakdown # Neeche grade-wise total (G TOT)
             }
 
         # 3. MATTRESS ke liye logic
@@ -1597,17 +1576,35 @@ def parse_production_matrix(df):
         return pd.DataFrame(), []
     
     df = df.dropna(how='all').reset_index(drop=True)
-    first_row = df.iloc[0].astype(str).str.strip().tolist()
-    second_row = df.iloc[1].astype(str).str.strip().tolist()
     
+    # Header row dhoondho (jahan DATE ya ITEM likha ho)
+    header_idx = 0
+    for i in range(min(10, len(df))):
+        row_str = " ".join([str(x).upper() for x in df.iloc[i].values])
+        if "DATE" in row_str and ("ITEM" in row_str or "EFFICIENCY" in row_str):
+            header_idx = i
+            break
+            
+    if header_idx >= len(df) - 1:
+        return pd.DataFrame(), []
+
+    # Headers set karo
+    headers = df.iloc[header_idx].astype(str).str.strip().tolist()
+    
+    # Item column ka index dhoondho
+    item_col_idx = None
+    for i, h in enumerate(headers):
+        if "ITEM" in str(h).upper() or "GRADE" in str(h).upper():
+            item_col_idx = i
+            break
+            
+    # Date aur Production/Efficiency columns dhoondho
     date_columns = {}
     current_date = None
     
-    for idx, cell in enumerate(first_row):
-        # PATCH: Text ko date mein convert karo
+    for idx, cell in enumerate(headers):
         if cell:
             try:
-                # "1-Oct-26" ko date object banata hai
                 parsed_dt = pd.to_datetime(cell, format="%d-%b-%y", errors="coerce")
                 if pd.notna(parsed_dt):
                     current_date = parsed_dt.date()
@@ -1615,40 +1612,76 @@ def parse_production_matrix(df):
                 pass
             
         if current_date:
-            sub = second_row[idx].lower()
-            if 'actual production' in sub:
+            # Upar wale header cell ko check karo, ya uske neeche wale row ko
+            # (Kyunki matrix mein efficiency "Efficiency" ya "%" likha hota hai)
+            sub = str(headers[idx]).lower()
+            # Agar humne headers ke neeche wali row nahi li, toh current col ka naam check karo
+            if 'actual production' in sub or 'g tot' in sub:
                 if current_date not in date_columns:
                     date_columns[current_date] = {}
                 date_columns[current_date]["prod_col"] = idx
-            elif 'efficiency' in sub or 'eff' in sub:
+            elif 'efficiency' in sub or '%' in sub:
                 if current_date not in date_columns:
                     date_columns[current_date] = {}
                 date_columns[current_date]["eff_col"] = idx
-                
+
+    # Agar upar wale tarike se nahi mila, toh neeche wali row (header_idx + 1) check karo
+    if not date_columns and header_idx + 1 < len(df):
+        second_row = df.iloc[header_idx + 1].astype(str).str.strip().tolist()
+        current_date = None
+        for idx, cell in enumerate(headers):
+            if cell:
+                try:
+                    parsed_dt = pd.to_datetime(cell, format="%d-%b-%y", errors="coerce")
+                    if pd.notna(parsed_dt):
+                        current_date = parsed_dt.date()
+                except:
+                    pass
+                    
+            if current_date:
+                sub = second_row[idx].lower() if idx < len(second_row) else ""
+                if 'actual production' in sub or 'g tot' in sub:
+                    if current_date not in date_columns:
+                        date_columns[current_date] = {}
+                    date_columns[current_date]["prod_col"] = idx
+                elif 'efficiency' in sub or '%' in sub:
+                    if current_date not in date_columns:
+                        date_columns[current_date] = {}
+                    date_columns[current_date]["eff_col"] = idx
+
     available_dates = list(date_columns.keys())
     records = []
     
-    for idx, row in df.iterrows():
-        if idx < 2:
-            continue
-        shed = str(row.iloc[0]).strip()
-        unit_type = str(row.iloc[1]).strip()
+    # Data rows padhna start karo (header ke 2 row baad)
+    start_row = header_idx + 2
+    for idx in range(start_row, len(df)):
+        row = df.iloc[idx]
         
-        if not shed or shed in ["None", "Shed Name", ""]:
-            continue
-            
+        # Item (Grade) nikalna
+        item_name = "Unknown"
+        if item_col_idx is not None and item_col_idx < len(row):
+            item_name = str(row.iloc[item_col_idx]).strip()
+            if item_name in ["None", "nan", ""]:
+                item_name = "Unknown"
+
         for dt, cols in date_columns.items():
             try:
-                prod_val = str(row.iloc[cols["prod_col"]]).replace(',', '').strip()
-                eff_val = str(row.iloc[cols["eff_col"]]).replace('%', '').replace(',', '').strip() if "eff_col" in cols else "0"
+                prod_val = 0.0
+                eff_val = 0.0
                 
-                records.append({
-                    "Date": dt,
-                    "Shed": shed,
-                    "UnitType": unit_type,
-                    "ActualProduction": pd.to_numeric(prod_val, errors='coerce'),
-                    "Efficiency": pd.to_numeric(eff_val, errors='coerce')
-                })
+                if "prod_col" in cols and cols["prod_col"] < len(row):
+                    prod_val = pd.to_numeric(str(row.iloc[cols["prod_col"]]).replace(',', '').replace('%', ''), errors='coerce')
+                if "eff_col" in cols and cols["eff_col"] < len(row):
+                    eff_val = pd.to_numeric(str(row.iloc[cols["eff_col"]]).replace(',', '').replace('%', ''), errors='coerce')
+                
+                # Sirf tab record karo jab Item unknown na ho
+                if item_name != "Unknown":
+                    records.append({
+                        "Date": dt,
+                        "Item": item_name,
+                        "ActualProduction": prod_val if pd.notna(prod_val) else 0.0,
+                        "Efficiency": eff_val if pd.notna(eff_val) else 0.0
+                    })
             except Exception:
                 continue
                 
