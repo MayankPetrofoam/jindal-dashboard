@@ -1165,60 +1165,45 @@ def compute_kpi(df, spec, day):
     if calc and str(calc).startswith("order_"):
         df_ord = df.copy()
 
-        # 1. Order No Column dhoondho (Sheet 1: ORDER NO. | Sheet 2: ORDER NO)
+        # Direct Order No column dhoondho
         order_col = next((c for c in df_ord.columns if "ORDER NO" in str(c).upper().replace(".", "")), None)
         if not order_col:
             return {"value": "Error", "desc": "ORDER NO column not found", "color": RED}
 
-        # 2. Finance Column dhoondho
+        # Finance column dhoondho
         fin_col = next((c for c in df_ord.columns if "FIN" in str(c).upper()), None)
 
-        # 3. Sirf valid rows rakho jahan Order No blank na ho
+        # Sirf un rows ko rakho jahan ORDER NO actually likha hua hai (Gaps ignore karo)
         valid_orders = df_ord[df_ord[order_col].astype(str).str.strip() != ""].copy()
         
-        # 4. Check karo ki order pending hai ya approved
+        # Finance check karo (Pending hai ya Approved)
         if fin_col:
-            # Agar Finance column mein NOT APPROVED ya PAYMENT PENDING hai, toh pending
             fin_val = valid_orders[fin_col].astype(str).str.strip().str.upper()
             is_pending = ~(fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False))
             pending_df = valid_orders[is_pending].copy()
         else:
-            # Agar Finance column nahi hai, toh sab pending maan lo
-            pending_df = valid_orders
+            pending_df = valid_orders.copy()
 
-        # 5. Unique order count function
+        # Helper function: Unique Order No count
         def _unique_orders(frame):
             return frame[order_col].astype(str).str.strip().replace("", pd.NA).nunique()
 
-        # 6. Age calculation (sirf un rows ke liye jinki date valid hai)
-        if "_date" in pending_df.columns:
-            pending_df["_age_days"] = pending_df["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 999)
-        else:
-            pending_df["_age_days"] = 0
-
-        # ---------- AGEING BLOCKS ----------
+        # --- AGEING BLOCKS ---
         if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
-            if calc == "order_age_0_7":
-                sub = pending_df[(pending_df["_age_days"] >= 0) & (pending_df["_age_days"] <= 7)]
-                label, color = "0-7 Days", BLUE
-            elif calc == "order_age_7_14":
-                sub = pending_df[(pending_df["_age_days"] > 7) & (pending_df["_age_days"] <= 14)]
-                label, color = "7-14 Days", BLUE
-            elif calc == "order_age_14_21":
-                sub = pending_df[(pending_df["_age_days"] > 14) & (pending_df["_age_days"] <= 21)]
-                label, color = "14-21 Days", AMBER
-            else:
-                sub = pending_df[pending_df["_age_days"] > 21]
-                label, color = "21+ Days (Critical)", RED
+            sub = pending_df.copy()
+            
+            # Agar date valid hai toh age filter lagao, warna sab pending maano
+            if "_date" in sub.columns and sub["_date"].notna().any():
+                sub["_age_days"] = sub["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 0)
+                if calc == "order_age_0_7": sub = sub[(sub["_age_days"] >= 0) & (sub["_age_days"] <= 7)]
+                elif calc == "order_age_7_14": sub = sub[(sub["_age_days"] > 7) & (sub["_age_days"] <= 14)]
+                elif calc == "order_age_14_21": sub = sub[(sub["_age_days"] > 14) & (sub["_age_days"] <= 21)]
+                else: sub = sub[sub["_age_days"] > 21]
 
             total_orders = _unique_orders(sub)
-            return {
-                "value": f"{total_orders} Orders",
-                "desc": f"{label} pending",
-                "color": color,
-            }
+            return {"value": f"{total_orders} Orders", "desc": "Pending", "color": BLUE}
 
-        # ---------- ORDERS LEFT (Total Pending) ----------
+        # --- ORDERS LEFT (Total Pending) ---
         if calc == "order_pending":
             total_orders = _unique_orders(pending_df)
             
@@ -1229,14 +1214,9 @@ def compute_kpi(df, spec, day):
                     tab_counts.append(f"Tab {t}: {_unique_orders(g)}")
                 per_tab = " | ".join(tab_counts)
 
-            return {
-                "value": f"{total_orders} Orders",
-                "desc": "Total Pending",
-                "color": RED if total_orders > 0 else BLUE,
-                "extra": per_tab,
-            }
+            return {"value": f"{total_orders} Orders", "desc": "Total Pending", "color": RED if total_orders > 0 else BLUE, "extra": per_tab}
 
-        # ---------- CURRENT SCHEDULE (Aaj ke orders) ----------
+        # --- CURRENT SCHEDULE ---
         if calc == "order_current_schedule":
             if "_date" in valid_orders.columns:
                 today_df = valid_orders[valid_orders["_date"] == day]
@@ -1247,34 +1227,22 @@ def compute_kpi(df, spec, day):
                 return {"value": "0 Orders", "desc": "No orders scheduled today", "color": GREY}
 
             total_orders = _unique_orders(today_df)
-            
             if fin_col:
                 fin_val = today_df[fin_col].astype(str).str.strip().str.upper()
-                is_pending_today = ~(fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False))
-                pending_count = _unique_orders(today_df[is_pending_today])
+                pending_today = ~(fin_val.str.contains("APPROVED", na=False) & ~fin_val.str.contains("NOT", na=False))
+                pending_count = _unique_orders(today_df[pending_today])
             else:
                 pending_count = total_orders
 
-            return {
-                "value": f"{total_orders} Orders",
-                "desc": f"Today's Pending: {pending_count}",
-                "color": BLUE,
-            }
+            return {"value": f"{total_orders} Orders", "desc": f"Today's Pending: {pending_count}", "color": BLUE}
 
-        # ---------- SERVICEABILITY % ----------
+        # --- SERVICEABILITY % ---
         if calc == "order_serviceability":
             total = _unique_orders(valid_orders)
             approved = _unique_orders(valid_orders[~valid_orders.index.isin(pending_df.index)])
-            
-            if total == 0:
-                return None
+            if total == 0: return None
             pct = (approved / total) * 100
-
-            return {
-                "value": f"{pct:.1f}%",
-                "desc": f"{approved} Approved / {total} Total",
-                "color": BLUE if pct > 80 else AMBER,
-            }
+            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total} Total", "color": BLUE if pct > 80 else AMBER}
         
 
     # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
@@ -1796,14 +1764,14 @@ SHEETS = {
     "order_management_1":  {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
-        "date_col": "DATE", 
+        "header_hint": "DATE", 
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
     "order_management_2": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
         "worksheet": ["648729418"],
-        "date_col": "ORDER DATE",
+        "header_hint": "ORDER DATE",
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
