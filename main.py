@@ -1173,7 +1173,7 @@ def compute_kpi(df, spec, day):
         # Finance column dhoondho
         fin_col = next((c for c in df_ord.columns if "FIN" in str(c).upper()), None)
 
-        # Sirf un rows ko rakho jahan ORDER NO actually likha hua hai (Gaps ignore karo)
+        # Sirf un rows ko rakho jahan ORDER NO actually likha hua hai
         valid_orders = df_ord[df_ord[order_col].astype(str).str.strip() != ""].copy()
         
         # Finance check karo (Pending hai ya Approved)
@@ -1184,7 +1184,7 @@ def compute_kpi(df, spec, day):
         else:
             pending_df = valid_orders.copy()
 
-        # Helper function: Unique Order No count
+        # Helper function: Unique Order No count (Comma aur Plus wale numbers bhi alag count honge)
         def _unique_orders(frame):
             return frame[order_col].astype(str).str.strip().replace("", pd.NA).nunique()
 
@@ -1192,7 +1192,6 @@ def compute_kpi(df, spec, day):
         if calc in ("order_age_0_7", "order_age_7_14", "order_age_14_21", "order_age_21_plus"):
             sub = pending_df.copy()
             
-            # Agar date valid hai toh age filter lagao, warna sab pending maano
             if "_date" in sub.columns and sub["_date"].notna().any():
                 sub["_age_days"] = sub["_date"].apply(lambda x: (day - x).days if pd.notna(x) else 0)
                 if calc == "order_age_0_7": sub = sub[(sub["_age_days"] >= 0) & (sub["_age_days"] <= 7)]
@@ -1764,14 +1763,14 @@ SHEETS = {
     "order_management_1":  {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
-        "header_hint": "DATE", 
+        "date_col": "DATE", 
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
     "order_management_2": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
         "worksheet": ["648729418"],
-        "header_hint": "ORDER DATE",
+        "date_col": "ORDER DATE",
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
@@ -2155,16 +2154,35 @@ def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
     frames, problems = [], []
     for gid in gids:
         try:
-            d = fetch_sheet(url, gid, None, header_hint=date_col).copy()
+            # Direct raw CSV fetch karo
+            d = fetch_sheet(url, gid, None, header_hint=None).copy()
             d["TAB_GID"] = str(gid)
             frames.append(d)
         except Exception as exc:
             problems.append(f"gid {gid}: {type(exc).__name__}: {exc}")
+    
     if not frames:
         raise DataError("Kisi bhi tab se data nahi mila. " + " | ".join(problems))
+    
     df = pd.concat(frames, ignore_index=True, sort=False).fillna("")
-    # 05.10.2026 jaisi dates ke dots hatao
-    df[date_col] = df[date_col].astype(str).str.replace(".", "-", regex=False)
+    
+    # --- NAYA PATCH: MANUAL HEADER DETECTION ---
+    # Har tab ki pehli kuch rows check karo jahan "ORDER NO" ya "DATE" likha ho
+    header_idx = 0
+    for i in range(min(10, len(df))):
+        row_str = " ".join([str(x).upper() for x in df.iloc[i].values])
+        if "ORDER NO" in row_str or "DATE" in row_str:
+            header_idx = i
+            break
+            
+    # Header row set karo
+    df.columns = df.iloc[header_idx].astype(str).str.strip()
+    df = df.iloc[header_idx + 1:].copy()
+    
+    # Clean dates (dots hatao)
+    if date_col in df.columns:
+        df[date_col] = df[date_col].astype(str).str.replace(".", "-", regex=False)
+        
     out = prepare(df, date_col, dayfirst, (), None, (), tuple(ignore) + ("TAB_GID",))
     return out, datetime.datetime.now(IST)
 
