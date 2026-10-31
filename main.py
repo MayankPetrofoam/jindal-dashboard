@@ -949,6 +949,7 @@ def compute_kpi(df, spec, day):
         # 2. TOTAL ke liye logic
         # 2. TOTAL ke liye logic (Prod Summary file se)
         # 2. TOTAL ke liye logic (Prod Summary file se)
+        # 2. TOTAL ke liye logic (Prod Summary file se)
         elif ptype == "total":
             y_df, err, _ = get_sheet("prod_summary")
             if y_df is None:
@@ -973,23 +974,38 @@ def compute_kpi(df, spec, day):
             # Baaki sab (3rd grade, scrap, etc.)
             third_pct = 100.0 - first_pct - second_pct
 
-            # Top items nikalna (Grade wise summary)
-            # Hum un items ka sum nikalenge jo 1st grade exclude list mein nahi hain (matlab jo actual items hain)
-            real_items = month_data[~month_data["item"].isin(FIRST_GRADE_EXCLUDE)]
-            top_items = real_items.groupby("item")["kg"].sum().sort_values(ascending=False).head(3)
-            
-            # Format text: "1st Grade: 79.48% (831.2 T) | 2nd Grade: 8.13% (85.0 T) | 3rd Grade: 12.39%"
+            # Format text: "1st: 79.48% | 2nd: 8.13% | 3rd: 12.39%"
             breakdown_txt = f"1st: {first_pct:.2f}% | 2nd: {second_pct:.2f}% | 3rd: {third_pct:.2f}%"
 
-            # 2. YEAR TOTAL (Saare mahino ka total - April se ab tak)
+            # --- YEARLY TOTAL (Saare mahino ka total - April se ab tak) ---
             year_data = y_df[y_df["_date"] >= datetime.date(2026, 4, 1)]
             year_total_kg = year_data["kg"].sum()
+
+            # --- NAYA: YEARLY BUNDLES & GRADE-WISE COUNT (Aapke diye numbers ke hisaab se) ---
+            # Unique Bundles count karna (kyunki ek bundle mein multiple rows hoti hain)
+            if "bundles" in year_data.columns:
+                year_total_bundles = year_data["bundles"].astype(str).str.strip().nunique()
+                
+                # Grade wise bundles count (Items ke basis par)
+                # 1st Grade: Jo items exclude list mein nahi hain
+                first_grade_bundles = year_data[~year_data["item"].isin(FIRST_GRADE_EXCLUDE)]["bundles"].astype(str).str.strip().nunique()
+                
+                # 2nd Grade: Jo SECOND_GRADE_ITEMS mein hain
+                second_grade_bundles = year_data[year_data["item"].isin(SECOND_GRADE_ITEMS)]["bundles"].astype(str).str.strip().nunique()
+                
+                # 3rd Grade: Jo na 1st mein na 2nd mein
+                third_grade_bundles = year_total_bundles - first_grade_bundles - second_grade_bundles
+                
+                bundles_txt = f"Total Prod: {year_total_bundles:,} | 1st: {first_grade_bundles:,} | 2nd: {second_grade_bundles:,} | 3rd: {third_grade_bundles:,}"
+            else:
+                bundles_txt = "Bundles data not found in sheet"
 
             return {
                 "value": f"{first_pct:,.2f} %",       # Upar 1st Grade Yield
                 "desc": f"Oct Yield: {month_total_kg/1000:,.1f} T", # Neeche month ka total
                 "color": BLUE,
-                "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T"
+                # Yahan humne Extra mein Yearly Total ke saath Bundles bhi jod diya hai
+                "extra": f"{breakdown_txt} | Yearly Total: {year_total_kg/1000:,.1f} T | {bundles_txt}"
             }
 
         # 3. MATTRESS ke liye logic
