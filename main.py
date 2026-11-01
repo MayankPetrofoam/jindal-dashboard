@@ -930,6 +930,97 @@ def _fetch_rolls_cached(files):
         raise DataError("B/C shed files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+# ---------------- D-SHED YIELD (1st Grade weight / total weight x 100) ----------------
+D_YIELD_EXCLUDE = []          # total se kuch item hatane ho to yahan likho, e.g. ["DC GRADE", "FC"]
+D_YIELD_FIRST = "1ST GRADE"
+
+
+def _parse_mixed_dates(s):
+    """'01-Apr-25' aur '01-04-2025' dono format ek hi column mein chalte hain."""
+    s = s.astype(str).str.strip()
+    d = pd.to_datetime(s, format="%d-%b-%y", errors="coerce")
+    for fmt in ("%d-%m-%Y", "%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+        m = d.isna()
+        if not m.any():
+            break
+        d[m] = pd.to_datetime(s[m], format=fmt, errors="coerce")
+    return d
+
+
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_dyield_cached(url, sheet_name=""):
+    """D-Shed yield file (csv ya xlsx): columns DATE, ITEM, D-SHED -> _date, item, kg."""
+    is_csv = str(url).lower().split("?")[0].endswith(".csv")
+    src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+    if is_csv:
+        raw = pd.read_csv(src, dtype=str)
+    else:
+        xl = pd.ExcelFile(src, engine="openpyxl")
+        tab = sheet_name if sheet_name in xl.sheet_names else xl.sheet_names[0]
+        raw = xl.parse(tab, dtype=object)
+    raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
+    date_col = next((c for c in raw.columns if c == "DATE"), None)
+    item_col = next((c for c in raw.columns if c == "ITEM"), None)
+    val_col = next((c for c in raw.columns if "SHED" in c), None)
+    if not all([date_col, item_col, val_col]):
+        raise DataError(f"D yield file mein DATE / ITEM / D-SHED columns nahi mile. Mile hue: {list(raw.columns)}")
+    d = _parse_mixed_dates(raw[date_col])
+    df = pd.DataFrame({
+        "_date": d.dt.date,
+        "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
+        "kg": _num(raw[val_col]).fillna(0.0),
+    })
+    df = df[d.notna() & (df["item"] != "") & (df["item"] != "NAN")].copy()
+    if df.empty:
+        raise DataError("D yield file mein koi valid date nahi mili")
+    return df, datetime.datetime.now(IST)
+
+
+def d_yield(y_df, start, end):
+    """[start, end] ka 1st grade yield %. Return None agar us period ka data nahi."""
+    s = y_df[(y_df["_date"] >= start) & (y_df["_date"] <= end)]
+    s = s[~s["item"].isin(D_YIELD_EXCLUDE)]
+    total = float(s["kg"].sum())
+    if total <= 0:
+        return None
+    first = float(s.loc[s["item"] == D_YIELD_FIRST, "kg"].sum())
+    return {"pct": first / total * 100, "first": first, "total": total,
+            "by_item": s.groupby("item")["kg"].sum().sort_values(ascending=False)}
+
+
+def d_yield_text(day):
+    """Card ki extra lines: din ki yield, mahine ki yield, grade-wise, month-wise."""
+    y_df, err, _ = get_sheet("d_yield")
+    if y_df is None:
+        return f"D-Shed yield: data error ({err})"
+    m_start = day.replace(day=1)
+    m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+    dy, my = d_yield(y_df, day, day), d_yield(y_df, m_start, m_end)
+    lines = []
+    day_txt = f"{dy['pct']:.2f}%" if dy else "no data"
+    mon_txt = f"{my['pct']:.2f}%" if my else "no data"
+    lines.append(f"D-Shed 1st Grade Yield: {day:%d-%m} {day_txt} | {day:%b-%y} {mon_txt}")
+    if dy:
+        lines.append(f"{day:%d-%m} grade-wise (kg): " + " | ".join(
+            f"{k.capitalize()} {v:,.1f}" for k, v in dy["by_item"].items() if v > 0))
+    if my:
+        lines.append(f"{day:%b-%y} 1st Grade {my['first']:,.0f} / Total {my['total']:,.0f} kg")
+    fy_year = day.year if day.month >= 4 else day.year - 1
+    months = []
+    for k in range(12):
+        y, m = (fy_year + (3 + k) // 12, (3 + k) % 12 + 1)
+        ms = datetime.date(y, m, 1)
+        if ms > m_start:
+            break
+        me = (ms.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+        r = d_yield(y_df, ms, me)
+        if r:
+            months.append(f"{ms:%b} {r['pct']:.1f}%")
+    if months:
+        lines.append("Month-wise yield: " + " | ".join(months))
+    return "<br>".join(lines)
+
+
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
@@ -1451,32 +1542,28 @@ def compute_kpi(df, spec, day):
         def tot(d, typ):
             return float(d.loc[d["type"] == typ, "val"].sum())
 
-        d_day = df[df["_date"] == day]
-        # Month-to-date (1st se selected date tak)
-        d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
-        # POORA MONTH (1st se last date tak) - naya add kiya
         month_start = day.replace(day=1)
         next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
         month_end = next_month - datetime.timedelta(days=1)
+        d_day = df[df["_date"] == day]
         d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
 
         b, p = tot(d_day, "BUNDLES"), tot(d_day, "PRODUCTION")
-        
-        # Shed-wise breakdown for selected date
+        mb, mp = tot(d_full_month, "BUNDLES"), tot(d_full_month, "PRODUCTION")
+
         parts = []
         for shed in sorted(df["shed"].unique()):
             s = d_day[d_day["shed"] == shed]
-            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls")
+            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls / {tot(s, 'PRODUCTION'):,.1f} Prod")
 
-        # Naya: Complete month ki total production (Bundles + Production)
-        full_month_b = tot(d_full_month, "BUNDLES")
-        full_month_p = tot(d_full_month, "PRODUCTION")
-
+        extra = (f"Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp:,.1f} Prod"
+                 f"<br>{' | '.join(parts)}"
+                 f"<br>{d_yield_text(day)}")
         return {
             "value": f"{b:,.0f} Bdls | {p:,.1f} Prod",
-            "desc": f"Month-to-date: {tot(d_mtd, 'BUNDLES'):,.0f} Bdls | {tot(d_mtd, 'PRODUCTION'):,.1f} Prod",
+            "desc": f"Selected date total (D + E shed)",
             "color": BLUE,
-            "extra": f"{' | '.join(parts)} | Month Total: {full_month_b:,.0f} Bdls | {full_month_p:,.1f} Prod"
+            "extra": extra,
         }
 
     # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
@@ -1796,6 +1883,11 @@ SHEETS = {
             ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-D%20Bdls%2BProd%20(1).xlsx", "Shed-D Bdls+Prod"),
             ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-E%20Bdls%2BProd.xlsx", "Shed-E Bdls+Prod"),
         ),
+    },
+    "d_yield": {
+        "type": "dyield",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/D-Shedyield.csv",   # <-- apni file ka naam
+        "sheet_name": "",      # xlsx ho to tab ka naam, csv ho to khali chhodo
     },
         "rolls_bc": {
         "type": "rolls_bc",
@@ -2441,6 +2533,12 @@ def get_sheet(name):
         if isinstance(cfg.get("worksheet"), (list, tuple)):
             df, fetched = _fetch_multi_cached(cfg["url"], tuple(cfg["worksheet"]), cfg["date_col"],
                                             cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
+
+        if cfg.get("type") == "dyield":
+            df, fetched = _fetch_dyield_cached(cfg["url"], cfg.get("sheet_name", ""))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
