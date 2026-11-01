@@ -1730,7 +1730,7 @@ SHEETS = {
     },
     "daily_sales_report": {
         "type": "excel",
-        "url": "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=2", , # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=2", , # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
         "sheet_name": "LAST DAY SALE",  # <-- Nayi Sheet ka Tab name
         "date_col": "DATE",             
         "dayfirst": True,               
