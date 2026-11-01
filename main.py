@@ -1099,13 +1099,12 @@ def compute_kpi(df, spec, day):
             return df[mask]
 
         # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
-        # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
         if calc == "sales_daily":
-            # Us din ka exact data filter karo
+            # Us din ka exact data filter karo (Date match)
             day_data = df[df["_date"] == day]
             
             if day_data.empty:
-                return {"value": "No Data", "desc": f"No records for {day.strftime('%d-%b-%Y')}", "color": GREY}
+                return {"value": "₹0", "desc": f"No records for {day.strftime('%d-%b-%Y')}", "color": GREY}
             
             # Columns dhoondho
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
@@ -1117,9 +1116,9 @@ def compute_kpi(df, spec, day):
             total_amt = _num(day_data[amt_col]).sum()
             total_parties = _num(day_data[party_col]).sum() if party_col else 0
             
-            # Agar amount 0 hai (jaisa 27 Oct ka hai)
+            # Agar amount 0 hai toh No Data dikhao
             if total_amt == 0:
-                return {"value": "₹0", "desc": f"No sale recorded on {day.strftime('%d-%b-%Y')}", "color": GREY}
+                return {"value": "₹0", "desc": f"Amount is empty in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
             
             return {
                 "value": _inr(total_amt),
@@ -1730,8 +1729,8 @@ SHEETS = {
     },
     "daily_sales_report": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=2", # <-- Nayi Sheet ka Link (Yahan apni nayi file ka link daalein)
-        "sheet_name": "LAST DAY SALE",  # <-- Nayi Sheet ka Tab name
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=3", # <-- v=3 kar dein
+        "sheet_name": "DAILY BASIS SALES",  # <-- YEH CHANGE KAREIN (LAST DAY SALE se)
         "date_col": "DATE",             
         "dayfirst": True,               
     },
