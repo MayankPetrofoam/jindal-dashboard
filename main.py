@@ -1043,6 +1043,7 @@ def compute_kpi(df, spec, day):
         ptype = spec.get("type")
 
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
+        # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
             if f_df is None:
@@ -1052,19 +1053,40 @@ def compute_kpi(df, spec, day):
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
-            # --- YIELD: F-Shed sheet se selected month ki latest date nikalna ---
+            # --- YIELD CALCULATION (Formula: 1st Grade / Others * 100) ---
+            def calc_f_shed_yield(sub_df):
+                if sub_df.empty:
+                    return 0.0
+                # Item column aur Yield column ka naam dhoondhein (case-insensitive)
+                item_col = next((c for c in sub_df.columns if "ITEM" in str(c).upper()), None)
+                yield_col = next((c for c in sub_df.columns if "F-SHED" in str(c).upper()), None)
+                
+                if not item_col or not yield_col:
+                    return 0.0
+                
+                # Values ko numeric banao
+                vals = _num(sub_df[yield_col])
+                items = sub_df[item_col].astype(str).str.strip().str.upper()
+                
+                # 1st Grade ka weight
+                first_grade = vals[items == "1ST GRADE"].sum()
+                # Baaki sabhi items ka weight (1st grade ke alawa)
+                other_items = vals[items != "1ST GRADE"].sum()
+                
+                # Agar denominator 0 hai to 0 return karo, warna calculate karo
+                return (first_grade / other_items * 100) if other_items > 0 else 0.0
+
+            # Us mahine ka data
             f_month_data = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
+            
+            # Selected day ka data
+            f_day_data = f_df[f_df["_date"] == day]
 
-            if not f_month_data.empty:
-                actual_date = f_month_data["_date"].max()  # Us mahine ki sabse latest date
-                f_day = f_month_data[f_month_data["_date"] == actual_date]
-            else:
-                f_day = pd.DataFrame()  # Agar us mahine ka data nahi hai
+            # Yield nikaalein
+            day_yield = calc_f_shed_yield(f_day_data)
+            month_yield = calc_f_shed_yield(f_month_data)
 
-            day_yield = float(_num(_pcol(f_day, "F-SHED")).sum()) if not f_day.empty else 0.0
-            month_yield = float(_num(_pcol(f_month_data, "F-SHED")).sum()) if not f_month_data.empty else 0.0
-
-            # --- BDLS / SHEET / WEIGHT ---
+            # --- BDLS / SHEET / WEIGHT (Prod Summary sheet se, jaisa aapne pehle rakha tha) ---
             t = PROD_TYPES["rollpack"]
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
@@ -1079,12 +1101,18 @@ def compute_kpi(df, spec, day):
                 if bdls == 0:
                     bdls = sheets
 
-            # Categories
+            # Categories (F-Shed sheet se top 4 items ka weight)
             if not f_month_data.empty:
-                top = (f_month_data.assign(_v=_num(_pcol(f_month_data, "F-SHED")))
-                       .groupby(_pcol(f_month_data, "ITEM").astype(str).str.strip())["_v"].sum()
-                       .sort_values(ascending=False).head(4))
-                cats = " | ".join(f"{k}: {v:,.1f}" for k, v in top.items())
+                item_col = next((c for c in f_month_data.columns if "ITEM" in str(c).upper()), None)
+                yield_col = next((c for c in f_month_data.columns if "F-SHED" in str(c).upper()), None)
+                
+                if item_col and yield_col:
+                    top = (f_month_data.assign(_v=_num(f_month_data[yield_col]))
+                           .groupby(f_month_data[item_col].astype(str).str.strip())["_v"].sum()
+                           .sort_values(ascending=False).head(4))
+                    cats = " | ".join(f"{k}: {v:,.1f}" for k, v in top.items())
+                else:
+                    cats = "Item/Yield column not found"
             else:
                 cats = "No yield data this month"
 
