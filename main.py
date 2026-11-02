@@ -73,9 +73,7 @@ st.markdown(
                 max-height: 4.5em; overflow: hidden; } /* 10px se 11px kiya */
     .kpi-wrap { padding-bottom: 1.1rem; }
 
-    /* compact per-KPI date dropdown (original design) */
-    /* Dropdowns ko naya size aur spacing dein */
-        /* Dropdowns ko chhota size aur spacing */
+    /* Dropdowns ko chhota size aur spacing */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         min-height: 24px !important; 
         font-size: 10px !important;
@@ -224,7 +222,7 @@ def _parse_dates(series, dayfirst):
         parsed = pd.to_datetime(series, dayfirst=dayfirst, errors="coerce", format="mixed")
     else:
         parsed = pd.to_datetime(series, dayfirst=dayfirst, errors="coerce")
-    
+
     # Jahan normal parse fail ho gaya (NaT) aur text "Apr-25" type ka hai, use handle karo
     mask = parsed.isna() & series.notna()
     if mask.any():
@@ -236,10 +234,10 @@ def _parse_dates(series, dayfirst):
                 return pd.to_datetime(f"01-{month_str}-{year}", format="%d-%b-%Y", errors="coerce")
             except:
                 return pd.NaT
-        
+
         fixed_dates = series[mask].apply(_fix_month)
         parsed.loc[mask] = fixed_dates
-        
+
     return parsed
 
 
@@ -357,11 +355,6 @@ def compute(df, spec, day):
 # ====================================================================
 # PURCHASE ORDER CALCULATIONS  (sheet "PO STATUS_v2" / tab "Consolidated")
 # ====================================================================
-# Sheet layout (verified on your screenshots): a PO line is one row with a
-# PO #, followed by rows with a blank PO # that carry one invoice each
-# (Invoice #, Inv Qty, Recd Date ...). "Balance Qty" on the first row of a
-# line equals PO Qty - sum(Inv Qty) (checked on POs 45, 49, 284, 339, 342,
-# 350, 361), so Inv Qty with a Recd Date is what the sheet treats as received.
 PO_COLUMNS = {
     "po_no": ["PO #", "PO No", "PO No.", "PO Number", "PO"],
     "item": ["Item Description", "Item Code", "Item", "Item Name", "Material", "Material Code"],
@@ -637,7 +630,7 @@ PROD_TYPES = {
     "bdls":     {"col": "ITEM", "words": ["BONDED"],                "qty": "SHEET", "unit": "Sheets"},
     "rolls":    {"col": "ITEM", "words": ["ROLL"], "not": ["ROLLPACK", "ROLL PACK"], "qty": "MTR", "unit": "Mtr"},
     "mattress": {"col": "ITEM", "words": ["MATTRESS"],              "qty": "SHEET", "unit": "Pcs"},
-     "pillow":   {"col": "ITEM", "words": ["PILLOW"],                "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
+    "pillow":   {"col": "ITEM", "words": ["PILLOW"],                "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
     "rollpack": {"col": "ITEM", "words": ["ROLLPACK", "ROLL PACK", "ROLL P"], "qty": "SHEET", "unit": "Pcs", "is_pcs": True},
 }
 
@@ -682,28 +675,31 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
         raise DataError(f"'{date_col}' column mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+
 def _pcol(df, name):
     import re
     # Sirf letters aur numbers rakho
     want = re.sub(r"[^A-Z0-9]", "", name.upper())
     cols = [(c, re.sub(r"[^A-Z0-9]", "", str(c).upper())) for c in df.columns]
-    
+
     # Exact match (SHEET -> SHEET)
     for c, n in cols:
         if n == want:
             return df[c]
-    
+
     # Startswith match (SHEET ✓ -> SHEET)
     for c, n in cols:
         if n.startswith(want) and not str(c).startswith("_"):
             return df[c]
-            
+
     # Endswith match
     for c, n in cols:
         if n.endswith(want) and not str(c).startswith("_"):
             return df[c]
-            
+
     raise DataError(f"Column '{name}' nahi mila. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
+
+
 def _hr_daily(df):
     """Har (date, department) ka ek row. Ek department ke kai rows (SHEET/MM/WEIGHT/BDL) mein
     manpower aur OT repeat hote hain, isliye max lete hain, sum nahi (warna double count hoga)."""
@@ -725,6 +721,7 @@ def _hr_dates(df):
     """Sirf wo dates jin din kuch data bhara hai (blank September rows nahi)."""
     t = _hr_daily(df).groupby("_date")[["man", "ot"]].sum()
     return sorted(t[(t["man"] > 0) | (t["ot"] > 0)].index, reverse=True)
+
 
 @st.cache_data(ttl=900, show_spinner="Stock file load ho rahi hai (badi file hai)...")
 def _fetch_stock_cached(url, sheet_name):
@@ -754,13 +751,14 @@ def _fetch_stock_cached(url, sheet_name):
         raise DataError("Stock sheet mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+
 # ====================================================================
 # GRADE YIELD  (Prod. Summary file)
 #   yield % = (grade ka weight / us period ka TOTAL weight) x 100
 #   Item ka naam (ITEM NAME column) hi grade decide karta hai.
 # ====================================================================
 SECOND_GRADE_ITEMS = ["PEELING 2ND GRADE", "PU FOAM 2ND GRADE", "PU FOAM A GRADE",
-                      "A GRADE", "PU FOAM DC GRADE"]            # <-- DC GRADE yahan hai (neeche note dekho)
+                      "A GRADE", "PU FOAM DC GRADE"]
 THIRD_GRADE_ITEMS = ["PEELING 3RD GRADE", "PU FOAM 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]
 # 1st Grade = BAAKI SAB items (mattress, pillow, bonded sheet, peeling roll, pu foam sheet ...)
 FIRST_GRADE_EXCLUDE = SECOND_GRADE_ITEMS + THIRD_GRADE_ITEMS
@@ -904,6 +902,7 @@ def _fetch_shed_cached(files):
         raise DataError("Shed files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
+
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def _fetch_rolls_cached(files):
     """B-Shed aur C-Shed ki files padhkar ek table banata hai. files = ((shed, path, sheet), ...)"""
@@ -930,16 +929,17 @@ def _fetch_rolls_cached(files):
         raise DataError("B/C shed files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
-# ---------------- D-SHED YIELD (1st Grade weight / total weight x 100) ----------------
-D_YIELD_EXCLUDE = []          # total se kuch item hatane ho to yahan likho, e.g. ["DC GRADE", "FC"]
+
+# ---------------- D+E SHED YIELD (1st Grade weight / total weight x 100) ----------------
+D_YIELD_EXCLUDE = []          # total se kuch item hatane ho to yahan likho, e.g. ["DC GRADE"]
 D_YIELD_FIRST = "1ST GRADE"
 
 
 def _parse_mixed_dates(s):
-    """'01-Apr-25' aur '01-04-2025' dono format ek hi column mein chalte hain."""
+    """'01-Apr-25', '01-04-2025', '2025-04-01 00:00:00' sab format ek hi column mein chalte hain."""
     s = s.astype(str).str.strip()
     d = pd.to_datetime(s, format="%d-%b-%y", errors="coerce")
-    for fmt in ("%d-%m-%Y", "%d-%b-%Y", "%d/%m/%Y", "%Y-%m-%d"):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%m-%Y", "%d-%b-%Y", "%d/%m/%Y", "%d.%m.%Y"):
         m = d.isna()
         if not m.any():
             break
@@ -948,37 +948,40 @@ def _parse_mixed_dates(s):
 
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
-def _fetch_dyield_cached(url, sheet_name=""):
-    """D-Shed yield file (csv ya xlsx): columns DATE, ITEM, D-SHED -> _date, item, kg."""
-    is_csv = str(url).lower().split("?")[0].endswith(".csv")
-    src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
-    if is_csv:
-        raw = pd.read_csv(src, dtype=str)
-    else:
-        xl = pd.ExcelFile(src, engine="openpyxl")
-        tab = sheet_name if sheet_name in xl.sheet_names else xl.sheet_names[0]
-        raw = xl.parse(tab, dtype=object)
-    raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
-    date_col = next((c for c in raw.columns if c == "DATE"), None)
-    item_col = next((c for c in raw.columns if c == "ITEM"), None)
-    val_col = next((c for c in raw.columns if "SHED" in c), None)
-    if not all([date_col, item_col, val_col]):
-        raise DataError(f"D yield file mein DATE / ITEM / D-SHED columns nahi mile. Mile hue: {list(raw.columns)}")
-    d = _parse_mixed_dates(raw[date_col])
-    df = pd.DataFrame({
-        "_date": d.dt.date,
-        "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
-        "kg": _num(raw[val_col]).fillna(0.0),
-    })
-    df = df[d.notna() & (df["item"] != "") & (df["item"] != "NAN")].copy()
+def _fetch_dyield_cached(files):
+    """D aur E shed yield Excel files (DATE, ITEM, D-SHED / E-SHED) jodkar ek table banata hai.
+    files = (("D Shed", url), ("E Shed", url)). Pehli sheet (tab) padhi jaati hai."""
+    frames = []
+    for shed, url in files:
+        src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+        is_csv = str(url).lower().split("?")[0].endswith(".csv")
+        raw = pd.read_csv(src, dtype=str) if is_csv else pd.read_excel(src, dtype=object, engine="openpyxl")
+        raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
+        date_col = next((c for c in raw.columns if c == "DATE"), None)
+        item_col = next((c for c in raw.columns if c == "ITEM"), None)
+        val_col = next((c for c in raw.columns if "SHED" in c), None)
+        if not all([date_col, item_col, val_col]):
+            raise DataError(f"{shed} yield file mein DATE / ITEM / SHED columns nahi mile. "
+                            f"Mile hue: {list(raw.columns)}")
+        d = _parse_mixed_dates(raw[date_col])
+        t = pd.DataFrame({
+            "shed": shed,
+            "_date": d.dt.date,
+            "item": raw[item_col].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True),
+            "kg": _num(raw[val_col]).fillna(0.0),
+        })
+        frames.append(t[d.notna() & (t["item"] != "") & (t["item"] != "NAN")])
+    df = pd.concat(frames, ignore_index=True)
     if df.empty:
-        raise DataError("D yield file mein koi valid date nahi mili")
+        raise DataError("D/E yield files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
 
-def d_yield(y_df, start, end):
-    """[start, end] ka 1st grade yield %. Return None agar us period ka data nahi."""
+def d_yield(y_df, start, end, shed=None):
+    """[start, end] ka 1st grade yield %. shed=None => D+E combined. Data na ho to None."""
     s = y_df[(y_df["_date"] >= start) & (y_df["_date"] <= end)]
+    if shed:
+        s = s[s["shed"] == shed]
     s = s[~s["item"].isin(D_YIELD_EXCLUDE)]
     total = float(s["kg"].sum())
     if total <= 0:
@@ -989,22 +992,31 @@ def d_yield(y_df, start, end):
 
 
 def d_yield_text(day):
-    """Card ki extra lines: din ki yield, mahine ki yield, grade-wise, month-wise."""
+    """Card ki extra lines: D+E combined yield (bold, sabse upar), phir shed-wise, grade-wise, month-wise."""
     y_df, err, _ = get_sheet("d_yield")
     if y_df is None:
-        return f"D-Shed yield: data error ({err})"
+        return f"Yield: data error ({err})"
+
+    def fmt(r):
+        return f"{r['pct']:.2f}%" if r else "no data"
+
     m_start = day.replace(day=1)
     m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
     dy, my = d_yield(y_df, day, day), d_yield(y_df, m_start, m_end)
-    lines = []
-    day_txt = f"{dy['pct']:.2f}%" if dy else "no data"
-    mon_txt = f"{my['pct']:.2f}%" if my else "no data"
-    lines.append(f"D-Shed 1st Grade Yield: {day:%d-%m} {day_txt} | {day:%b-%y} {mon_txt}")
+
+    lines = [f"<b>1st Grade Yield (D+E): {day:%d-%m} {fmt(dy)} | {day:%b-%y} {fmt(my)}</b>"]
+
+    for shed in sorted(y_df["shed"].unique()):
+        sd = d_yield(y_df, day, day, shed)
+        sm = d_yield(y_df, m_start, m_end, shed)
+        lines.append(f"{shed}: {day:%d-%m} {fmt(sd)} | {day:%b-%y} {fmt(sm)}")
+
     if dy:
         lines.append(f"{day:%d-%m} grade-wise (kg): " + " | ".join(
-            f"{k.capitalize()} {v:,.1f}" for k, v in dy["by_item"].items() if v > 0))
+            f"{k.title()} {v:,.1f}" for k, v in dy["by_item"].items() if v > 0))
     if my:
-        lines.append(f"{day:%b-%y} 1st Grade {my['first']:,.0f} / Total {my['total']:,.0f} kg")
+        lines.append(f"{day:%b-%y}: 1st Grade {my['first']:,.0f} / Total {my['total']:,.0f} kg")
+
     fy_year = day.year if day.month >= 4 else day.year - 1
     months = []
     for k in range(12):
@@ -1017,7 +1029,7 @@ def d_yield_text(day):
         if r:
             months.append(f"{ms:%b} {r['pct']:.1f}%")
     if months:
-        lines.append("Month-wise yield: " + " | ".join(months))
+        lines.append("Month-wise yield (D+E): " + " | ".join(months))
     return "<br>".join(lines)
 
 
@@ -1028,7 +1040,6 @@ def compute_kpi(df, spec, day):
     if calc == "prod_log":
         ptype = spec.get("type")
 
-        # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
@@ -1041,12 +1052,12 @@ def compute_kpi(df, spec, day):
 
             # --- YIELD: F-Shed sheet se selected month ki latest date nikalna ---
             f_month_data = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
-            
+
             if not f_month_data.empty:
-                actual_date = f_month_data["_date"].max() # Us mahine ki sabse latest date
+                actual_date = f_month_data["_date"].max()  # Us mahine ki sabse latest date
                 f_day = f_month_data[f_month_data["_date"] == actual_date]
             else:
-                f_day = pd.DataFrame() # Agar us mahine ka data nahi hai
+                f_day = pd.DataFrame()  # Agar us mahine ka data nahi hai
 
             day_yield = float(_num(_pcol(f_day, "F-SHED")).sum()) if not f_day.empty else 0.0
             month_yield = float(_num(_pcol(f_month_data, "F-SHED")).sum()) if not f_month_data.empty else 0.0
@@ -1135,7 +1146,7 @@ def compute_kpi(df, spec, day):
                 "extra": None
             }
 
-        # 3. PILLOW ke liye logic
+        # 4. PILLOW ke liye logic
         elif ptype == "pillow":
             t = PROD_TYPES[ptype]
             s = _pcol(df, t["col"]).astype(str).str.upper()
@@ -1164,8 +1175,6 @@ def compute_kpi(df, spec, day):
         else:
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
-        # ---------- SALES CALCULATIONS ----------
-        # ---------- SALES CALCULATIONS ----------
     # ---------- SALES CALCULATIONS ----------
     if calc and str(calc).startswith("sales_"):
         # 1. Column Picker (Exact match taaki ST. CODE mil sake)
@@ -1178,39 +1187,35 @@ def compute_kpi(df, spec, day):
         amt_col = safe_pcol("AMT")
         bdls_col = safe_pcol("BDLS")
         cat_col = safe_pcol("ST. CODE")
-        
+
         df["_amt"] = _num(amt_col).fillna(0)
         df["_bdls"] = _num(bdls_col).fillna(0)
         df["_cat"] = cat_col.astype(str).str.strip()
 
         # 2. Selected Month aur SAAL (Year) ka exact data nikalne ka function
         def get_selected_month_data():
-            # Yahan humne month aur YEAR dono match kiye hain
             mask = df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)
             return df[mask]
 
-        # ---------- Naya Logic Daily Basis Sales Sheet Ke Liye ----------
+        # ---------- Daily Basis Sales Sheet ----------
         if calc == "sales_daily":
-            # Us din ka exact data filter karo (Date match)
             day_data = df[df["_date"] == day]
-            
+
             if day_data.empty:
                 return {"value": "₹0", "desc": f"No records for {day.strftime('%d-%b-%Y')}", "color": GREY}
-            
-            # Columns dhoondho
+
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
             party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None)
-            
+
             if not amt_col:
                 return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
-                
+
             total_amt = _num(day_data[amt_col]).sum()
             total_parties = _num(day_data[party_col]).sum() if party_col else 0
-            
-            # Agar amount 0 hai toh No Data dikhao
+
             if total_amt == 0:
                 return {"value": "₹0", "desc": f"Amount is empty in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
-            
+
             return {
                 "value": _inr(total_amt),
                 "desc": f"Last recorded sale on {day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
@@ -1218,20 +1223,19 @@ def compute_kpi(df, spec, day):
             }
 
         elif calc == "sales_daily_mtd":
-            # Selected mahine ka poora data (1st se aaj tak)
             sub = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False) & (df["_date"] <= day)]
             if sub.empty:
                 return {"value": "₹0", "desc": f"No sales in {day.strftime('%b-%Y')}", "color": GREY}
-            
+
             amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
             party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None)
-            
+
             if not amt_col:
                 return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
-                
+
             total_amt = _num(sub[amt_col]).sum()
             total_parties = _num(sub[party_col]).sum() if party_col else 0
-            
+
             return {
                 "value": _inr(total_amt),
                 "desc": f"Month-to-date | {total_parties:,.0f} Parties",
@@ -1242,11 +1246,10 @@ def compute_kpi(df, spec, day):
             sub = get_selected_month_data()
             if sub.empty:
                 return {"value": "No Data", "desc": f"No category data for {day.strftime('%b-%Y')}", "color": GREY}
-            
-            # ST. CODE ke hisaab se group karna
+
             mix = sub.groupby("_cat")["_amt"].sum().sort_values(ascending=False)
-            mix = mix[(mix.index != "") & (mix.index != "nan") & (mix.index != "0")] # Blank hatao
-            
+            mix = mix[(mix.index != "") & (mix.index != "nan") & (mix.index != "0")]  # Blank hatao
+
             if mix.empty:
                 return {"value": "No Data", "desc": "No category data", "color": GREY}
 
@@ -1258,28 +1261,26 @@ def compute_kpi(df, spec, day):
                 "color": BLUE
             }
 
-        # Agar koi aur sales calc ho toh yahan se pehle wala purana code hata dein
-
-        # ---------- OTHERS: FREIGHT ----------
+    # ---------- OTHERS: FREIGHT ----------
     if calc == "freight_mtd":
         sub = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
         if sub.empty:
             return {"value": "₹0", "desc": "No freight data this month", "color": GREY}
-        
-        # Freight ka total (ACT. RATE column uthayenge)
+
         act_rate_col = next((c for c in sub.columns if "ACT" in str(c).upper()), None)
         if not act_rate_col:
             return {"value": "Config error", "desc": "ACT. RATE column nahi mila", "color": RED}
-            
+
         total_amt = _num(sub[act_rate_col]).sum()
         total_inv = sub["INV. NO."].nunique() if "INV. NO." in sub.columns else len(sub)
-        
+
         return {
             "value": _inr(total_amt),
             "desc": f"Month-to-date: {total_inv} Invoices",
             "color": BLUE
         }
- # ---------- FINANCE: TOTAL DRS & CRS ----------
+
+    # ---------- FINANCE: TOTAL DRS & CRS ----------
     if calc == "finance_total_drs_crs":
         cb_col = _pcol(df, "CB")
         cb_vals = _num(cb_col).dropna()
@@ -1300,13 +1301,14 @@ def compute_kpi(df, spec, day):
         col_61_120 = _pcol(df, "61-120")
         col_120 = _pcol(df, ">120")
         col_180 = _pcol(df, ">180")
-        
+
         amt_90_plus = _num(col_61_120).sum() + _num(col_120).sum() + _num(col_180).sum()
         amt_180_plus = _num(col_180).sum()
-        
+
         return {"value": f"₹{amt_90_plus:,.0f}",
                 "desc": f">180 Days: ₹{amt_180_plus:,.0f}",
                 "color": RED if amt_90_plus > 0 else BLUE}
+
     # ---------- ORDER MANAGEMENT (ORDER NO = base; har order sirf ek baar ginta hai) ----------
     # Rule: 0-7 + 7-14 + 14-21 + 21+  =  ORDERS LEFT   (hamesha, kisi bhi date par)
     if calc and str(calc).startswith("order_"):
@@ -1315,7 +1317,7 @@ def compute_kpi(df, spec, day):
 
         orders_all = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
 
-        # --- CURRENT SCHEDULE (selected date ke orders; iski calculation pehle jaisi hi hai) ---
+        # --- CURRENT SCHEDULE (selected date ke orders) ---
         if calc == "order_current_schedule":
             today_df = orders_all[orders_all["_date"] == day]
             if today_df.empty:
@@ -1325,7 +1327,7 @@ def compute_kpi(df, spec, day):
             n_pend = today_df.loc[~ok, "ORDER NO"].astype(str).str.strip().nunique()
             return {"value": f"{n_all} Orders", "desc": f"Finance pending: {n_pend}", "color": BLUE}
 
-        # --- baaki sab blocks: ek order number = ek order (duplicate number sirf ek baar, purani date wala) ---
+        # --- baaki sab blocks: ek order number = ek order ---
         orders = orders_all.copy()
         orders["ORDER NO"] = orders["ORDER NO"].astype(str).str.strip()
         orders["_sort"] = orders["_date"].apply(lambda x: x if pd.notna(x) else datetime.date.max)
@@ -1334,7 +1336,7 @@ def compute_kpi(df, spec, day):
         age = pd.to_numeric(orders["_date"].apply(lambda x: (day - x).days if pd.notna(x) else None),
                             errors="coerce")
         undated = age.isna()                     # date nahi / samajh nahi aayi -> naya order maanke 0-7 mein
-        age = age.fillna(0)                      # (aur future date wale bhi 0-7 mein; isse koi order chhootta nahi)
+        age = age.fillna(0)
 
         masks = {
             "order_age_0_7":   age <= 7,
@@ -1368,37 +1370,7 @@ def compute_kpi(df, spec, day):
             return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total_left} Total",
                     "color": BLUE if pct > 80 else AMBER}
 
-    # ---------- PRODUCTION: PILLOW (Sirf Month-wise & Pcs) ----------
-    if calc == "prod_log" and spec.get("type") == "pillow":
-        t = PROD_TYPES[spec["type"]]
-        s = _pcol(df, t["col"]).astype(str).str.upper()
-        m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
-        work = df[m]
-
-        def agg_pillow(d):
-            if d.empty:
-                return 0, 0.0
-            # BDLS column ka sum
-            bdl = int(_num(_pcol(d, "BDLS")).sum())
-            
-            # Pcs ke liye 'SHEET' column ki values ko sum karo (kyunki sheet mein yahi Pcs hai)
-            qty = float(_num(_pcol(d, "SHEET")).sum()) 
-            return bdl, qty
-
-        # Sirf selected month ka data (1st se last date tak)
-        month_start = day.replace(day=1)
-        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        month_end = next_month - datetime.timedelta(days=1)
-        month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-        
-        month_b, month_q = agg_pillow(month_data)
-
-        # UI par display format
-        return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
-                "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
-                "color": BLUE,
-                "extra": None} 
-        # ---------- FOAMING: STATIC VALUES (Temporary) ----------
+    # ---------- FOAMING: STATIC VALUES (Temporary) ----------
     if calc == "static_value":
         return {
             "value": spec.get("value", "0"),
@@ -1406,30 +1378,26 @@ def compute_kpi(df, spec, day):
             "color": BLUE
         }
 
-        
     # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
     if calc == "sum_consumption":
         col = spec.get("col", "CONS")
         if col not in df.columns:
             raise DataError(f"Column '{col}' not found.")
-        
-        # Data ko selected date ke month se filter karo
+
         sub = df[df["_date"].apply(lambda d: d.month == day.month and d.year == day.year if pd.notna(d) else False)]
-        
-        # Agar upar wala filter fail ho, toh fallback (as_of logic)
+
         if sub.empty:
             sub = df[df["_date"] <= day]
         if sub.empty:
             return None
-        
-        # Agar 'where' condition di hai (jaise TDI DRUMS), toh filter karo
+
         for col_name, wanted in spec.get("where", {}).items():
             if col_name in sub.columns:
                 sub = sub[sub[col_name].astype(str).str.strip().str.lower() == str(wanted).strip().lower()]
-        
+
         if sub.empty:
             return None
-            
+
         total_cons = _num(sub[col]).sum()
         return {"value": f"{total_cons:,.2f}", "desc": f"Consumption for {day.strftime('%b-%Y')}", "color": BLUE}
 
@@ -1438,15 +1406,15 @@ def compute_kpi(df, spec, day):
         col = spec.get("col", "TDI_Balance")
         if col not in df.columns:
             raise DataError(f"Column '{col}' not found. Columns: {list(df.columns)}")
-        
-        # Selected date ka last record
+
         sub = df[df["_date"] <= day]
         if sub.empty:
             return None
-        
+
         last_val = _num(sub[col]).dropna().iloc[-1] if not _num(sub[col]).dropna().empty else 0
         return {"value": f"{last_val:,.2f} Qty", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}", "color": BLUE}
-        # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
+
+    # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
         item = _pcol(df, "ITEM NAME").astype(str).str.strip()
         status = _pcol(df, "STATUS").astype(str).str.strip().str.lower()
@@ -1460,7 +1428,8 @@ def compute_kpi(df, spec, day):
                 "desc": (names + ("..." if n_below > 3 else "")) if n_below else "Sab items minimum se upar",
                 "color": RED if n_below else BLUE,
                 "extra": f"{by_group} | Total tracked: {n_all}" if n_below else f"Total tracked: {n_all}"}
-        # ---------- INVENTORY ----------
+
+    # ---------- INVENTORY ----------
     if calc == "stock_value":
         d = df[df["_date"] == day]
         if d.empty:
@@ -1496,19 +1465,18 @@ def compute_kpi(df, spec, day):
                 "color": RED if len(dead) else BLUE,
                 "extra": txt or "Koi dead stock nahi"}
 
-        # ---------- MAINTENANCE ----------
+    # ---------- MAINTENANCE ----------
     if calc == "generic_count":
         col = spec.get("col")
         where = spec.get("where", {})
         sub = df[df["_date"] <= day]
         if sub.empty:
             return {"value": "0", "desc": "No records found till this date", "color": BLUE}
-        
-        # Filter lagana (Jaise Issue Resolved blank hona chahiye)
+
         for c, val in where.items():
             if c in sub.columns:
                 sub = sub[sub[c].astype(str).str.strip() == str(val).strip()]
-        
+
         count = len(sub)
         return {
             "value": f"{count} Machines",
@@ -1520,24 +1488,23 @@ def compute_kpi(df, spec, day):
         sub = df[df["_date"] <= day]
         if sub.empty:
             return {"value": "0%", "desc": "No maintenance records", "color": GREY}
-        
-        # "Issue Resolved" column dhoondho (agar column ka naam thoda alag ho toh)
+
         res_col = next((c for c in sub.columns if "RESOLVED" in str(c).upper()), None)
         if not res_col:
             return {"value": "No Column", "desc": "Issue Resolved column not found", "color": GREY}
 
         total = len(sub)
         resolved = sub[res_col].astype(str).str.strip().str.lower().isin(["yes", "y", "resolved", "done", "true"]).sum()
-        
+
         pct = (resolved / total) * 100 if total > 0 else 0
-        
+
         return {
             "value": f"{pct:.1f}%",
             "desc": f"{resolved} Resolved / {total} Total Breakdowns",
             "color": BLUE if pct > 80 else AMBER
         }
-    
-        # ---------- PRODUCTION: BDLS (D + E Shed) ----------
+
+    # ---------- PRODUCTION: BDLS (D + E Shed) ----------
     if calc == "bdls_de":
         def tot(d, typ):
             return float(d.loc[d["type"] == typ, "val"].sum())
@@ -1556,9 +1523,10 @@ def compute_kpi(df, spec, day):
             s = d_day[d_day["shed"] == shed]
             parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls / {tot(s, 'PRODUCTION'):,.1f} Prod")
 
-        extra = (f"Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp:,.1f} Prod"
-                 f"<br>{' | '.join(parts)}"
-                 f"<br>{d_yield_text(day)}")
+        # D+E combined yield (bold) sabse upar, phir month total, phir shed-wise
+        extra = (f"{d_yield_text(day)}"
+                 f"<br>Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp:,.1f} Prod"
+                 f"<br>{' | '.join(parts)}")
         return {
             "value": f"{b:,.0f} Bdls | {p:,.1f} Prod",
             "desc": f"Selected date total (D + E shed)",
@@ -1573,20 +1541,18 @@ def compute_kpi(df, spec, day):
 
         d_day = df[df["_date"] == day]
         d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
-        # POORA MONTH - naya add kiya
         month_start = day.replace(day=1)
         next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
         month_end = next_month - datetime.timedelta(days=1)
         d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
 
         r, m, p = tot(d_day, "ROLLS"), tot(d_day, "METERS"), tot(d_day, "PRODUCTION")
-        
+
         parts = []
         for shed in sorted(df["shed"].unique()):
             s = d_day[d_day["shed"] == shed]
             parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr")
 
-        # Naya: Complete month ki total production
         full_month_r = tot(d_full_month, "ROLLS")
         full_month_m = tot(d_full_month, "METERS")
         full_month_p = tot(d_full_month, "PRODUCTION")
@@ -1624,7 +1590,8 @@ def compute_kpi(df, spec, day):
             out["desc"] = "⚠ mixed-currency rates: " + ", ".join(r["warn_items"][:3])
             out["color"] = AMBER
         return out
-        # ---------- HR ----------
+
+    # ---------- HR ----------
     if calc in ("hr_manpower", "hr_overtime", "hr_dept"):
         d = _hr_daily(df)
         tot = d.groupby("_date")[["man", "ot"]].sum()
@@ -1654,40 +1621,36 @@ def compute_kpi(df, spec, day):
         return None if v is None else {"value": v, "desc": None, "color": None}
     else:
         return {"value": "Not configured", "desc": "No calculation defined for this KPI", "color": GREY}
-    
 
 
 def parse_production_matrix(df):
     if df.empty or len(df) < 3:
         return pd.DataFrame(), []
-    
+
     df = df.dropna(how='all').reset_index(drop=True)
-    
-    # Header row dhoondho (jahan DATE ya ITEM likha ho)
+
+    # Header row dhoondo (jahan DATE ya ITEM likha ho)
     header_idx = 0
     for i in range(min(10, len(df))):
         row_str = " ".join([str(x).upper() for x in df.iloc[i].values])
         if "DATE" in row_str and ("ITEM" in row_str or "EFFICIENCY" in row_str):
             header_idx = i
             break
-            
+
     if header_idx >= len(df) - 1:
         return pd.DataFrame(), []
 
-    # Headers set karo
     headers = df.iloc[header_idx].astype(str).str.strip().tolist()
-    
-    # Item column ka index dhoondho
+
     item_col_idx = None
     for i, h in enumerate(headers):
         if "ITEM" in str(h).upper() or "GRADE" in str(h).upper():
             item_col_idx = i
             break
-            
-    # Date aur Production/Efficiency columns dhoondho
+
     date_columns = {}
     current_date = None
-    
+
     for idx, cell in enumerate(headers):
         if cell:
             try:
@@ -1696,12 +1659,9 @@ def parse_production_matrix(df):
                     current_date = parsed_dt.date()
             except:
                 pass
-            
+
         if current_date:
-            # Upar wale header cell ko check karo, ya uske neeche wale row ko
-            # (Kyunki matrix mein efficiency "Efficiency" ya "%" likha hota hai)
             sub = str(headers[idx]).lower()
-            # Agar humne headers ke neeche wali row nahi li, toh current col ka naam check karo
             if 'actual production' in sub or 'g tot' in sub:
                 if current_date not in date_columns:
                     date_columns[current_date] = {}
@@ -1711,7 +1671,6 @@ def parse_production_matrix(df):
                     date_columns[current_date] = {}
                 date_columns[current_date]["eff_col"] = idx
 
-    # Agar upar wale tarike se nahi mila, toh neeche wali row (header_idx + 1) check karo
     if not date_columns and header_idx + 1 < len(df):
         second_row = df.iloc[header_idx + 1].astype(str).str.strip().tolist()
         current_date = None
@@ -1723,7 +1682,7 @@ def parse_production_matrix(df):
                         current_date = parsed_dt.date()
                 except:
                     pass
-                    
+
             if current_date:
                 sub = second_row[idx].lower() if idx < len(second_row) else ""
                 if 'actual production' in sub or 'g tot' in sub:
@@ -1737,13 +1696,11 @@ def parse_production_matrix(df):
 
     available_dates = list(date_columns.keys())
     records = []
-    
-    # Data rows padhna start karo (header ke 2 row baad)
+
     start_row = header_idx + 2
     for idx in range(start_row, len(df)):
         row = df.iloc[idx]
-        
-        # Item (Grade) nikalna
+
         item_name = "Unknown"
         if item_col_idx is not None and item_col_idx < len(row):
             item_name = str(row.iloc[item_col_idx]).strip()
@@ -1754,13 +1711,12 @@ def parse_production_matrix(df):
             try:
                 prod_val = 0.0
                 eff_val = 0.0
-                
+
                 if "prod_col" in cols and cols["prod_col"] < len(row):
                     prod_val = pd.to_numeric(str(row.iloc[cols["prod_col"]]).replace(',', '').replace('%', ''), errors='coerce')
                 if "eff_col" in cols and cols["eff_col"] < len(row):
                     eff_val = pd.to_numeric(str(row.iloc[cols["eff_col"]]).replace(',', '').replace('%', ''), errors='coerce')
-                
-                # Sirf tab record karo jab Item unknown na ho
+
                 if item_name != "Unknown":
                     records.append({
                         "Date": dt,
@@ -1770,9 +1726,8 @@ def parse_production_matrix(df):
                     })
             except Exception:
                 continue
-                
-    return pd.DataFrame(records), available_dates
 
+    return pd.DataFrame(records), available_dates
 
 
 # ====================================================================
@@ -1792,8 +1747,6 @@ DATE_FMT = "%d-%m-%Y"
 # 5a. SHEETS
 # ====================================================================
 SHEETS = {
-    # "PO STATUS_v2" -> tab "Consolidated". One PO line = one row with a PO #,
-    # followed by rows with a blank PO # that each carry one invoice.
     "purchase_po": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRMyHArWBjTjiS4_B9LMLIkR2mYOVhviB5Yb-uQZ3sUWZV1W6dhkxQ6njifhKMIGq8eCCoK9U9dqz12/pubhtml",
         "worksheet": "0",          # gid of the 'Consolidated' tab
@@ -1805,35 +1758,24 @@ SHEETS = {
         "extra_date_cols": ["Recd Date"],        # receipt dates also appear in the date dropdown
         "ignore_cols": ["Status"],               # dropdown-only column (not used to detect blank rows)
     },
-    # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
-    # <<< YAHAN SE NAYA SALES BLOCK ADD KAREIN >>>
     "sales_report": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx", # <-- Purani Sheet ka Link
-        "sheet_name": "Sales Data",  # <-- Purani Sheet ka Tab (Jisme ST. CODE hai)
-        "date_col": "MONTH",         
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx",
+        "sheet_name": "Sales Data",
+        "date_col": "MONTH",
         "dayfirst": True,
     },
     "daily_sales_report": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=3", # <-- v=3 kar dein
-        "sheet_name": "DAILY BASIS SALES",  # <-- YEH CHANGE KAREIN (LAST DAY SALE se)
-        "date_col": "DATE",             
-        "dayfirst": True,               
-    },
-    # Add more tabs/sheets here, each with ITS OWN date_col.
-        "production_logs": {
-        "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
-        "sheet_name": "FY2026-27 Prod. Sheet",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DAILY%20BASIS%20SALES.xlsx?v=3",
+        "sheet_name": "DAILY BASIS SALES",
         "date_col": "DATE",
         "dayfirst": True,
     },
-        # F-Shed (Yield ke liye)
-    "f_shed": {
+    "production_logs": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx",
-        "sheet_name": "F-Shed",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(5).xlsx",
+        "sheet_name": "FY2026-27 Prod. Sheet",
         "date_col": "DATE",
         "dayfirst": True,
     },
@@ -1869,14 +1811,15 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
-        "min_stock": {
+    "min_stock": {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance.xlsx",
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
     },
-            "bdls_de": {
+    # D + E shed ka Bdls + Prod
+    "bdls_de": {
         "type": "bdls_de",
         "url": "bdls_de",
         "files": (
@@ -1884,12 +1827,16 @@ SHEETS = {
             ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-E%20Bdls%2BProd.xlsx", "Shed-E Bdls+Prod"),
         ),
     },
+    # D + E shed ka COMBINED yield (D-Shed(yield).xlsx + E-Shed.xlsx, pehli sheet/tab padhi jaati hai)
     "d_yield": {
         "type": "dyield",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/D-Shedyield.csv",   # <-- apni file ka naam
-        "sheet_name": "",      # xlsx ho to tab ka naam, csv ho to khali chhodo
+        "url": "d_yield",
+        "files": (
+            ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/D-Shed%28yield%29.xlsx"),
+            ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/E-Shed.xlsx"),
+        ),
     },
-        "rolls_bc": {
+    "rolls_bc": {
         "type": "rolls_bc",
         "url": "rolls_bc",
         "files": (
@@ -1900,50 +1847,50 @@ SHEETS = {
 
     "maintenance_logs": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrPocQhFp-3kIL0QhVYFzIrkD5Wd5QmoShNK3i08MZSx4Wu59y25d0uo687C71guf3vc5FdNcM56_H/pubhtml",
-        "worksheet": "0",          
-        "date_col": "Breakdown Date", 
+        "worksheet": "0",
+        "date_col": "Breakdown Date",
         "dayfirst": True
     },
 
-        "foaming_chemicals": {
-        "type": "excel", 
+    "foaming_chemicals": {
+        "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20Consumption.xlsx",
-        "sheet_name": "Data", # <--- YEH ADD KARNA ZAROORI HAI (Aapki excel file me jo tab ka naam hai, woh daalein)
-        "date_col": "MONTH", 
+        "sheet_name": "Data",
+        "date_col": "MONTH",
         "dayfirst": True
     },
 
-        "stock_data": {
+    "stock_data": {
         "type": "stock",
         "url":  "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/STOCK.xlsx",
         "sheet_name": "Inventory Data",
     },
-        "freight_data": {
+    "freight_data": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ3meZTQ5PvgX63s8_3Nc87WfD-RzNXc9fu8t_hmlZZ2g3VAffZn01a__L7WtKTTPPbuTRFOwZC-mLh/pubhtml",
-        "worksheet": "1511781172",  # Aapki screenshot ke hisaab se GID
-        "date_col": "DATE",         # Freight sheet mein date wala column
-        "dayfirst": False,          # 22-Oct-26 format ke liye
-        "ignore_cols": ["MONTH"],   # MONTH column ko filter karne ke liye
+        "worksheet": "1511781172",
+        "date_col": "DATE",
+        "dayfirst": False,
+        "ignore_cols": ["MONTH"],
     },
 
     "hr_manpower": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4PjMPwxSrMxWE010j_3E4TXjUmmHo9nERPYUcTKfrHE9C_NeR-HbC50QrpKc8Yw/pubhtml",
-        "worksheet": "1154348919",     # Over Time Data tab ka gid
+        "worksheet": "1154348919",
         "date_col": "DATE",
         "dayfirst": True,
     },
     "grade_category": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Grade%20wise%20category.xlsx", 
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Grade%20wise%20category.xlsx",
         "sheet_name": "Grade+Category",
-        "date_col": "GRADE", 
-        "static": True, 
+        "date_col": "GRADE",
+        "static": True,
     },
     "order_management_1":  {
         "type": "orders",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml",
         "worksheet": ["0", "1151895349", "416003397"],
-        "date_col": "DATE", 
+        "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
@@ -1958,39 +1905,39 @@ SHEETS = {
     # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
     "prod_summary": {
         "type": "yield",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx",  # <-- GitHub par jo naam rakhoge wahi likho
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx",
         "sheet_name": "Prod. Summary 26-27",
     },
     "m_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",  # <-- M-Shed (4).xlsx KA SAHI LINK
-        "sheet_name": "M-Shed",  # <-- Sheet tab ka naam "M-Shed" hi hai
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx",
+        "sheet_name": "M-Shed",
         "date_col": "DATE",
         "dayfirst": True,
         "ignore_cols": ["MON"],
     },
     "f_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx", 
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx",
         "sheet_name": "F-Shed",
         "date_col": "DATE",
         "dayfirst": True,
     },
-        "finance_ageing": {
+    "finance_ageing": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Ageing%20(2).xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Ageing%20(2).xlsx",
         "sheet_name": "Ageing analysis",
         "date_col": "PARTY NAME",
     },
     "finance_svp": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/SVP%20(1).xlsx", # <-- Yahan apni actual Finance file ka link daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/SVP%20(1).xlsx",
         "sheet_name": "svp",
         "date_col": "PARTY NAME",
     },
-        "manual": {
+    "manual": {
         "url": "manual",
     },
 }
@@ -1998,17 +1945,12 @@ SHEETS = {
 # 5b. KPI_SOURCES  (key = (department key, KPI title exactly as on screen))
 # ====================================================================
 KPI_SOURCES = {
-    # Open POs (count) as of the selected date; description line shows the
-    # outstanding quantity per unit (PCS / KGS / MTR).
     ("purchase", "Pending PO"): {
-    "sheet": "purchase_po",
-    "mode": "on_date",
-    "date_label": "PO date",
-    "calc": "po_pending",
-},
-    # Value of goods received from the 1st of the month up to the selected date
-    # = sum(Inv Qty x Invoice Rate) by Recd Date.  Change "basis" to "po" to use
-    # PO value instead (sum(PO Qty x PO Rate) by PO Date).
+        "sheet": "purchase_po",
+        "mode": "on_date",
+        "date_label": "PO date",
+        "calc": "po_pending",
+    },
     ("purchase", "Goods Below MS"): {"sheet": "min_stock", "calc": "min_stock"},
     ("purchase", "Purchase Till Date"): {
         "sheet": "purchase_po",
@@ -2018,12 +1960,10 @@ KPI_SOURCES = {
         "basis": "received",
     },
 
-    
-
     ("inventory", "Total Inventory Value"): {"sheet": "stock_data", "calc": "stock_value"},
     ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "stock_data", "calc": "stock_dead", "dead_days": 90},
 
-        # Production Department ke saare blocks ki live binding:
+    # Production Department ke saare blocks ki live binding:
     ("production", "Total Production & Yield"): {"sheet": "production_logs", "calc": "prod_log", "type": "total"},
     ("production", "Bdls & Yield"):      {"sheet": "bdls_de", "calc": "bdls_de"},
     ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
@@ -2039,18 +1979,17 @@ KPI_SOURCES = {
 
     # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
-    "sheet": "maintenance_logs",
+        "sheet": "maintenance_logs",
         "mode": "as_of",
         "calc": "generic_count",
-        "col": "Issue Resolved",           
-        "where": {"Issue Resolved": ""},   
+        "col": "Issue Resolved",
+        "where": {"Issue Resolved": ""},
     },
     ("maint", "Preventive Maintenance %"): {
         "sheet": "maintenance_logs",
         "mode": "as_of",
         "calc": "maintenance_pct",
     },
-        # <<< Yahan se naye Order Ageing blocks shuru >>>
     # <<< ORDER MANAGEMENT DATA SOURCE >>>
     ("order", "Orders 0-7 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_0_7"},
     ("order", "Orders 7-14 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_7_14"},
@@ -2059,7 +1998,7 @@ KPI_SOURCES = {
     ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
     ("order", "Serviceability %"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_serviceability"},
-    
+
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
         "sheet": "finance_svp",
@@ -2073,18 +2012,15 @@ KPI_SOURCES = {
         "sheet": "finance_ageing",
         "calc": "finance_total_due",
     },
-    # Baaki 2 blocks (Receivable/Payable Days aur Total Amt Received/Paid) ke liye abhi data nahi hai
-    # isliye unhe hata dein ya unka "calc" empty chhod dein
-# <<< YAHAN SE SALES KA CODE ADD KAREIN >>>
-        # <<< SALES DATA SOURCE >>>
+    # <<< SALES DATA SOURCE >>>
     ("sales", "Last Day Sale (Value & Bdls)"): {
         "sheet": "daily_sales_report",
-        "calc": "sales_daily",     # <-- YEH CHANGE KAREIN
-        "show_date": True,         # <-- YEH ADD KAREIN
+        "calc": "sales_daily",
+        "show_date": True,
     },
     ("sales", "T/O in This Month"): {
-        "sheet": "daily_sales_report",  # <-- Nayi sheet
-        "calc": "sales_daily_mtd",      # <-- YEH "sales_daily_mtd" HONA CHAHIYE
+        "sheet": "daily_sales_report",
+        "calc": "sales_daily_mtd",
     },
     ("sales", "Category Mix"): {
         "sheet": "sales_report",
@@ -2097,11 +2033,11 @@ KPI_SOURCES = {
     ("foaming", "Tonnage Foaming"): {
         "sheet": "foaming_chemicals",
         "calc": "sum_consumption",
-        "col": "CONS"                 # <--- Excel me column ka naam CONS hai
+        "col": "CONS"
     },
 
-        ("foaming", "Poly Stock"): {
-        "sheet": "manual", # Iska matlab hai ki data kisi sheet se nahi aayega
+    ("foaming", "Poly Stock"): {
+        "sheet": "manual",
         "calc": "static_value",
         "value": "234,000 Kg",
         "desc": "Polyol stock (Temporary fixed value)",
@@ -2118,8 +2054,6 @@ KPI_SOURCES = {
         "value": "29,490 Kg",
         "desc": "Pop Polymer stock (Temporary fixed value)",
     },
-
-    # <<< YAHAN TAK >>>
 }
 # Shown on KPI blocks that have no source yet, so "Not connected" always says why.
 MISSING_SOURCE = {
@@ -2129,15 +2063,12 @@ MISSING_SOURCE = {
 DEFAULT_MISSING = "Source tab not provided yet (the PO STATUS sheet only holds purchase-order rows)"
 
 # ====================================================================
-# ====================================================================
 # 6. LINKS
 # ====================================================================
 PURCHASE_SHEET = (
     "https://docs.google.com/spreadsheets/d/e/"
     "2PACX-1vRMyHArWBjTjiS4_B9LMLIkR2mYOVhviB5Yb-uQZ3sUWZV1W6dhkxQ6njifhKMIGq8eCCoK9U9dqz12/pubhtml"
 )
-# Power BI: this is a report VIEWING link only. It opens the report in a browser;
-# it does not give this app any data. See POWERBI_NOTE / the Diagnostics panel.
 PURCHASE_POWERBI = (
     "https://app.powerbi.com/groups/me/reports/"
     "3ac01124-e935-4964-a7b1-2436d90f0787/0ae022176631890e2147?experience=power-bi"
@@ -2163,7 +2094,7 @@ DEPARTMENTS = [
             ("LB Stock", "Long block: Qty / Weight"),
             ("Poly Stock", "Chemical stock"),
             ("TDI Balance", "Chemical balance"),
-            ("Pop Polymer", "Pop polymer stock"), # <-- Naya block yahan add kiya
+            ("Pop Polymer", "Pop polymer stock"),
         ],
         "links": [
             ("📊 Tonnage Dashboard (Power BI)", None),
@@ -2188,7 +2119,7 @@ DEPARTMENTS = [
             ("📋 Plant Logs Register (Google Sheets)", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All%20shed%20production%202026-27%20(4).xlsx"),
         ],
     },
-     {
+    {
         "key": "order",
         "icon": "📦",
         "name": "ORDER MANAGEMENT",
@@ -2324,7 +2255,7 @@ def _service_account():
     try:
         if "gcp_service_account" in st.secrets:
             return dict(st.secrets["gcp_service_account"])
-    except Exception:   
+    except Exception:
         pass
     return None
 
@@ -2335,41 +2266,37 @@ def _fetch_cached(url, worksheet, date_col, dayfirst, has_account, anchor, ffill
     df = prepare(df, date_col, dayfirst, ffill, anchor, extra, ignore)
     return df, datetime.datetime.now(IST)
 
+
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
     """Ek Google workbook ke kai tabs ko jodkar ek table banata hai."""
     frames, problems = [], []
     for gid in gids:
         try:
-            # Direct raw CSV fetch karo
             d = fetch_sheet(url, gid, None, header_hint=None).copy()
             d["TAB_GID"] = str(gid)
             frames.append(d)
         except Exception as exc:
             problems.append(f"gid {gid}: {type(exc).__name__}: {exc}")
-    
+
     if not frames:
         raise DataError("Kisi bhi tab se data nahi mila. " + " | ".join(problems))
-    
+
     df = pd.concat(frames, ignore_index=True, sort=False).fillna("")
-    
-    # --- NAYA PATCH: MANUAL HEADER DETECTION ---
-    # Har tab ki pehli kuch rows check karo jahan "ORDER NO" ya "DATE" likha ho
+
     header_idx = 0
     for i in range(min(10, len(df))):
         row_str = " ".join([str(x).upper() for x in df.iloc[i].values])
         if "ORDER NO" in row_str or "DATE" in row_str:
             header_idx = i
             break
-            
-    # Header row set karo
+
     df.columns = df.iloc[header_idx].astype(str).str.strip()
     df = df.iloc[header_idx + 1:].copy()
-    
-    # Clean dates (dots hatao)
+
     if date_col in df.columns:
         df[date_col] = df[date_col].astype(str).str.replace(".", "-", regex=False)
-        
+
     out = prepare(df, date_col, dayfirst, (), None, (), tuple(ignore) + ("TAB_GID",))
     return out, datetime.datetime.now(IST)
 
@@ -2538,7 +2465,7 @@ def get_sheet(name):
             return df, None, fetched
 
         if cfg.get("type") == "dyield":
-            df, fetched = _fetch_dyield_cached(cfg["url"], cfg.get("sheet_name", ""))
+            df, fetched = _fetch_dyield_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
@@ -2652,7 +2579,6 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # Main Dates nikalne ka code
-            # Main Dates nikalne ka code
             if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
                 dates = [datetime.datetime.now(IST).date()]
             else:
@@ -2664,9 +2590,6 @@ def render_kpi(dept_key, idx, title, desc):
                 if _f is not None and "_date" in _f.columns:
                     dates = sorted(set(dates) | set(_f["_date"].dropna().unique()), reverse=True)
 
-            # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
-
-            # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
             # Agar Mattress hai, toh M-Shed ki dates bhi jodo (October ke liye)
             if spec.get("type") == "mattress":
                 _m, _e, _t = get_sheet("m_shed")
@@ -2687,37 +2610,31 @@ def render_kpi(dept_key, idx, title, desc):
             for m in range(1, 13):
                 all_months.add((current_year, m))
                 all_months.add((current_year - 1, m))
-            
+
             months_with_data = sorted({(d.year, d.month) for d in dates}, reverse=True)
             other_months = sorted([m for m in all_months if m not in months_with_data], reverse=True)
             months = months_with_data + other_months
-            
+
             mcol, dcol = st.columns([1, 1], gap="small")
             chosen_m = mcol.selectbox(
                 f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
                 format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
             )
-            
+
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             if not month_dates:
                 _disabled_date(title, key)
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
                 return
 
-            # --- PILLOW KE LIYE SIRF MONTH, DATE HIDDEN ---
-            # Purana:
-            # is_finance = str(spec.get("calc", "")).startswith("finance_")
-            # if is_pillow or is_finance:
-
-            # Naya (Isko copy-paste karein):
+            # --- PILLOW / FINANCE / FOAMING / SALES: sirf month, date hidden ---
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
             is_finance = str(spec.get("calc", "")).startswith("finance_")
-            is_foaming = str(spec.get("calc", "")).startswith("sum_consumption") # <-- YEH ADD KAREIN
-            
-            # Sirf un blocks ke liye month dikhao jahan show_date True na ho
-            hide_date = is_pillow or is_finance or is_foaming or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date")) # <-- Yahan is_foaming add karein
+            is_foaming = str(spec.get("calc", "")).startswith("sum_consumption")
 
-            if hide_date: 
+            hide_date = is_pillow or is_finance or is_foaming or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
+
+            if hide_date:
                 chosen = month_dates[0]
                 date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
@@ -2727,11 +2644,11 @@ def render_kpi(dept_key, idx, title, desc):
                     format_func=lambda d: d.strftime("%d-%m-%y"),
                 )
                 date_label = chosen.strftime(DATE_FMT)
-            
-            st.session_state[key] = chosen  # <--- YEH LINE BAHAR (EKDUM LEFT) AANI CHAHIYE
+
+            st.session_state[key] = chosen
             prefix = spec.get("date_label", "as of" if spec.get("mode") == "as_of" else "")
             label = f"{prefix} {date_label}".strip()
-            
+
             try:
                 res = compute_kpi(df, spec, chosen)
             except Exception as exc:
@@ -2790,6 +2707,7 @@ def discover_tabs(pub_url):
         for g in dict.fromkeys(re.findall(r"gid=(\d+)", html)):
             tabs.append((f"tab gid {g}", g))
     return tabs or [("first tab", "0")]
+
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def peek_tab(pub_url, gid, n=8):
@@ -2892,7 +2810,6 @@ def render_diagnostics():
                         st.dataframe(r["table"], use_container_width=True)
                 except Exception as exc:
                     st.error(f"{type(exc).__name__}: {exc}")
-
 
 
 # ====================================================================
