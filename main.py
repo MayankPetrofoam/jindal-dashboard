@@ -2968,7 +2968,7 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             if res is not None and res.get("details"):
-                with st.expander("📋 Poora detail dekho"):
+                with st.expander("📋 View Full Details"):
                     st.markdown(_sections_html(res["details"]), unsafe_allow_html=True)
 
             if res is None:
