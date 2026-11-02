@@ -2067,6 +2067,32 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
+        "tdi_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xls",
+        "sheet_name": "tdi",
+        "date_col": "Date",
+        "dayfirst": True,
+    },
+    "pop_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xls",
+        "sheet_name": "pop",
+        "date_col": "Date",
+        "dayfirst": True,
+    },
+    "poly_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/polyol.xls",
+        "sheet_name": "polyol",
+        "date_col": "Date",
+        "dayfirst": True,
+    },
+    "lb_stock_data": {
+        "type": "gviz",
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSbP2V-mXI6R5hS_u_aktc7B0j4N3fiVV-bm3BgAgkgxKpcrzUP4_esIunwZsyQILmFpuRu-643OOFV/pubhtml",
+        "worksheet": "0", 
+    },
     # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
     "prod_summary": {
         "type": "yield",
