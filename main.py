@@ -2857,6 +2857,8 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
+            if spec.get("calc") == "lb_stock":
+                dates = [datetime.datetime.now(IST).date()]
 
             # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
             if spec.get("type") == "rollpack":
