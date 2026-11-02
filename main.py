@@ -1215,30 +1215,61 @@ def compute_kpi(df, spec, day):
             }
 
         # 4. PILLOW ke liye logic
+        # 4. PILLOW ke liye logic
         elif ptype == "pillow":
             t = PROD_TYPES[ptype]
+            
+            # Column Picker: ITEM column dhoondhein
             s = _pcol(df, t["col"]).astype(str).str.upper()
             m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
             work = df[m]
 
             def agg_pillow(d):
                 if d.empty:
-                    return 0, 0.0
-                bdl = int(_num(_pcol(d, "BDLS")).sum())
-                qty = float(_num(_pcol(d, "SHEET")).sum())
-                return bdl, qty
+                    return 0, 0.0, 0.0
+                try:
+                    # Bundle number column dhoondhein aur unique count lein
+                    bdl_col = _pcol(d, "BUNDLE")
+                    bdl = int(bdl_col.astype(str).str.strip().replace("", pd.NA).dropna().nunique())
+                except:
+                    bdl = 0
+                
+                try:
+                    # Sheet (Pcs) column dhoondhein
+                    sheet_col = _pcol(d, "SHEET")
+                    qty = float(_num(sheet_col).fillna(0).sum())
+                except:
+                    qty = 0.0
+
+                try:
+                    # Weight (Kgs) column dhoondhein
+                    kg_col = _pcol(d, "KGS")
+                    kg = float(_num(kg_col).fillna(0).sum())
+                except:
+                    kg = 0.0
+                
+                return bdl, qty, kg
 
             month_start = day.replace(day=1)
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
+            
+            # Selected month ka data
             month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
+            # Selected date tak ka data (Total till date)
+            till_date_data = work[work["_date"] <= day]
 
-            month_b, month_q = agg_pillow(month_data)
+            # Month aur Till Date ke totals nikaalein
+            month_b, month_q, month_kg = agg_pillow(month_data)
+            total_b, total_q, total_kg = agg_pillow(till_date_data)
 
-            return {"value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
-                    "desc": f"Full Month Total ({day.strftime('%b-%Y')})",
-                    "color": BLUE,
-                    "extra": None}
+            # Card par return karein
+            return {
+                "value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
+                "desc": f"Full Month ({day.strftime('%b-%Y')})",
+                "color": BLUE,
+                "extra": f"Till Date: {total_b:,} Bdls | {total_q:,.0f} Pcs | {total_kg:,.1f} Kgs"
+            }
 
         else:
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
