@@ -670,21 +670,38 @@ def _direct_url(url):
     return url
 
 
-@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
     if re.match(r"^https?://", url or ""):
         data = _http_get(_direct_url(url))
-        if data[:2] != b"PK":
-            raise PermissionError("Link se Excel file nahi mili.")
         src = io.BytesIO(data)
     else:
         src = url
-    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, dtype=object, engine="openpyxl")
+        
+    # File extension check karke engine decide karein (.xls ke liye xlrd, .xlsx ke liye openpyxl)
+    file_ext = str(url).split('?')[0].split('.')[-1].lower()
+    eng = "xlrd" if file_ext == "xls" else "openpyxl"
+    
+    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, dtype=object, engine=eng)
     df = _frame_from_rows(raw.fillna("").values.tolist(), header_hint=date_col)
-
+    
     if static:
         df["_date"] = datetime.datetime.now(IST).date()
         return df, datetime.datetime.now(IST)
+
+    def _to_date(v):
+        if isinstance(v, (datetime.datetime, pd.Timestamp)):
+            return v.date()
+        if isinstance(v, datetime.date):
+            return v
+        d = _parse_dates(pd.Series([str(v)]), dayfirst).iloc[0]
+        return d.date() if pd.notna(d) else None
+
+    df["_date"] = df[date_col].apply(_to_date)
+    df = df.dropna(subset=["_date"]).copy()
+    if df.empty:
+        raise DataError(f"'{date_col}' column mein koi valid date nahi mili")
+    return df, datetime.datetime.now(IST)
 
     def _to_date(v):
         if isinstance(v, (datetime.datetime, pd.Timestamp)):
@@ -2834,6 +2851,9 @@ def render_kpi(dept_key, idx, title, desc):
 
             # Main Dates nikalne ka code
             if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
+                dates = [datetime.datetime.now(IST).date()]
+                        # LB Stock mein date nahi hoti, isliye aaj ki date fix karein
+            if spec.get("calc") == "lb_stock":
                 dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
