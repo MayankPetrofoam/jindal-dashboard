@@ -1495,6 +1495,38 @@ def compute_kpi(df, spec, day):
             "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
             "color": BLUE
         }
+   # ---------- FOAMING: POP POLYMER BALANCE (Dynamic from Sheet) ----------
+    if calc == "pop_balance":
+        # Column names check karein (screenshot ke hisaab se)
+        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
+            raise DataError(f"POP sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
+
+        # Selected date tak ka saara data
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return None
+
+        # Total Received aur Total Issued nikaalein
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
+        
+        # Formula: (Aaya hua) - (Gaya hua)
+        balance = total_recd - total_issues
+        
+        # Description line ke liye aaj ke din ka movement
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+
+        return {
+            "value": f"{balance:,.2f} Kg", 
+            "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
+            "color": BLUE
+        }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
@@ -2038,6 +2070,13 @@ SHEETS = {
         "date_col": "Date",
         "dayfirst": True,
     },
+      "pop_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xls", # <-- Raw Link
+        "sheet_name": "pop",  # Aapke screenshot mein niche tab ka naam 'pop' dikh raha hai
+        "date_col": "Date",
+        "dayfirst": True,
+    },
     "finance_ageing": {
         "type": "excel",
         "static": True,
@@ -2163,10 +2202,9 @@ KPI_SOURCES = {
         "date_label": "as on",
     },
     ("foaming", "Pop Polymer"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "29,490 Kg",
-        "desc": "Pop Polymer stock (Temporary fixed value)",
+        "sheet": "pop_data",
+        "calc": "pop_balance", # <--- Yahan pop_balance karna hai
+        "date_label": "as on",
     },
 }
 # Shown on KPI blocks that have no source yet, so "Not connected" always says why.
