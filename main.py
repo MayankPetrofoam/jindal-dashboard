@@ -1004,7 +1004,8 @@ def d_yield_text(day):
     m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
     dy, my = d_yield(y_df, day, day), d_yield(y_df, m_start, m_end)
 
-    lines = [f"<b>1st Grade Yield (D+E): {day:%d-%m} {fmt(dy)} | {day:%b-%y} {fmt(my)}</b>"]
+    # din ki yield ab upar bold value line mein jaati hai; yahan sirf mahine ki yield
+    lines = [f"<b>1st Grade Yield (D+E) {day:%b-%y}: {fmt(my)}</b>"]
 
     for shed in sorted(y_df["shed"].unique()):
         sd = d_yield(y_df, day, day, shed)
@@ -1527,8 +1528,13 @@ def compute_kpi(df, spec, day):
         extra = (f"{d_yield_text(day)}"
                  f"<br>Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp:,.1f} Prod"
                  f"<br>{' | '.join(parts)}")
+        # selected date ki D+E combined yield (bold value line ke saath)
+        _yd, _ye, _ = get_sheet("d_yield")
+        _dy = d_yield(_yd, day, day) if _yd is not None else None
+        yield_txt = f"{_dy['pct']:.2f}% Yield" if _dy else "No Yield Data"
+
         return {
-            "value": f"{b:,.0f} Bdls | {p:,.1f} Prod",
+            "value": f"{b:,.0f} Bdls | {p / 1000:,.2f} Tons | {yield_txt}",
             "desc": f"Selected date total (D + E shed)",
             "color": BLUE,
             "extra": extra,
