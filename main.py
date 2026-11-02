@@ -218,14 +218,20 @@ def fetch_sheet(url, worksheet=None, service_account=None, header_hint=None):
 # --------------------------------------------------------------------
 def _parse_dates(series, dayfirst):
     """Text -> datetime (unreadable -> NaT)."""
-    if int(pd.__version__.split(".")[0]) >= 2:
-        parsed = pd.to_datetime(series, dayfirst=dayfirst, errors="coerce", format="mixed")
-    else:
-        parsed = pd.to_datetime(series, dayfirst=dayfirst, errors="coerce")
-
-    # Jahan normal parse fail ho gaya (NaT) aur text "Apr-25" type ka hai, use handle karo
+    # 1. Pehle strict format (dd-mm-yyyy) try karein jo aapki sheet mein hai
+    parsed = pd.to_datetime(series, format="%d-%m-%Y", errors="coerce")
+    
+    # 2. Agar kuch dates nahi padi (jaise "16-Oct-2026" ya "Apr-25"), toh mixed format use karein
     mask = parsed.isna() & series.notna()
     if mask.any():
+        if int(pd.__version__.split(".")[0]) >= 2:
+            parsed.loc[mask] = pd.to_datetime(series[mask], dayfirst=dayfirst, errors="coerce", format="mixed")
+        else:
+            parsed.loc[mask] = pd.to_datetime(series[mask], dayfirst=dayfirst, errors="coerce")
+
+    # 3. Jahan normal parse fail ho gaya aur text "Apr-25" type ka hai, use handle karo (purana logic)
+    mask2 = parsed.isna() & series.notna()
+    if mask2.any():
         def _fix_month(m):
             try:
                 month_str = str(m).split('-')[0].strip()
@@ -235,10 +241,11 @@ def _parse_dates(series, dayfirst):
             except:
                 return pd.NaT
 
-        fixed_dates = series[mask].apply(_fix_month)
-        parsed.loc[mask] = fixed_dates
+        fixed_dates = series[mask2].apply(_fix_month)
+        parsed.loc[mask2] = fixed_dates
 
     return parsed
+
 
 
 def prepare(df, date_col, dayfirst=True, ffill_cols=(), anchor=None, extra_date_cols=(), ignore_cols=()):
@@ -1259,23 +1266,32 @@ def compute_kpi(df, spec, day):
             return df[mask]
 
         # ---------- Daily Basis Sales Sheet ----------
+        # ---------- Daily Basis Sales Sheet ----------
         if calc == "sales_daily":
             day_data = df[df["_date"] == day]
 
             if day_data.empty:
                 return {"value": "₹0", "desc": f"No records for {day.strftime('%d-%b-%Y')}", "color": GREY}
 
-            amt_col = next((c for c in df.columns if "TOTAL SALE" in str(c).upper()), None)
-            party_col = next((c for c in df.columns if "PARTIES COUNT" in str(c).upper()), None)
-
+            # Column dhoondhne ka smart tarika (case-insensitive aur space ka dhyan rakhte hue)
+            amt_col = None
+            party_col = None
+            for c in df.columns:
+                c_upper = str(c).upper().strip()
+                if "TOTAL SALE" in c_upper or "SALE AMOUNT" in c_upper or "TOTAL" in c_upper:
+                    amt_col = c
+                if "PARTIES" in c_upper or "COUNT" in c_upper:
+                    party_col = c
+            
             if not amt_col:
-                return {"value": "Error", "desc": "TOTAL SALE AMOUNT column not found", "color": RED}
+                # Agar column naam nahi mila, toh 4th column utha lo (TOTAL SALE AMOUNT usually 4th hota hai)
+                amt_col = df.columns[3] if len(df.columns) > 3 else df.columns[-1]
 
             total_amt = _num(day_data[amt_col]).sum()
             total_parties = _num(day_data[party_col]).sum() if party_col else 0
 
             if total_amt == 0:
-                return {"value": "₹0", "desc": f"Amount is empty in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
+                return {"value": "₹0", "desc": f"Amount is zero in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
 
             return {
                 "value": _inr(total_amt),
