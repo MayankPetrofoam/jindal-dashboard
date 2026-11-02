@@ -649,14 +649,17 @@ def _direct_url(url):
 def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
     if re.match(r"^https?://", url or ""):
         data = _http_get(_direct_url(url))
-        if data[:2] != b"PK":
-            raise PermissionError("Link se Excel file nahi mili.")
         src = io.BytesIO(data)
     else:
         src = url
-    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, dtype=object, engine="openpyxl")
+        
+    # File extension check karke engine decide karein
+    file_ext = str(url).split('?')[0].split('.')[-1].lower()
+    eng = "xlrd" if file_ext == "xls" else "openpyxl"
+    
+    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, dtype=object, engine=eng)
     df = _frame_from_rows(raw.fillna("").values.tolist(), header_hint=date_col)
-
+    
     if static:
         df["_date"] = datetime.datetime.now(IST).date()
         return df, datetime.datetime.now(IST)
@@ -2030,7 +2033,7 @@ SHEETS = {
     },
         "tdi_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Sorted%20Zone.xlsx", # <-- Apna sahi GitHub/Excel link yaha daalein
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xls", # <-- Apna sahi GitHub/Excel link yaha daalein
         "sheet_name": "tdi",
         "date_col": "Date",
         "dayfirst": True,
