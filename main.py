@@ -2031,7 +2031,7 @@ SHEETS = {
         "tdi_data": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Sorted%20Zone.xlsx", # <-- Apna sahi GitHub/Excel link yaha daalein
-        "sheet_name": "Sheet1",
+        "sheet_name": "tdi",
         "date_col": "Date",
         "dayfirst": True,
     },
