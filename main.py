@@ -689,19 +689,6 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
         df["_date"] = datetime.datetime.now(IST).date()
         return df, datetime.datetime.now(IST)
 
-    def _to_date(v):
-        if isinstance(v, (datetime.datetime, pd.Timestamp)):
-            return v.date()
-        if isinstance(v, datetime.date):
-            return v
-        d = _parse_dates(pd.Series([str(v)]), dayfirst).iloc[0]
-        return d.date() if pd.notna(d) else None
-
-    df["_date"] = df[date_col].apply(_to_date)
-    df = df.dropna(subset=["_date"]).copy()
-    if df.empty:
-        raise DataError(f"'{date_col}' column mein koi valid date nahi mili")
-    return df, datetime.datetime.now(IST)
 
     def _to_date(v):
         if isinstance(v, (datetime.datetime, pd.Timestamp)):
@@ -2937,6 +2924,15 @@ def render_kpi(dept_key, idx, title, desc):
             )
 
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
+            
+            # LB Stock mein date column nahi hota, isliye agar month_dates khali hai toh aaj ki date force karein
+            if not month_dates and spec.get("calc") == "lb_stock":
+                month_dates = [datetime.datetime.now(IST).date()]
+                
+            if not month_dates:
+                _disabled_date(title, key)
+                _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
+                return
             if not month_dates:
                 _disabled_date(title, key)
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
