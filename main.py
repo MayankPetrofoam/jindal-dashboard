@@ -1559,6 +1559,50 @@ def compute_kpi(df, spec, day):
             "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
             "color": BLUE
         }
+    # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
+    if calc == "lb_stock":
+        # Column names dhoondhein (case-insensitive)
+        def find_col(name_part):
+            for c in df.columns:
+                if name_part in str(c).upper():
+                    return c
+            return None
+
+        col_grade = find_col("GRADE")
+        col_mtr = find_col("MTR")
+        col_density = find_col("DENSITY")
+
+        if not col_grade or not col_mtr:
+            raise DataError(f"LB Stock sheet mein 'GRADE' ya 'MTR' column nahi mila. Columns: {list(df.columns)}")
+
+        # Data ko clean karein (sirf valid rows rakhein)
+        df_clean = df[df[col_mtr].astype(str).str.strip() != ""].copy()
+        
+        # MTR ko number mein badlein (agar text/blank hai to 0)
+        mtr_vals = _num(df_clean[col_mtr]).fillna(0)
+        
+        if df_clean.empty or mtr_vals.sum() == 0:
+            return {"value": "0 Mtr", "desc": "No long block stock found", "color": GREY}
+
+        # Total MTR
+        total_mtr = mtr_vals.sum()
+
+        # Grade-wise MTR nikaalein
+        grades = df_clean[col_grade].astype(str).str.strip().str.upper()
+        grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
+        
+        # Top 3 Grades ka text banayein (jaise: CL+: 450 | CL: 300)
+        top_grades_txt = " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0)
+        
+        # Total Rolls/Blocks ki ginti
+        total_rows = len(df_clean)
+
+        return {
+            "value": f"{total_mtr:,.0f} Mtr",
+            "desc": f"Total {total_rows:,} Blocks | {top_grades_txt}",
+            "color": BLUE,
+            "extra": "Live data from BLOCK STOCK sheet"
+        }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
@@ -2116,6 +2160,11 @@ SHEETS = {
         "date_col": "Date",
         "dayfirst": True,
     },
+        "lb_stock_data": {
+        "type": "gviz",
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSbP2V-mXI6R5hS_u_aktc7B0j4N3fiVV-bm3BgAgkgxKpcrzUP4_esIunwZsyQILmFpuRu-643OOFV/pubhtml",
+        "worksheet": "0", # LONG BLOCK STOCK tab ka gid
+    },
     "finance_ageing": {
         "type": "excel",
         "static": True,
@@ -2242,6 +2291,11 @@ KPI_SOURCES = {
     ("foaming", "Pop Polymer"): {
         "sheet": "pop_data",
         "calc": "pop_balance", # <--- Yahan pop_balance karna hai
+        "date_label": "as on",
+    },
+        ("foaming", "LB Stock"): {
+        "sheet": "lb_stock_data",
+        "calc": "lb_stock",
         "date_label": "as on",
     },
 }
@@ -2641,6 +2695,23 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
+                if cfg.get("type") == "gviz":
+            # Google sheets se data fetch karein
+            base = cfg["url"].split("/pub")[0]
+            csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
+            data = _http_get(csv_url)
+            if data.lstrip()[:1] == b"<":
+                raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
+            
+            # CSV ko dataframe mein padhein (header row khud dhoondh lega)
+            df = _frame_from_csv(data, header_hint="GRADE") 
+            
+            # Date column nahi hai, isliye aaj ki date daal rahe hain
+            df["_date"] = datetime.datetime.now(IST).date()
+            
+            good[name] = (df, datetime.datetime.now(IST))
+            errors.pop(name, None)
+            return df, None, datetime.datetime.now(IST)
         if cfg.get("type") == "orders":
             df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
             good[name] = (df, fetched)
