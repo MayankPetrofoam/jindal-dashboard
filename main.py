@@ -218,34 +218,20 @@ def fetch_sheet(url, worksheet=None, service_account=None, header_hint=None):
 # --------------------------------------------------------------------
 def _parse_dates(series, dayfirst):
     """Text -> datetime (unreadable -> NaT)."""
-    # 1. Pehle strict format (dd-mm-yyyy) try karein jo aapki sheet mein hai
-    # Dono formats (16-10-2026 aur 03-Apr-26) support karne ke liye
+    # 1. Pehle DD-MMM-YY format try karein (jo aapki nayi sheet mein hai: 03-Apr-26)
     parsed = pd.to_datetime(series, format="%d-%b-%y", errors="coerce")
+    
+    # 2. Agar parse na ho, toh DD-MM-YYYY try karein
     parsed2 = pd.to_datetime(series, format="%d-%m-%Y", errors="coerce")
     parsed = parsed.fillna(parsed2)
     
-    # 2. Agar kuch dates nahi padi (jaise "16-Oct-2026" ya "Apr-25"), toh mixed format use karein
+    # 3. Agar abhi bhi parse na ho (jaise mixed text), toh default mixed logic chalayein
     mask = parsed.isna() & series.notna()
     if mask.any():
         if int(pd.__version__.split(".")[0]) >= 2:
             parsed.loc[mask] = pd.to_datetime(series[mask], dayfirst=dayfirst, errors="coerce", format="mixed")
         else:
             parsed.loc[mask] = pd.to_datetime(series[mask], dayfirst=dayfirst, errors="coerce")
-
-    # 3. Jahan normal parse fail ho gaya aur text "Apr-25" type ka hai, use handle karo (purana logic)
-    mask2 = parsed.isna() & series.notna()
-    if mask2.any():
-        def _fix_month(m):
-            try:
-                month_str = str(m).split('-')[0].strip()
-                year_str = str(m).split('-')[1].strip()
-                year = f"20{year_str}" if len(year_str) == 2 else year_str
-                return pd.to_datetime(f"01-{month_str}-{year}", format="%d-%b-%Y", errors="coerce")
-            except:
-                return pd.NaT
-
-        fixed_dates = series[mask2].apply(_fix_month)
-        parsed.loc[mask2] = fixed_dates
 
     return parsed
 
@@ -1231,25 +1217,25 @@ def compute_kpi(df, spec, day):
                 if d.empty:
                     return 0, 0.0, 0.0
                 try:
-                    # BUNDLE column dhoondhein
+                    # Bundles ke liye 'BUNDLE' column (aapki sheet ke hisaab se)
                     bdl_col = _pcol(d, "BUNDLE")
-                    # Text ko clean karein (space hatao) aur unique count lein
+                    # Unique counts lein (kyunki 26-J00001 multiple rows mein ho sakta hai)
                     bdl = int(bdl_col.astype(str).str.strip().replace("", pd.NA).dropna().nunique())
-                except:
+                except Exception:
                     bdl = 0
                 
                 try:
-                    # Sheet (Pcs) column dhoondhein
+                    # Sheet (Pcs) column
                     sheet_col = _pcol(d, "SHEET")
                     qty = float(_num(sheet_col).fillna(0).sum())
-                except:
+                except Exception:
                     qty = 0.0
 
                 try:
-                    # Weight (Kgs) column dhoondhein
+                    # Weight (Kgs) column
                     kg_col = _pcol(d, "KGS")
                     kg = float(_num(kg_col).fillna(0).sum())
-                except:
+                except Exception:
                     kg = 0.0
                 
                 return bdl, qty, kg
@@ -1258,9 +1244,9 @@ def compute_kpi(df, spec, day):
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
             
-            # Selected month ka data (jaise Sep-2026)
+            # Selected month ka data
             month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
-            # Selected date tak ka data (Total till date)
+            # Selected date tak ka data
             till_date_data = work[work["_date"] <= day]
 
             # Month aur Till Date ke totals nikaalein
@@ -1272,7 +1258,7 @@ def compute_kpi(df, spec, day):
                 "value": f"{month_b:,} Bdls | {month_q:,.0f} Pcs",
                 "desc": f"Full Month ({day.strftime('%b-%Y')})",
                 "color": BLUE,
-                "extra": f"Till Date: {total_b:,} Bdls | {total_q:,.0f} Pcs | {total_kg:,.1f} Kgs"
+                "extra": f"Σ Till Date: {total_b:,} Bdls | {total_q:,.0f} Pcs | {total_kg:,.1f} Kgs"
             }
 
         else:
