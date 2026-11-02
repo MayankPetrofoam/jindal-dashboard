@@ -1563,48 +1563,84 @@ def compute_kpi(df, spec, day):
                     "color": BLUE if pct > 80 else AMBER}
 
     # ---------- FOAMING: STATIC VALUES (Temporary) ----------
-    if calc == "static_value":
-        return {
-            "value": spec.get("value", "0"),
-            "desc": spec.get("desc", ""),
-            "color": BLUE
-        }
-
-    # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
-    if calc == "sum_consumption":
-        col = spec.get("col", "CONS")
-        if col not in df.columns:
-            raise DataError(f"Column '{col}' not found.")
-
-        sub = df[df["_date"].apply(lambda d: d.month == day.month and d.year == day.year if pd.notna(d) else False)]
-
-        if sub.empty:
-            sub = df[df["_date"] <= day]
-        if sub.empty:
-            return None
-
-        for col_name, wanted in spec.get("where", {}).items():
-            if col_name in sub.columns:
-                sub = sub[sub[col_name].astype(str).str.strip().str.lower() == str(wanted).strip().lower()]
-
-        if sub.empty:
-            return None
-
-        total_cons = _num(sub[col]).sum()
-        return {"value": f"{total_cons:,.2f}", "desc": f"Consumption for {day.strftime('%b-%Y')}", "color": BLUE}
-
     # ---------- FOAMING: TDI BALANCE ----------
-    if calc == "last_balance":
-        col = spec.get("col", "TDI_Balance")
-        if col not in df.columns:
-            raise DataError(f"Column '{col}' not found. Columns: {list(df.columns)}")
-
+    if calc == "tdi_balance":
+        if "Recd Qty" not in df.columns or "Issues Qty" not in df.columns:
+            raise DataError(f"TDI sheet mein 'Recd Qty' ya 'Issues Qty' column nahi mila. Columns: {list(df.columns)}")
         sub = df[df["_date"] <= day]
         if sub.empty:
             return None
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issues Qty"]).fillna(0).sum()
+        balance = total_recd - total_issues
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issues Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
 
-        last_val = _num(sub[col]).dropna().iloc[-1] if not _num(sub[col]).dropna().empty else 0
-        return {"value": f"{last_val:,.2f} Qty", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}", "color": BLUE}
+    # ---------- FOAMING: POP POLYMER BALANCE ----------
+    if calc == "pop_balance":
+        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
+            raise DataError(f"POP sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return None
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
+        balance = total_recd - total_issues
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
+
+    # ---------- FOAMING: POLYOL STOCK BALANCE ----------
+    if calc == "poly_balance":
+        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
+            raise DataError(f"POLYOL sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return None
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
+        balance = total_recd - total_issues
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
+
+    # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
+    if calc == "lb_stock":
+        def find_col(name_part):
+            for c in df.columns:
+                if name_part in str(c).upper():
+                    return c
+            return None
+        col_grade = find_col("GRADE")
+        col_mtr = find_col("MTR")
+        if not col_grade or not col_mtr:
+            raise DataError(f"LB Stock sheet mein 'GRADE' ya 'MTR' column nahi mila. Columns: {list(df.columns)}")
+        df_clean = df[df[col_mtr].astype(str).str.strip() != ""].copy()
+        mtr_vals = _num(df_clean[col_mtr]).fillna(0)
+        if df_clean.empty or mtr_vals.sum() == 0:
+            return {"value": "0 Mtr", "desc": "No long block stock found", "color": GREY}
+        total_mtr = mtr_vals.sum()
+        grades = df_clean[col_grade].astype(str).str.strip().str.upper()
+        grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
+        top_grades_txt = " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0)
+        total_rows = len(df_clean)
+        return {"value": f"{total_mtr:,.0f} Mtr", "desc": f"Total {total_rows:,} Blocks | {top_grades_txt}", "color": BLUE, "extra": "Live data from BLOCK STOCK sheet"}
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
@@ -2881,8 +2917,8 @@ def render_kpi(dept_key, idx, title, desc):
                 chosen = month_dates[0]
                 date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
-                chosen = dcol.selectbox(
-                    f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}",
+chosen = dcol.selectbox(
+    f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
                     label_visibility="collapsed",
                     format_func=lambda d: d.strftime("%d-%m-%y"),
                 )
