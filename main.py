@@ -1053,18 +1053,17 @@ def compute_kpi(df, spec, day):
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
 
-            # --- YIELD CALCULATION (Formula: 1st Grade / Others * 100) ---
+            # --- YIELD CALCULATION FUNCTION (Corrected Formula: (First Grade / Total) * 100) ---
             def calc_f_shed_yield(sub_df):
                 if sub_df.empty:
-                    return 0.0
-                # Item column aur Yield column ka naam dhoondhein (case-insensitive)
+                    return 0.0, 0.0, 0.0, 0.0  # (Yield %, 1st Grade, Others, Total)
+                
                 item_col = next((c for c in sub_df.columns if "ITEM" in str(c).upper()), None)
                 yield_col = next((c for c in sub_df.columns if "F-SHED" in str(c).upper()), None)
                 
                 if not item_col or not yield_col:
-                    return 0.0
+                    return 0.0, 0.0, 0.0, 0.0
                 
-                # Values ko numeric banao
                 vals = _num(sub_df[yield_col])
                 items = sub_df[item_col].astype(str).str.strip().str.upper()
                 
@@ -1072,21 +1071,31 @@ def compute_kpi(df, spec, day):
                 first_grade = vals[items == "1ST GRADE"].sum()
                 # Baaki sabhi items ka weight (1st grade ke alawa)
                 other_items = vals[items != "1ST GRADE"].sum()
+                # Total weight
+                total_weight = first_grade + other_items
                 
-                # Agar denominator 0 hai to 0 return karo, warna calculate karo
-                return (first_grade / other_items * 100) if other_items > 0 else 0.0
+                # Correct Percentage Calculation
+                yield_pct = (first_grade / total_weight * 100) if total_weight > 0 else 0.0
+                
+                return yield_pct, first_grade, other_items, total_weight
 
             # Us mahine ka data
             f_month_data = f_df[(f_df["_date"] >= month_start) & (f_df["_date"] <= month_end)]
             
-            # Selected day ka data
+            # --- SMART DATE FALLBACK (Agar selected date par data nahi hai, toh month ki latest date lo) ---
             f_day_data = f_df[f_df["_date"] == day]
+            actual_date = day
+            
+            if f_day_data.empty and not f_month_data.empty:
+                # Agar selected day par data nahi hai, toh mahine ki latest date nikaalo
+                actual_date = f_month_data["_date"].max()
+                f_day_data = f_df[f_df["_date"] == actual_date]
 
             # Yield nikaalein
-            day_yield = calc_f_shed_yield(f_day_data)
-            month_yield = calc_f_shed_yield(f_month_data)
+            day_yield, first_kg, other_kg, total_kg = calc_f_shed_yield(f_day_data)
+            month_yield, _, _, _ = calc_f_shed_yield(f_month_data)
 
-            # --- BDLS / SHEET / WEIGHT (Prod Summary sheet se, jaisa aapne pehle rakha tha) ---
+            # --- BDLS / SHEET / WEIGHT (Prod Summary sheet se) ---
             t = PROD_TYPES["rollpack"]
             s = _pcol(df, t["col"]).astype(str).str.upper()
             work = df[s.str.contains("|".join(map(re.escape, t["words"])), na=False)]
@@ -1101,7 +1110,7 @@ def compute_kpi(df, spec, day):
                 if bdls == 0:
                     bdls = sheets
 
-            # Categories (F-Shed sheet se top 4 items ka weight)
+            # Categories display text (Top 4 items)
             if not f_month_data.empty:
                 item_col = next((c for c in f_month_data.columns if "ITEM" in str(c).upper()), None)
                 yield_col = next((c for c in f_month_data.columns if "F-SHED" in str(c).upper()), None)
@@ -1116,11 +1125,15 @@ def compute_kpi(df, spec, day):
             else:
                 cats = "No yield data this month"
 
+            # Agar actual_date alag hai (fallback laga hai), toh date label me dikhane ke liye
+            date_note = f" (Data as of {actual_date.strftime('%d-%m')})" if actual_date != day else ""
+
             return {
-                "value": f"{day_yield:,.1f} Yield",
-                "desc": f"Month ({month_start:%b-%y}): {bdls:,} Bdls | {sheets:,.0f} Sheets | {weight:,.1f} Wt",
+                "value": f"{day_yield:,.2f}% Yield",  # Percentage symbol add kiya
+                "desc": f"Month ({month_start:%b-%y}): {bdls:,} Bdls | {sheets:,.0f} Sheets | {weight:,.1f} Wt{date_note}",
                 "color": BLUE,
-                "extra": f"Month Yield: {month_yield:,.1f} | {cats}",
+                # Extra me First Grade, Others aur Total kg bhi dikha diye taaki cross-check ho sake
+                "extra": f"Month Yield: {month_yield:,.2f}% | 1st: {first_kg:,.1f} | Others: {other_kg:,.1f} | Total: {total_kg:,.1f}<br>{cats}",
             }
 
         # 2. TOTAL ke liye logic (Prod Summary file se: 1st/2nd/3rd grade yield + bundles)
