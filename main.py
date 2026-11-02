@@ -2695,12 +2695,12 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
-                if cfg.get("type") == "gviz":
+        if cfg.get("type") == "gviz":
             # Google sheets se data fetch karein
             base = cfg["url"].split("/pub")[0]
             csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
             data = _http_get(csv_url)
-            if data.lstrip()[:1] == b"<":
+        if data.lstrip()[:1] == b"<":
                 raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
             
             # CSV ko dataframe mein padhein (header row khud dhoondh lega)
