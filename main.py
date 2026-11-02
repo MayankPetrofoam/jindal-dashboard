@@ -1044,7 +1044,7 @@ def compute_kpi(df, spec, day):
 
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
         # 1. ROLLPACK ke liye alag logic (F-Shed sheet se)
-               if ptype == "rollpack":
+        if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_shed")
             if f_df is None:
                 return {"value": "Error", "desc": f"F-Shed data not available: {err_f}", "color": RED}
