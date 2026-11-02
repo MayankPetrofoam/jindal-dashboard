@@ -56,42 +56,63 @@ st.markdown(
     }
     div[data-testid="stPopover"] > button p,
     a[data-testid="stBaseLinkButton-secondary"] p {
-        font-weight: 700 !important; font-size: 13px !important; color: #ffffff !important;
+        font-weight: 800 !important; font-size: 15px !important; color: #ffffff !important;
     }
     div[data-testid="stPopover"] > button:hover,
     a[data-testid="stBaseLinkButton-secondary"]:hover {
         background-color: #2B4FB5 !important;
     }
 
-    .kpi-title { font-size: 10.5px; font-weight: 700; color: #334155;
-                text-transform: uppercase; line-height: 1.15; }
-    .kpi-value { font-size: 16px; font-weight: 800; color: #0F172A; line-height: 1.2; }
-    .kpi-desc  { font-size: 12px; font-weight: 600; line-height: 1.3;
-                white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .kpi-date  { font-size: 12px; font-weight: 700; color: #1E3A8A; line-height: 1.3; } /* 10px se 12px kiya */
-    .kpi-err   { font-size: 11px; font-weight: 500; line-height: 1.3; color: #dc2626;
-                max-height: 4.5em; overflow: hidden; } /* 10px se 11px kiya */
-    .kpi-wrap { padding-bottom: 1.1rem; }
+    /* ---------- KPI card: bade aur saaf akshar (buzurg workers ke liye) ---------- */
+    .kpi-wrap { padding: 2px 2px 10px 2px; }
+    .kpi-title { font-size: 15px; font-weight: 800; color: #1E3A8A; letter-spacing: .3px;
+                text-transform: uppercase; line-height: 1.2; margin-bottom: 4px; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: #0F172A; line-height: 1.15; margin: 4px 0; }
+    .kpi-desc  { font-size: 15px; font-weight: 600; line-height: 1.35; margin: 4px 0; }
+    .kpi-date  { display: inline-block; font-size: 15px; font-weight: 800; color: #1E3A8A;
+                background: #E0E7FF; border-radius: 6px; padding: 2px 10px; line-height: 1.4; }
+    .kpi-err   { font-size: 14px; font-weight: 600; line-height: 1.35; color: #dc2626;
+                max-height: 6em; overflow: hidden; }
+    .kpi-extra { font-size: 14px; font-weight: 700; color: #0F172A; line-height: 1.4; margin-top: 6px; }
 
-    /* Dropdowns ko chhota size aur spacing */
+    /* metric tiles: bade number + chhota label */
+    .kpi-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px 0; }
+    .kpi-tile  { flex: 1 1 88px; background: #F1F5F9; border-radius: 10px; padding: 6px 8px;
+                text-align: center; border: 1px solid #E2E8F0; }
+    .kpi-tile.yield { background: #DCFCE7; border-color: #86EFAC; }
+    .kpi-num   { font-size: 24px; font-weight: 800; color: #0F172A; line-height: 1.1; }
+    .kpi-tile.yield .kpi-num { color: #15803D; }
+    .kpi-lbl   { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase;
+                line-height: 1.2; margin-top: 2px; }
+
+    /* sections: Selected date / Month / Total */
+    .kpi-sec   { margin-top: 8px; padding-top: 6px; border-top: 2px solid #E2E8F0; }
+    .kpi-sec-h { font-size: 14px; font-weight: 800; color: #1E3A8A; margin-bottom: 2px; }
+    .kpi-row   { display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+                font-size: 15px; line-height: 1.45; padding: 1px 0; }
+    .kpi-rl    { color: #334155; font-weight: 600; white-space: nowrap; }
+    .kpi-rv    { color: #0F172A; font-weight: 800; text-align: right; }
+
+    /* Dropdowns: bade aur padhne layak */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-        min-height: 24px !important; 
-        font-size: 10px !important;
-        padding-left: 4px !important; 
-        padding-right: 1px !important;
+        min-height: 38px !important;
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        padding-left: 8px !important;
+        padding-right: 2px !important;
     }
-    div[data-testid="stSelectbox"] { 
-        width: 100% !important; 
-        margin-bottom: 0 !important; 
+    div[data-testid="stSelectbox"] {
+        width: 100% !important;
+        margin-bottom: 0 !important;
     }
-    /* Label ko chhota karo taaki jagah bache */
     div[data-testid="stSelectbox"] label {
-        font-size: 9px !important;
+        font-size: 12px !important;
         margin-bottom: 2px !important;
         line-height: 1 !important;
     }
     div[data-testid="stSelectbox"] div[data-baseweb="select"] span { overflow: visible !important; }
-    div[data-testid="stDateInput"] { width: 132px !important; margin-bottom: -6px; }
+    div[data-testid="stDateInput"] { width: 150px !important; margin-bottom: -6px; }
+    div[data-testid="stDateInput"] input { font-size: 15px !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -861,8 +882,14 @@ def pillow_txt(a):
     return f"{a['bdl']:,} Bdls | {a['sheets']:,.0f} Sheets | {a['kg']:,.1f} Kg"
 
 
+def _month_range(day):
+    m_start = day.replace(day=1)
+    m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+    return m_start, m_end
+
+
 def pillow_card(day):
-    """Pillow button: din ka, mahine ka, month-wise aur total (April se last date tak) production."""
+    """Pillow button: selected date, selected month aur total (April se last date tak)."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
@@ -870,29 +897,30 @@ def pillow_card(day):
     if p.empty:
         return {"value": "No Data", "desc": "Prod. Summary mein koi 26-J pillow row nahi mili", "color": GREY}
 
-    m_start = day.replace(day=1)
-    m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+    m_start, m_end = _month_range(day)
     d_day = pillow_agg(p[p["_date"] == day])
     d_mon = pillow_agg(p[(p["_date"] >= m_start) & (p["_date"] <= m_end)])
     d_all = pillow_agg(p)
     first, last = p["_date"].min(), p["_date"].max()
 
-    lines = [f"<b>{day:%b-%y} Total: {pillow_txt(d_mon)}</b>",
-             f"Total ({first:%d-%m-%y} to {last:%d-%m-%y}): {pillow_txt(d_all)}"]
-    ym = p["ym"]
-    for k in sorted(ym.unique()):
-        a = pillow_agg(p[ym == k])
-        lines.append(f"{datetime.date(int(k // 100), int(k % 100), 1):%b-%y}: {pillow_txt(a)}")
+    def rows(a):
+        return [("Bundles", f"{a['bdl']:,}"), ("Sheets", f"{a['sheets']:,.0f}"), ("Weight", f"{a['kg']:,.1f} Kg")]
+
     return {
         "value": pillow_txt(d_day),
-        "desc": "Selected date (J shed pillow)",
+        "desc": "Pillow production (J shed)",
         "color": BLUE,
-        "extra": "<br>".join(lines),
+        "metrics": [(f"{d_day['bdl']:,}", "Bundles"), (f"{d_day['sheets']:,.0f}", "Sheets"),
+                    (f"{d_day['kg']:,.1f}", "Kg")],
+        "sections": [
+            (f"🗓 Month {day:%b-%y}", rows(d_mon)),
+            (f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all)),
+        ],
     }
 
 
 def yield_card(day):
-    """Total Production & Yield button. Bada text = selected month ki 1st grade yield %."""
+    """Total Production & Yield: selected date, selected month, saal ka total (month-wise list nahi)."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "0.00 %", "desc": f"Data error: {err}", "color": RED}
@@ -906,25 +934,30 @@ def yield_card(day):
     upto = y_df[(y_df["ym"] <= ym) & (y_df["_date"] >= YIELD_START)]     # April se selected month tak
     yt = _grade_table(upto)
 
-    months = []
-    for k in sorted(upto["ym"].unique()):
-        t = _grade_table(upto[upto["ym"] == k])
-        months.append(f"{datetime.date(int(k // 100), int(k % 100), 1):%b} {t['pct'][1]:.1f}%")
+    dfr = y_df[y_df["_date"] == day]                    # selected date
+    dt = _grade_table(dfr) if (not dfr.empty and dfr["kg"].sum() > 0) else None
 
-    p, b = mt["pct"], mt["bdl"]
-    extra = (
-        f"{day:%b-%y}: 1st {p[1]:.2f}% | 2nd {p[2]:.2f}% | 3rd {p[3]:.2f}%"
-        f"<br>Bundles: {mt['bdl_total']:,} (1st {b[1]:,} | 2nd {b[2]:,} | 3rd {b[3]:,})"
-        f"<br>Year Total (till {day:%b-%y}): {yt['total'] / 1000:,.1f} T | 1st {yt['pct'][1]:.2f}% | "
-        f"2nd {yt['pct'][2]:.2f}% | 3rd {yt['pct'][3]:.2f}%"
-        f"<br>Total Bundles: {yt['bdl_total']:,} (1st {yt['bdl'][1]:,} | 2nd {yt['bdl'][2]:,} | 3rd {yt['bdl'][3]:,})"
-        f"<br>Month-wise 1st: {' | '.join(months)}"
-    )
+    def grade_rows(t):
+        return [("1st Grade", f"{t['pct'][1]:.2f}%"), ("2nd Grade", f"{t['pct'][2]:.2f}%"),
+                ("3rd Grade", f"{t['pct'][3]:.2f}%"), ("Production", f"{t['total'] / 1000:,.1f} Tons"),
+                ("Bundles", f"{t['bdl_total']:,}  (1st {t['bdl'][1]:,} · 2nd {t['bdl'][2]:,} · 3rd {t['bdl'][3]:,})")]
+
+    p = mt["pct"]
+    sections = []
+    if dt:
+        sections.append((f"📅 {day:%d-%m-%y}", grade_rows(dt)))
+    sections.append((f"🗓 Month {day:%b-%y}", grade_rows(mt)))
+    sections.append((f"📆 Year total (Apr to {day:%b-%y})", grade_rows(yt)))
     return {
-        "value": f"{p[1]:,.2f} %",                               # bada text: 1st grade yield
-        "desc": f"{day:%b-%y} Production: {mt['total'] / 1000:,.1f} T",
+        "value": f"{p[1]:,.2f} %",
+        "desc": "1st Grade yield & production",
         "color": BLUE,
-        "extra": extra,
+        "metrics": [
+            (f"{dt['pct'][1]:.2f}%" if dt else "—", f"Yield {day:%d-%m}", "yield"),
+            (f"{p[1]:.2f}%", f"Yield {day:%b-%y}", "yield"),
+            (f"{mt['total'] / 1000:,.1f}", f"Tons {day:%b-%y}"),
+        ],
+        "sections": sections,
     }
 
 
@@ -1001,14 +1034,27 @@ def _parse_mixed_dates(s):
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def _fetch_dyield_cached(files):
-    """D aur E shed yield Excel files (DATE, ITEM, D-SHED / E-SHED) jodkar ek table banata hai.
-    files = (("D Shed", url), ("E Shed", url)). Pehli sheet (tab) padhi jaati hai."""
+    """Yield files (DATE, ITEM, <X>-SHED) jodkar ek table banata hai.
+    files = (("D Shed", url), ("F Shed", url, "F-Shed"), ...). 3rd cheez = sheet(tab) ka naam (na ho to pehli tab).
+    Header row apne aap dhoondhi jaati hai (jis row mein DATE likha ho)."""
     frames = []
-    for shed, url in files:
+    for item in files:
+        shed, url = item[0], item[1]
+        want_tab = item[2] if len(item) > 2 else None
         src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
         is_csv = str(url).lower().split("?")[0].endswith(".csv")
-        raw = pd.read_csv(src, dtype=str) if is_csv else pd.read_excel(src, dtype=object, engine="openpyxl")
-        raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
+        if is_csv:
+            raw0 = pd.read_csv(src, dtype=str, header=None)
+        else:
+            xl = pd.ExcelFile(src, engine="openpyxl")
+            tab = want_tab if want_tab in xl.sheet_names else xl.sheet_names[0]
+            raw0 = xl.parse(tab, dtype=object, header=None)
+        hdr = next((i for i in range(min(15, len(raw0)))
+                    if any(str(c).strip().upper() == "DATE" for c in raw0.iloc[i].tolist())), None)
+        if hdr is None:
+            raise DataError(f"{shed} yield file mein 'DATE' wali header row nahi mili")
+        raw = raw0.iloc[hdr + 1:].copy()
+        raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw0.iloc[hdr].tolist()]
         date_col = next((c for c in raw.columns if c == "DATE"), None)
         item_col = next((c for c in raw.columns if c == "ITEM"), None)
         val_col = next((c for c in raw.columns if "SHED" in c), None)
@@ -1025,7 +1071,7 @@ def _fetch_dyield_cached(files):
         frames.append(t[d.notna() & (t["item"] != "") & (t["item"] != "NAN")])
     df = pd.concat(frames, ignore_index=True)
     if df.empty:
-        raise DataError("D/E yield files mein koi valid date nahi mili")
+        raise DataError("Yield files mein koi valid date nahi mili")
     return df, datetime.datetime.now(IST)
 
 
@@ -1087,6 +1133,57 @@ def d_yield_text(day, sheet="d_yield", label="D+E"):
     return "<br>".join(lines)
 
 
+def shed_card(df, day, kind, y_sheet, label):
+    """D+E (kind="bdls") aur B+C (kind="rolls") ka card: selected date, selected month, shed-wise, grade-wise."""
+    def tot(d, typ):
+        return float(d.loc[d["type"] == typ, "val"].sum())
+
+    def txt(d):
+        if kind == "bdls":
+            return f"{tot(d, 'BUNDLES'):,.0f} Bdls · {tot(d, 'PRODUCTION') / 1000:,.2f} Tons"
+        return (f"{tot(d, 'ROLLS'):,.0f} Rolls · {tot(d, 'METERS'):,.0f} Mtr · "
+                f"{tot(d, 'PRODUCTION') / 1000:,.2f} Tons")
+
+    m_start, m_end = _month_range(day)
+    d_day = df[df["_date"] == day]
+    d_mon = df[(df["_date"] >= m_start) & (df["_date"] <= m_end)]
+
+    y_df, _yerr, _ = get_sheet(y_sheet)
+
+    def yld(a, b, shed=None):
+        return d_yield(y_df, a, b, shed) if y_df is not None else None
+
+    def ys(r):
+        return f"{r['pct']:.2f}%" if r else "no data"
+
+    dy, my = yld(day, day), yld(m_start, m_end)
+
+    if kind == "bdls":
+        tiles = [(f"{tot(d_day, 'BUNDLES'):,.0f}", "Bdls"), (f"{tot(d_day, 'PRODUCTION') / 1000:,.2f}", "Tons")]
+    else:
+        tiles = [(f"{tot(d_day, 'ROLLS'):,.0f}", "Rolls"), (f"{tot(d_day, 'METERS'):,.0f}", "Mtr"),
+                 (f"{tot(d_day, 'PRODUCTION') / 1000:,.2f}", "Tons")]
+    tiles.append((f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"))
+
+    sheds = sorted(df["shed"].unique())
+    day_rows = [(sh, f"{txt(d_day[d_day['shed'] == sh])} · {ys(yld(day, day, sh))}") for sh in sheds]
+    mon_rows = [("Total", txt(d_mon)), (f"Yield ({label})", ys(my))]
+    mon_rows += [(sh, f"{txt(d_mon[d_mon['shed'] == sh])} · {ys(yld(m_start, m_end, sh))}") for sh in sheds]
+
+    sections = [(f"📅 {day:%d-%m-%y} · Shed wise", day_rows), (f"🗓 Month {day:%b-%y}", mon_rows)]
+    if dy:
+        sections.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
+                         [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+    b = tot(d_day, "BUNDLES" if kind == "bdls" else "ROLLS")
+    return {
+        "value": " | ".join(f"{t[0]} {t[1]}" for t in tiles),
+        "desc": f"Selected date total ({label} shed)",
+        "color": BLUE,
+        "metrics": tiles,
+        "sections": sections,
+    }
+
+
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
 
@@ -1098,18 +1195,35 @@ def compute_kpi(df, spec, day):
     if calc == "prod_log":
         ptype = spec.get("type")
 
-        # 1. ROLLPACK: sirf F-Shed ki 1st Grade yield (F-Shed.xlsx se)
+        # 1. ROLLPACK: sirf F-Shed ki 1st Grade yield
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_yield")
             if f_df is None:
-                return {"value": "Error", "desc": f"F-Shed yield data not available: {err_f}", "color": RED}
-            _dy = d_yield(f_df, day, day)
-            yield_txt = f"{_dy['pct']:.2f}% Yield" if _dy else "No Yield Data"
+                return {"value": "Error", "desc": f"F-Shed yield data nahi mila: {err_f}", "color": RED}
+            m_start, m_end = _month_range(day)
+            dy, my = d_yield(f_df, day, day), d_yield(f_df, m_start, m_end)
+
+            def ys(r):
+                return f"{r['pct']:.2f}%" if r else "no data"
+
+            sections = []
+            if my:
+                sections.append((f"🗓 Month {day:%b-%y}", [
+                    ("Yield", ys(my)),
+                    ("1st Grade weight", f"{my['first']:,.0f} kg"),
+                    ("Total weight", f"{my['total']:,.0f} kg")]))
+            if dy:
+                sections.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
+                                 [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+            tiles = [(ys(dy) if dy else "—", "Yield", "yield")]
+            if dy:
+                tiles += [(f"{dy['first']:,.0f}", "1st Grade Kg"), (f"{dy['total']:,.0f}", "Total Kg")]
             return {
-                "value": yield_txt,
-                "desc": "Selected date yield (F shed)",
+                "value": ys(dy) + " Yield",
+                "desc": "Rollpack 1st Grade yield (F shed)",
                 "color": BLUE,
-                "extra": d_yield_text(day, "f_yield", "F"),
+                "metrics": tiles,
+                "sections": sections,
             }
 
         # 2. TOTAL ke liye logic (Prod Summary file se: 1st/2nd/3rd grade yield + bundles)
@@ -1525,80 +1639,11 @@ def compute_kpi(df, spec, day):
 
     # ---------- PRODUCTION: BDLS (D + E Shed) ----------
     if calc == "bdls_de":
-        def tot(d, typ):
-            return float(d.loc[d["type"] == typ, "val"].sum())
-
-        month_start = day.replace(day=1)
-        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        month_end = next_month - datetime.timedelta(days=1)
-        d_day = df[df["_date"] == day]
-        d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
-
-        b, p = tot(d_day, "BUNDLES"), tot(d_day, "PRODUCTION")
-        mb, mp = tot(d_full_month, "BUNDLES"), tot(d_full_month, "PRODUCTION")
-
-        parts = []
-        for shed in sorted(df["shed"].unique()):
-            s = d_day[d_day["shed"] == shed]
-            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls / {tot(s, 'PRODUCTION') / 1000:,.2f} Tons")
-
-        # D+E combined yield (bold) sabse upar, phir month total (Tons), phir shed-wise
-        extra = (f"{d_yield_text(day)}"
-                 f"<br>Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp / 1000:,.2f} Tons"
-                 f"<br>{' | '.join(parts)}")
-        # selected date ki D+E combined yield (bold value line ke saath)
-        _yd, _ye, _ = get_sheet("d_yield")
-        _dy = d_yield(_yd, day, day) if _yd is not None else None
-        yield_txt = f"{_dy['pct']:.2f}% Yield" if _dy else "No Yield Data"
-
-        return {
-            "value": f"{b:,.0f} Bdls | {p / 1000:,.2f} Tons | {yield_txt}",
-            "desc": f"Selected date total (D + E shed)",
-            "color": BLUE,
-            "extra": extra,
-        }
+        return shed_card(df, day, "bdls", "d_yield", "D+E")
 
     # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
     if calc == "rolls_bc":
-        def tot(d, typ):
-            return float(d.loc[d["type"] == typ, "val"].sum())
-
-        d_day = df[df["_date"] == day]
-        d_mtd = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
-        month_start = day.replace(day=1)
-        next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        month_end = next_month - datetime.timedelta(days=1)
-        d_full_month = df[(df["_date"] >= month_start) & (df["_date"] <= month_end)]
-
-        r, m, p = tot(d_day, "ROLLS"), tot(d_day, "METERS"), tot(d_day, "PRODUCTION")
-
-        parts = []
-        for shed in sorted(df["shed"].unique()):
-            s = d_day[d_day["shed"] == shed]
-            parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr / "
-                         f"{tot(s, 'PRODUCTION') / 1000:,.2f} Tons")
-
-        full_month_r = tot(d_full_month, "ROLLS")
-        full_month_m = tot(d_full_month, "METERS")
-        full_month_p = tot(d_full_month, "PRODUCTION")
-
-        # selected date ki B+C combined yield (bold value line ke saath)
-        _yd, _ye, _ = get_sheet("bc_yield")
-        _dy = d_yield(_yd, day, day) if _yd is not None else None
-        yield_txt = f"{_dy['pct']:.2f}% Yield" if _dy else "No Yield Data"
-
-        # B+C combined yield (bold) sabse upar, phir month total (Tons), phir shed-wise
-        extra = (f"{d_yield_text(day, 'bc_yield', 'B+C')}"
-                 f"<br>Month Total ({day:%b-%y}): {full_month_r:,.0f} Rolls | {full_month_m:,.0f} Mtr | "
-                 f"{full_month_p / 1000:,.2f} Tons"
-                 f"<br>{' | '.join(parts)}")
-
-        return {
-            "value": f"{r:,.0f} Rolls | {m:,.0f} Mtr | {p / 1000:,.2f} Tons | {yield_txt}",
-            "desc": "Selected date total (B + C shed)",
-            "color": BLUE,
-            "extra": extra,
-        }
+        return shed_card(df, day, "rolls", "bc_yield", "B+C")
 
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
@@ -1881,12 +1926,12 @@ SHEETS = {
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed.xlsx"),
         ),
     },
-    # F-Shed (Rollpack) ki yield (F-Shed.xlsx, pehli sheet/tab padhi jaati hai)
+    # F-Shed (Rollpack) ki yield: repo mein pehle se maujood F-Shed (1).xlsx, tab 'F-Shed'
     "f_yield": {
         "type": "dyield",
         "url": "f_yield",
         "files": (
-            ("F Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed.xlsx"),
+            ("F Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx", "F-Shed"),
         ),
     },
     "rolls_bc": {
@@ -2586,24 +2631,36 @@ def get_sheet(name):
 KPI_PER_ROW = 3
 
 
-def _card(slot, title, value, desc, color, date_text=None, error=False, extra=None):
+def _tiles_html(metrics):
+    out = []
+    for m in metrics:
+        num, lbl = m[0], m[1]
+        cls = "kpi-tile yield" if len(m) > 2 and m[2] == "yield" else "kpi-tile"
+        out.append(f'<div class="{cls}"><div class="kpi-num">{num}</div><div class="kpi-lbl">{lbl}</div></div>')
+    return '<div class="kpi-tiles">' + "".join(out) + "</div>"
+
+
+def _sections_html(sections):
+    out = []
+    for heading, rows in sections:
+        body = "".join(f'<div class="kpi-row"><span class="kpi-rl">{l}</span><span class="kpi-rv">{v}</span></div>'
+                       for l, v in rows)
+        out.append(f'<div class="kpi-sec"><div class="kpi-sec-h">{heading}</div>{body}</div>')
+    return "".join(out)
+
+
+def _card(slot, title, value, desc, color, date_text=None, error=False, extra=None,
+          metrics=None, sections=None):
     date_html = f'<div class="kpi-date">📅 {date_text}</div>' if date_text else ""
     safe = str(desc).replace('"', "'").replace("<", "&lt;")
     desc_html = (f'<div class="kpi-err" style="color:{color};" title="{safe}">{safe}</div>' if error else
                 f'<div class="kpi-desc" style="color:{color};" title="{safe}">{safe}</div>')
-    extra_html = (f'<div class="kpi-date" style="color:#0F172A;">Σ {extra}</div>') if extra else ""
-    slot.markdown(
-        f"""
-        <div class="kpi-wrap">
-        <div class="kpi-title">{title}</div>
-        <div class="kpi-value">{value}</div>
-        {date_html}
-        {desc_html}
-        {extra_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    value_html = _tiles_html(metrics) if metrics else f'<div class="kpi-value">{value}</div>'
+    extra_html = _sections_html(sections) if sections else (f'<div class="kpi-extra">Σ {extra}</div>' if extra else "")
+    # NOTE: HTML mein koi khali line / 4-space indent nahi, warna markdown ise code samajh leta hai
+    html = (f'<div class="kpi-wrap"><div class="kpi-title">{title}</div>{date_html}'
+            f'{value_html}{desc_html}{extra_html}</div>')
+    slot.markdown(html, unsafe_allow_html=True)
 
 
 def _disabled_date(title, key):
@@ -2728,9 +2785,11 @@ def render_kpi(dept_key, idx, title, desc):
             if res is None:
                 _card(slot, title, "No Data Available for This Date", desc, GREY, chosen.strftime(DATE_FMT))
             elif err:
-                _card(slot, title, res["value"], f"⚠ Stale: last updated {fetched:%d-%m %H:%M}", AMBER, label, extra=res.get("extra"))
+                _card(slot, title, res["value"], f"⚠ Stale: last updated {fetched:%d-%m %H:%M}", AMBER, label,
+                      extra=res.get("extra"), metrics=res.get("metrics"), sections=res.get("sections"))
             else:
-                _card(slot, title, res["value"], res["desc"] or desc, res["color"] or BLUE, label, extra=res.get("extra"))
+                _card(slot, title, res["value"], res["desc"] or desc, res["color"] or BLUE, label,
+                      extra=res.get("extra"), metrics=res.get("metrics"), sections=res.get("sections"))
         except Exception as exc:                  # never let one block break the others
             log.exception("KPI %s/%s crashed", dept_key, title)
             _card(slot, title, "Error", f"{type(exc).__name__}: {exc}", RED, error=True)
