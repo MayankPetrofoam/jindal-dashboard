@@ -840,7 +840,7 @@ def _grade_table(frame):
 
 
 def yield_card(day):
-    """Total Production & Yield button. Bada text = selected month ki 1st grade yield %."""
+    """Total Production & Yield button. Bada text = Month Production (Tons) | 1st grade yield %."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "0.00 %", "desc": f"Data error: {err}", "color": RED}
@@ -860,6 +860,10 @@ def yield_card(day):
         months.append(f"{datetime.date(int(k // 100), int(k % 100), 1):%b} {t['pct'][1]:.1f}%")
 
     p, b = mt["pct"], mt["bdl"]
+    
+    # Total Production Tons mein
+    total_tons = mt['total'] / 1000
+    
     extra = (
         f"{day:%b-%y}: 1st {p[1]:.2f}% | 2nd {p[2]:.2f}% | 3rd {p[3]:.2f}%"
         f"<br>Bundles: {mt['bdl_total']:,} (1st {b[1]:,} | 2nd {b[2]:,} | 3rd {b[3]:,})"
@@ -869,8 +873,8 @@ def yield_card(day):
         f"<br>Month-wise 1st: {' | '.join(months)}"
     )
     return {
-        "value": f"{p[1]:,.2f} %",                               # bada text: 1st grade yield
-        "desc": f"{day:%b-%y} Production: {mt['total'] / 1000:,.1f} T",
+        "value": f"{total_tons:,.1f} T | {p[1]:,.2f} %",  # Bada text: Production Tons | Yield %
+        "desc": f"{day:%b-%y} Production & Yield",
         "color": BLUE,
         "extra": extra,
     }
