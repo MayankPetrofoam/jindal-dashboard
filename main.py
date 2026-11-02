@@ -991,9 +991,10 @@ def d_yield(y_df, start, end, shed=None):
             "by_item": s.groupby("item")["kg"].sum().sort_values(ascending=False)}
 
 
-def d_yield_text(day):
-    """Card ki extra lines: D+E combined yield (bold, sabse upar), phir shed-wise, grade-wise, month-wise."""
-    y_df, err, _ = get_sheet("d_yield")
+def d_yield_text(day, sheet="d_yield", label="D+E"):
+    """Card ki extra lines: combined yield (bold, sabse upar), phir shed-wise, grade-wise, month-wise.
+    D+E ke liye sheet="d_yield", B+C ke liye sheet="bc_yield"."""
+    y_df, err, _ = get_sheet(sheet)
     if y_df is None:
         return f"Yield: data error ({err})"
 
@@ -1005,7 +1006,7 @@ def d_yield_text(day):
     dy, my = d_yield(y_df, day, day), d_yield(y_df, m_start, m_end)
 
     # din ki yield ab upar bold value line mein jaati hai; yahan sirf mahine ki yield
-    lines = [f"<b>1st Grade Yield (D+E) {day:%b-%y}: {fmt(my)}</b>"]
+    lines = [f"<b>1st Grade Yield ({label}) {day:%b-%y}: {fmt(my)}</b>"]
 
     for shed in sorted(y_df["shed"].unique()):
         sd = d_yield(y_df, day, day, shed)
@@ -1030,7 +1031,7 @@ def d_yield_text(day):
         if r:
             months.append(f"{ms:%b} {r['pct']:.1f}%")
     if months:
-        lines.append("Month-wise yield (D+E): " + " | ".join(months))
+        lines.append(f"Month-wise yield ({label}): " + " | ".join(months))
     return "<br>".join(lines)
 
 
@@ -1522,11 +1523,11 @@ def compute_kpi(df, spec, day):
         parts = []
         for shed in sorted(df["shed"].unique()):
             s = d_day[d_day["shed"] == shed]
-            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls / {tot(s, 'PRODUCTION'):,.1f} Prod")
+            parts.append(f"{shed}: {tot(s, 'BUNDLES'):,.0f} Bdls / {tot(s, 'PRODUCTION') / 1000:,.2f} Tons")
 
-        # D+E combined yield (bold) sabse upar, phir month total, phir shed-wise
+        # D+E combined yield (bold) sabse upar, phir month total (Tons), phir shed-wise
         extra = (f"{d_yield_text(day)}"
-                 f"<br>Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp:,.1f} Prod"
+                 f"<br>Month Total ({day:%b-%y}): {mb:,.0f} Bdls | {mp / 1000:,.2f} Tons"
                  f"<br>{' | '.join(parts)}")
         # selected date ki D+E combined yield (bold value line ke saath)
         _yd, _ye, _ = get_sheet("d_yield")
@@ -1557,17 +1558,29 @@ def compute_kpi(df, spec, day):
         parts = []
         for shed in sorted(df["shed"].unique()):
             s = d_day[d_day["shed"] == shed]
-            parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr")
+            parts.append(f"{shed}: {tot(s, 'ROLLS'):,.0f} Rolls / {tot(s, 'METERS'):,.0f} Mtr / "
+                         f"{tot(s, 'PRODUCTION') / 1000:,.2f} Tons")
 
         full_month_r = tot(d_full_month, "ROLLS")
         full_month_m = tot(d_full_month, "METERS")
         full_month_p = tot(d_full_month, "PRODUCTION")
 
+        # selected date ki B+C combined yield (bold value line ke saath)
+        _yd, _ye, _ = get_sheet("bc_yield")
+        _dy = d_yield(_yd, day, day) if _yd is not None else None
+        yield_txt = f"{_dy['pct']:.2f}% Yield" if _dy else "No Yield Data"
+
+        # B+C combined yield (bold) sabse upar, phir month total (Tons), phir shed-wise
+        extra = (f"{d_yield_text(day, 'bc_yield', 'B+C')}"
+                 f"<br>Month Total ({day:%b-%y}): {full_month_r:,.0f} Rolls | {full_month_m:,.0f} Mtr | "
+                 f"{full_month_p / 1000:,.2f} Tons"
+                 f"<br>{' | '.join(parts)}")
+
         return {
-            "value": f"{r:,.0f} Rolls | {m:,.0f} Mtr",
-            "desc": f"Production: {p:,.1f} | Month-to-date: {tot(d_mtd, 'ROLLS'):,.0f} Rolls",
+            "value": f"{r:,.0f} Rolls | {m:,.0f} Mtr | {p / 1000:,.2f} Tons | {yield_txt}",
+            "desc": "Selected date total (B + C shed)",
             "color": BLUE,
-            "extra": f"{' | '.join(parts)} | Month Total: {full_month_r:,.0f} Rolls | {full_month_m:,.0f} Mtr | Prod: {full_month_p:,.1f}"
+            "extra": extra,
         }
 
     # ---------- PURCHASE: PENDING PO ----------
@@ -1840,6 +1853,15 @@ SHEETS = {
         "files": (
             ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/D-Shed%28yield%29.xlsx"),
             ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/E-Shed.xlsx"),
+        ),
+    },
+    # B + C shed ka COMBINED yield (B-Shed.xlsx + C-Shed.xlsx, pehli sheet/tab padhi jaati hai)
+    "bc_yield": {
+        "type": "dyield",
+        "url": "bc_yield",
+        "files": (
+            ("B Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed.xlsx"),
+            ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed.xlsx"),
         ),
     },
     "rolls_bc": {
