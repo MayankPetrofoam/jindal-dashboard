@@ -1460,17 +1460,38 @@ def compute_kpi(df, spec, day):
         return {"value": f"{total_cons:,.2f}", "desc": f"Consumption for {day.strftime('%b-%Y')}", "color": BLUE}
 
     # ---------- FOAMING: TDI BALANCE ----------
-    if calc == "last_balance":
-        col = spec.get("col", "TDI_Balance")
-        if col not in df.columns:
-            raise DataError(f"Column '{col}' not found. Columns: {list(df.columns)}")
+    # ---------- FOAMING: TDI BALANCE (Dynamic from Sheet) ----------
+    if calc == "tdi_balance":
+        # Column names check karein
+        if "Recd Qty" not in df.columns or "Issues Qty" not in df.columns:
+            raise DataError(f"TDI sheet mein 'Recd Qty' ya 'Issues Qty' column nahi mila. Columns: {list(df.columns)}")
 
+        # Selected date tak ka saara data filter karein (Month wise ya Date wise dono ke liye)
         sub = df[df["_date"] <= day]
         if sub.empty:
             return None
 
-        last_val = _num(sub[col]).dropna().iloc[-1] if not _num(sub[col]).dropna().empty else 0
-        return {"value": f"{last_val:,.2f} Qty", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}", "color": BLUE}
+        # Total Received aur Total Issued nikaalein
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issues Qty"]).fillna(0).sum()
+        
+        # Formula: (Total Aaya hua) - (Total Gaya hua)
+        balance = total_recd - total_issues
+        
+        # Description line ke liye aaj ke din ka movement nikaalein
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issues Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+
+        return {
+            "value": f"{balance:,.2f} Kg", 
+            "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
+            "color": BLUE
+        }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
@@ -2007,6 +2028,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+        "tdi_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Sorted%20Zone.xlsx", # <-- Apna sahi GitHub/Excel link yaha daalein
+        "sheet_name": "Sheet1",
+        "date_col": "Date",
+        "dayfirst": True,
+    },
     "finance_ageing": {
         "type": "excel",
         "static": True,
@@ -2127,10 +2155,9 @@ KPI_SOURCES = {
         "desc": "Polyol stock (Temporary fixed value)",
     },
     ("foaming", "TDI Balance"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "42,250 Kg",
-        "desc": "TDI Balance (Temporary fixed value)",
+        "sheet": "tdi_data",
+        "calc": "tdi_balance",
+        "date_label": "as on",
     },
     ("foaming", "Pop Polymer"): {
         "sheet": "manual",
@@ -2685,6 +2712,9 @@ def render_kpi(dept_key, idx, title, desc):
                 _y, _e, _t = get_sheet("prod_summary")
                 if _y is not None and "_date" in _y.columns:
                     dates = sorted(set(_y["_date"].dropna().unique()), reverse=True)
+                      # TDI ke liye dates ko unique (duplicate hatane) karein
+            if spec.get("calc") == "tdi_balance":
+                dates = sorted(set(df["_date"].dropna().unique()), reverse=True)
 
             # --- MONTH dropdown ---
             all_months = set()
