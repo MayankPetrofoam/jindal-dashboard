@@ -2607,7 +2607,8 @@ def _card(slot, title, value, desc, color, date_text=None, error=False, extra=No
 
 
 def _disabled_date(title, key):
-    st.date_input(f"{title} date", datetime.datetime.now(IST).date(), key=key,
+    # alag key (_off): warna purani chuni hui date (jaise kal ki 31/10) is box mein atak jaati hai
+    st.date_input(f"{title} date", datetime.datetime.now(IST).date(), key=f"{key}_off",
                 label_visibility="collapsed", format="DD/MM/YYYY", disabled=True)
 
 
@@ -2660,6 +2661,15 @@ def render_kpi(dept_key, idx, title, desc):
                 _p = pillow_rows(df)
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+
+            # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
+            # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
+            if spec.get("sheet") == "manual":
+                chosen = dates[0]
+                res = compute_kpi(df, spec, chosen)
+                _card(slot, title, res["value"], res["desc"] or desc, res["color"] or BLUE,
+                      chosen.strftime(DATE_FMT))
+                return
 
             # --- MONTH dropdown ---
             all_months = set()
