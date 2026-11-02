@@ -219,7 +219,10 @@ def fetch_sheet(url, worksheet=None, service_account=None, header_hint=None):
 def _parse_dates(series, dayfirst):
     """Text -> datetime (unreadable -> NaT)."""
     # 1. Pehle strict format (dd-mm-yyyy) try karein jo aapki sheet mein hai
-    parsed = pd.to_datetime(series, format="%d-%m-%Y", errors="coerce")
+    # Dono formats (16-10-2026 aur 03-Apr-26) support karne ke liye
+    parsed = pd.to_datetime(series, format="%d-%b-%y", errors="coerce")
+    parsed2 = pd.to_datetime(series, format="%d-%m-%Y", errors="coerce")
+    parsed = parsed.fillna(parsed2)
     
     # 2. Agar kuch dates nahi padi (jaise "16-Oct-2026" ya "Apr-25"), toh mixed format use karein
     mask = parsed.isna() & series.notna()
@@ -1219,7 +1222,7 @@ def compute_kpi(df, spec, day):
         elif ptype == "pillow":
             t = PROD_TYPES[ptype]
             
-            # Column Picker: ITEM column dhoondhein
+            # Column Picker: ITEM column dhoondhein aur sirf "PILLOW" wali rows rakhein
             s = _pcol(df, t["col"]).astype(str).str.upper()
             m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
             work = df[m]
@@ -1228,8 +1231,9 @@ def compute_kpi(df, spec, day):
                 if d.empty:
                     return 0, 0.0, 0.0
                 try:
-                    # Bundle number column dhoondhein aur unique count lein
+                    # BUNDLE column dhoondhein
                     bdl_col = _pcol(d, "BUNDLE")
+                    # Text ko clean karein (space hatao) aur unique count lein
                     bdl = int(bdl_col.astype(str).str.strip().replace("", pd.NA).dropna().nunique())
                 except:
                     bdl = 0
@@ -1254,7 +1258,7 @@ def compute_kpi(df, spec, day):
             next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
             month_end = next_month - datetime.timedelta(days=1)
             
-            # Selected month ka data
+            # Selected month ka data (jaise Sep-2026)
             month_data = work[(work["_date"] >= month_start) & (work["_date"] <= month_end)]
             # Selected date tak ka data (Total till date)
             till_date_data = work[work["_date"] <= day]
