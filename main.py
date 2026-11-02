@@ -2700,17 +2700,17 @@ def get_sheet(name):
             base = cfg["url"].split("/pub")[0]
             csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
             data = _http_get(csv_url)
-        if data.lstrip()[:1] == b"<":
+            if data.lstrip()[:1] == b"<":
                 raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
             
             # CSV ko dataframe mein padhein (header row khud dhoondh lega)
-        df = _frame_from_csv(data, header_hint="GRADE") 
+            df = _frame_from_csv(data, header_hint="GRADE") 
             
             # Date column nahi hai, isliye aaj ki date daal rahe hain
-        df["_date"] = datetime.datetime.now(IST).date()
+            df["_date"] = datetime.datetime.now(IST).date()
             
-        good[name] = (df, datetime.datetime.now(IST))
-        errors.pop(name, None)
+            good[name] = (df, datetime.datetime.now(IST))
+            errors.pop(name, None)
             return df, None, datetime.datetime.now(IST)
         if cfg.get("type") == "orders":
             df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
