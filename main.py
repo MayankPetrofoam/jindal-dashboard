@@ -1580,6 +1580,23 @@ def compute_kpi(df, spec, day):
                     "color": BLUE if pct > 80 else AMBER}
 
     # ---------- FOAMING: STATIC VALUES (Temporary) ----------
+    # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
+    if calc == "sum_consumption":
+        col = spec.get("col", "CONS")
+        if col not in df.columns:
+            raise DataError(f"Column '{col}' not found.")
+        sub = df[df["_date"].apply(lambda d: d.month == day.month and d.year == day.year if pd.notna(d) else False)]
+        if sub.empty:
+            sub = df[df["_date"] <= day]
+        if sub.empty:
+            return None
+        for col_name, wanted in spec.get("where", {}).items():
+            if col_name in sub.columns:
+                sub = sub[sub[col_name].astype(str).str.strip().str.lower() == str(wanted).strip().lower()]
+        if sub.empty:
+            return None
+        total_cons = _num(sub[col]).sum()
+        return {"value": f"{total_cons:,.2f}", "desc": f"Consumption for {day.strftime('%b-%Y')}", "color": BLUE}
     # ---------- FOAMING: TDI BALANCE ----------
     if calc == "tdi_balance":
         if "Recd Qty" not in df.columns or "Issues Qty" not in df.columns:
@@ -2852,13 +2869,10 @@ def render_kpi(dept_key, idx, title, desc):
             # Main Dates nikalne ka code
             if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
                 dates = [datetime.datetime.now(IST).date()]
-                        # LB Stock mein date nahi hoti, isliye aaj ki date fix karein
-            if spec.get("calc") == "lb_stock":
+            elif spec.get("calc") == "lb_stock":
                 dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
-            if spec.get("calc") == "lb_stock":
-                dates = [datetime.datetime.now(IST).date()]
 
             # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
             if spec.get("type") == "rollpack":
