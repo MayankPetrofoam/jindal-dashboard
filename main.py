@@ -2228,22 +2228,24 @@ KPI_SOURCES = {
     },
 
     ("foaming", "Poly Stock"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "234,000 Kg",
-        "desc": "Polyol stock (Temporary fixed value)",
+        "sheet": "poly_data",
+        "calc": "poly_balance",
+        "date_label": "as on",
     },
     ("foaming", "TDI Balance"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "42,250 Kg",
-        "desc": "TDI Balance (Temporary fixed value)",
+        "sheet": "tdi_data",
+        "calc": "tdi_balance",
+        "date_label": "as on",
     },
     ("foaming", "Pop Polymer"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "29,490 Kg",
-        "desc": "Pop Polymer stock (Temporary fixed value)",
+        "sheet": "pop_data",
+        "calc": "pop_balance",
+        "date_label": "as on",
+    },
+    ("foaming", "LB Stock"): {
+        "sheet": "lb_stock_data",
+        "calc": "lb_stock",
+        "date_label": "as on",
     },
 }
 # Shown on KPI blocks that have no source yet, so "Not connected" always says why.
@@ -2642,6 +2644,18 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
+        # LB Stock (gviz) ke liye
+        if cfg.get("type") == "gviz":
+            base = cfg["url"].split("/pub")[0]
+            csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
+            data = _http_get(csv_url)
+            if data.lstrip()[:1] == b"<":
+                raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
+            df = _frame_from_csv(data, header_hint="GRADE") 
+            df["_date"] = datetime.datetime.now(IST).date()
+            good[name] = (df, datetime.datetime.now(IST))
+            errors.pop(name, None)
+            return df, None, datetime.datetime.now(IST)
         if cfg.get("type") == "orders":
             df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
             good[name] = (df, fetched)
