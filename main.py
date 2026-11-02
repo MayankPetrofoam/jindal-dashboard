@@ -1527,6 +1527,38 @@ def compute_kpi(df, spec, day):
             "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
             "color": BLUE
         }
+    # ---------- FOAMING: POLYOL STOCK BALANCE (Dynamic from Sheet) ----------
+    if calc == "poly_balance":
+        # Column names check karein (screenshot ke hisaab se)
+        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
+            raise DataError(f"POLYOL sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
+
+        # Selected date tak ka saara data
+        sub = df[df["_date"] <= day]
+        if sub.empty:
+            return None
+
+        # Total Received aur Total Issued nikaalein
+        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
+        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
+        
+        # Formula: (Aaya hua) - (Gaya hua)
+        balance = total_recd - total_issues
+        
+        # Description line ke liye aaj ke din ka movement
+        today_data = df[df["_date"] == day]
+        if not today_data.empty:
+            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
+            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
+            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
+        else:
+            day_note = " | No movement on this date"
+
+        return {
+            "value": f"{balance:,.2f} Kg", 
+            "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", 
+            "color": BLUE
+        }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
@@ -2077,6 +2109,13 @@ SHEETS = {
         "date_col": "Date",
         "dayfirst": True,
     },
+        "poly_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/polyol.xls", # <-- Raw Link
+        "sheet_name": "polyol",  # Aapke screenshot mein niche tab ka naam 'polyol' dikh raha hai
+        "date_col": "Date",
+        "dayfirst": True,
+    },
     "finance_ageing": {
         "type": "excel",
         "static": True,
@@ -2191,10 +2230,9 @@ KPI_SOURCES = {
     },
 
     ("foaming", "Poly Stock"): {
-        "sheet": "manual",
-        "calc": "static_value",
-        "value": "234,000 Kg",
-        "desc": "Polyol stock (Temporary fixed value)",
+        "sheet": "poly_data",
+        "calc": "poly_balance",  # <--- Yahan poly_balance karna hai
+        "date_label": "as on",
     },
     ("foaming", "TDI Balance"): {
         "sheet": "tdi_data",
