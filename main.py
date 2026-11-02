@@ -2709,7 +2709,7 @@ def get_sheet(name):
             # Date column nahi hai, isliye aaj ki date daal rahe hain
         df["_date"] = datetime.datetime.now(IST).date()
             
-            good[name] = (df, datetime.datetime.now(IST))
+        good[name] = (df, datetime.datetime.now(IST))
             errors.pop(name, None)
             return df, None, datetime.datetime.now(IST)
         if cfg.get("type") == "orders":
