@@ -113,6 +113,10 @@ st.markdown(
     div[data-testid="stSelectbox"] div[data-baseweb="select"] span { overflow: visible !important; }
     div[data-testid="stDateInput"] { width: 150px !important; margin-bottom: -6px; }
     div[data-testid="stDateInput"] input { font-size: 15px !important; }
+    div[data-testid="stExpander"] { margin-top: 2px; }
+    div[data-testid="stExpander"] summary { padding: 4px 8px !important; }
+    div[data-testid="stExpander"] summary p { font-size: 14px !important; font-weight: 800 !important; color: #1E3A8A; }
+    .kpi-wrap { padding-bottom: 4px; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -882,6 +886,15 @@ def pillow_txt(a):
     return f"{a['bdl']:,} Bdls | {a['sheets']:,.0f} Sheets | {a['kg']:,.1f} Kg"
 
 
+def shed_rows(y_df, letter, item=None):
+    """Prod. Summary se kisi shed ke rows: BUNDLES column '26-<letter>.....' se shuru (H = Mattress, J = Pillow)."""
+    b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
+    m = b.str.match(rf"^\d{{2}}-{letter}")
+    if item:
+        m = m & (y_df["item"] == item)
+    return y_df[m]
+
+
 def _month_range(day):
     m_start = day.replace(day=1)
     m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
@@ -912,10 +925,48 @@ def pillow_card(day):
         "color": BLUE,
         "metrics": [(f"{d_day['bdl']:,}", "Bundles"), (f"{d_day['sheets']:,.0f}", "Sheets"),
                     (f"{d_day['kg']:,.1f}", "Kg")],
-        "sections": [
-            (f"🗓 Month {day:%b-%y}", rows(d_mon)),
-            (f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all)),
-        ],
+        "sections": [(f"🗓 Month {day:%b-%y}", rows(d_mon))],
+        "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
+    }
+
+
+def mattress_card(day):
+    """Mattress: yield M-Shed se, production (bundles / sheets / weight) Prod. Summary ke H shed se."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    h = shed_rows(y_df, "H")
+    m_df, m_err, _ = get_sheet("m_yield")
+
+    m_start, m_end = _month_range(day)
+    a_day = pillow_agg(h[h["_date"] == day])
+    a_mon = pillow_agg(h[(h["_date"] >= m_start) & (h["_date"] <= m_end)])
+    a_all = pillow_agg(h)
+    dy = d_yield(m_df, day, day) if m_df is not None else None
+    my = d_yield(m_df, m_start, m_end) if m_df is not None else None
+
+    def ys(r):
+        return f"{r['pct']:.2f}%" if r else "no data"
+
+    def rows(a):
+        return [("Bundles", f"{a['bdl']:,}"), ("Sheets", f"{a['sheets']:,.0f}"), ("Weight", f"{a['kg']:,.1f} Kg")]
+
+    details = []
+    if not h.empty:
+        details.append((f"📆 Total ({h['_date'].min():%d-%m-%y} to {h['_date'].max():%d-%m-%y})", rows(a_all)))
+    if dy:
+        details.append((f"⚖ M Shed grade-wise · {day:%d-%m-%y}",
+                        [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+    return {
+        "value": f"{ys(dy)} Yield | {a_day['bdl']:,} Bdls | {a_day['sheets']:,.0f} Sheets",
+        "desc": "Mattress production (H shed) & yield (M shed)" if m_df is not None
+                else f"⚠ M-Shed yield nahi mili: {m_err}",
+        "color": BLUE if m_df is not None else AMBER,
+        "metrics": [(f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
+                    (f"{a_day['bdl']:,}", "Bundles"), (f"{a_day['sheets']:,.0f}", "Sheets"),
+                    (f"{a_day['kg']:,.1f}", "Kg")],
+        "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon))],
+        "details": details,
     }
 
 
@@ -943,11 +994,11 @@ def yield_card(day):
                 ("Bundles", f"{t['bdl_total']:,}  (1st {t['bdl'][1]:,} · 2nd {t['bdl'][2]:,} · 3rd {t['bdl'][3]:,})")]
 
     p = mt["pct"]
-    sections = []
+    details = []
     if dt:
-        sections.append((f"📅 {day:%d-%m-%y}", grade_rows(dt)))
-    sections.append((f"🗓 Month {day:%b-%y}", grade_rows(mt)))
-    sections.append((f"📆 Year total (Apr to {day:%b-%y})", grade_rows(yt)))
+        details.append((f"📅 {day:%d-%m-%y}", grade_rows(dt)))
+    details.append((f"🗓 Month {day:%b-%y}", grade_rows(mt)))
+    details.append((f"📆 Year total (Apr to {day:%b-%y})", grade_rows(yt)))
     return {
         "value": f"{p[1]:,.2f} %",
         "desc": "1st Grade yield & production",
@@ -957,7 +1008,7 @@ def yield_card(day):
             (f"{p[1]:.2f}%", f"Yield {day:%b-%y}", "yield"),
             (f"{mt['total'] / 1000:,.1f}", f"Tons {day:%b-%y}"),
         ],
-        "sections": sections,
+        "details": details,
     }
 
 
@@ -1168,12 +1219,13 @@ def shed_card(df, day, kind, y_sheet, label):
     sheds = sorted(df["shed"].unique())
     day_rows = [(sh, f"{txt(d_day[d_day['shed'] == sh])} · {ys(yld(day, day, sh))}") for sh in sheds]
     mon_rows = [("Total", txt(d_mon)), (f"Yield ({label})", ys(my))]
-    mon_rows += [(sh, f"{txt(d_mon[d_mon['shed'] == sh])} · {ys(yld(m_start, m_end, sh))}") for sh in sheds]
+    mon_shed_rows = [(sh, f"{txt(d_mon[d_mon['shed'] == sh])} · {ys(yld(m_start, m_end, sh))}") for sh in sheds]
 
-    sections = [(f"📅 {day:%d-%m-%y} · Shed wise", day_rows), (f"🗓 Month {day:%b-%y}", mon_rows)]
+    sections = [(f"🗓 Month {day:%b-%y}", mon_rows)]
+    details = [(f"📅 {day:%d-%m-%y} · Shed wise", day_rows), (f"🗓 Month {day:%b-%y} · Shed wise", mon_shed_rows)]
     if dy:
-        sections.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
-                         [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+        details.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
+                        [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
     b = tot(d_day, "BUNDLES" if kind == "bdls" else "ROLLS")
     return {
         "value": " | ".join(f"{t[0]} {t[1]}" for t in tiles),
@@ -1181,6 +1233,7 @@ def shed_card(df, day, kind, y_sheet, label):
         "color": BLUE,
         "metrics": tiles,
         "sections": sections,
+        "details": details,
     }
 
 
@@ -1190,6 +1243,10 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: PILLOW (J shed, Prod. Summary se) ----------
     if calc == "pillow_sum":
         return pillow_card(day)
+
+    # ---------- PRODUCTION: MATTRESS (H shed production + M-Shed yield) ----------
+    if calc == "mattress_sum":
+        return mattress_card(day)
 
     # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -1212,9 +1269,10 @@ def compute_kpi(df, spec, day):
                     ("Yield", ys(my)),
                     ("1st Grade weight", f"{my['first']:,.0f} kg"),
                     ("Total weight", f"{my['total']:,.0f} kg")]))
+            details = []
             if dy:
-                sections.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
-                                 [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+                details.append((f"⚖ Grade-wise weight · {day:%d-%m-%y}",
+                                [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
             tiles = [(ys(dy) if dy else "—", "Yield", "yield")]
             if dy:
                 tiles += [(f"{dy['first']:,.0f}", "1st Grade Kg"), (f"{dy['total']:,.0f}", "Total Kg")]
@@ -1224,6 +1282,7 @@ def compute_kpi(df, spec, day):
                 "color": BLUE,
                 "metrics": tiles,
                 "sections": sections,
+                "details": details,
             }
 
         # 2. TOTAL ke liye logic (Prod Summary file se: 1st/2nd/3rd grade yield + bundles)
@@ -1934,6 +1993,14 @@ SHEETS = {
             ("F Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/F-Shed%20(1).xlsx", "F-Shed"),
         ),
     },
+    # M-Shed (Mattress) ki yield: repo ki M-Shed (4).xlsx, tab 'M-Shed' (DATE, ITEM, M-SHED)
+    "m_yield": {
+        "type": "dyield",
+        "url": "m_yield",
+        "files": (
+            ("M Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/M-Shed%20(4).xlsx", "M-Shed"),
+        ),
+    },
     "rolls_bc": {
         "type": "rolls_bc",
         "url": "rolls_bc",
@@ -2065,7 +2132,7 @@ KPI_SOURCES = {
     ("production", "Total Production & Yield"): {"sheet": "production_logs", "calc": "prod_log", "type": "total"},
     ("production", "Bdls & Yield"):      {"sheet": "bdls_de", "calc": "bdls_de"},
     ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
-    ("production", "Mattress & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "mattress"},
+    ("production", "Mattress & Yield"):  {"sheet": "prod_summary", "calc": "mattress_sum"},
     ("production", "Pillow & Yield"):    {"sheet": "prod_summary", "calc": "pillow_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
 
@@ -2728,6 +2795,16 @@ def render_kpi(dept_key, idx, title, desc):
                       chosen.strftime(DATE_FMT))
                 return
 
+            # MATTRESS: dates = H shed production dates + M-Shed yield dates
+            if spec.get("calc") == "mattress_sum":
+                _h = shed_rows(df, "H")
+                _dset = set(_h["_date"].dropna().unique())
+                _m, _e, _t = get_sheet("m_yield")
+                if _m is not None:
+                    _dset |= set(_m["_date"].dropna().unique())
+                if _dset:
+                    dates = sorted(_dset, reverse=True)
+
             # --- MONTH dropdown ---
             all_months = set()
             for d in dates:
@@ -2781,6 +2858,10 @@ def render_kpi(dept_key, idx, title, desc):
                 log.exception("KPI %s/%s failed", dept_key, title)
                 _card(slot, title, "Config error", f"{type(exc).__name__}: {exc}", RED, label, error=True)
                 return
+
+            if res is not None and res.get("details"):
+                with st.expander("📋 Poora detail dekho"):
+                    st.markdown(_sections_html(res["details"]), unsafe_allow_html=True)
 
             if res is None:
                 _card(slot, title, "No Data Available for This Date", desc, GREY, chosen.strftime(DATE_FMT))
