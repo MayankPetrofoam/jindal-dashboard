@@ -1336,6 +1336,20 @@ def tonnage_card(day):
     n_days = 0
     src = ""
     chem = None
+    if chem is not None and not chem.empty:
+        # Aapka naya formula apply karne ke liye
+        def get_adjusted_val(frame):
+            if frame.empty: return 0.0
+            tot = frame[frame["chem"] == "GRAND TOTAL"]["kg"].sum()
+            add = frame[frame["chem"].str.contains("ADDTIVE 90250", na=False)]["kg"].sum()
+            mcl = frame[frame["chem"].str.contains("MCL", na=False)]["kg"].sum()
+            return float(tot - (add * 2.5 + mcl))
+
+        # Din ka adjusted value
+        day_val = get_adjusted_val(chem[chem["_date"] == day])
+        
+        # Mahine ka adjusted value
+        month_val = get_adjusted_val(chem[(chem["_date"] >= m_start) & (chem["_date"] <= m_end)])
     if d_df is not None:
         tot = d_df[d_df["chem"] == "GRAND TOTAL"]
         t_day = tot[tot["_date"] == day]
@@ -1355,10 +1369,15 @@ def tonnage_card(day):
     if month_val is None and day_val is None:
         return None
 
-    tiles = [(f"{day_val:,.0f}" if day_val is not None else "—", f"{day:%d-%m} Kg")]
+    # Tiles ko update karein
+    tiles = [
+        (f"{day_val:,.0f}" if day_val is not None else "—", f"{day:%d-%m} Kg"),
+    ]
     if month_val is not None:
-        tiles += [(f"{month_val:,.0f}", f"{day:%b-%y} Kg"),
-                  (f"{month_val / 1000:,.1f}", f"Tons {day:%b-%y}")]
+        tiles += [
+            (f"{month_val:,.0f}", f"{day:%b-%y} Kg"),
+            (f"{month_val / 1000:,.1f}", f"Tons {day:%b-%y}")
+        ]
 
     if src == "daily":
         desc = f"Consumption {day:%b-%Y} · {n_days} working days · avg {month_val / max(n_days, 1):,.0f} kg/day"
