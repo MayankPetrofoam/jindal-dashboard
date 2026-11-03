@@ -946,7 +946,16 @@ def mattress_card(day):
     a_day = pillow_agg(h[h["_date"] == day])
     a_mon = pillow_agg(h[(h["_date"] >= m_start) & (h["_date"] <= m_end)])
     a_all = pillow_agg(h)
-    dy = d_yield(m_df, day, day) if m_df is not None else None
+    dy = None
+    if m_df is not None:
+        dy = d_yield(m_df, day, day)
+        # Agar exact selected date ka data nahi hai, toh pichli available date (jaise 31-Oct) ka data utha lo
+        if dy is None:
+            available_m_dates = m_df[m_df["_date"] <= day]["_date"]
+            if not available_m_dates.empty:
+                latest_m_date = available_m_dates.max()
+                dy = d_yield(m_df, latest_m_date, latest_m_date)
+                
     my = d_yield(m_df, m_start, m_end) if m_df is not None else None
 
     def ys(r):
@@ -1088,6 +1097,33 @@ def _parse_mixed_dates(s):
 
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_m_shed_custom(url):
+    """M-Shed file ko seedha column index se padhta hai (C=Date, D=Item, E=Weight)"""
+    src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+    xl = pd.ExcelFile(src, engine="openpyxl")
+    tab = "M-Shed" if "M-Shed" in xl.sheet_names else xl.sheet_names[0]
+    
+    # header=None taaki headers ki wajah se data skip na ho
+    raw = xl.parse(tab, dtype=object, header=None)
+    
+    # Date column (Index 2 = Column C), Item (Index 3 = Column D), Weight (Index 4 = Column E)
+    d = _parse_mixed_dates(raw.iloc[:, 2])
+    item = raw.iloc[:, 3].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True)
+    kg = _num(raw.iloc[:, 4]).fillna(0.0)
+    
+    t = pd.DataFrame({
+        "shed": "M Shed",
+        "_date": d.dt.date,
+        "item": item,
+        "kg": kg,
+    })
+    
+    # Blank rows aur header text ko hatao
+    t = t.dropna(subset=["_date"])
+    t = t[(t["item"] != "") & (t["item"] != "NAN") & (t["item"] != "ITEM") & (t["item"] != "NONE")]
+    
+    return t, datetime.datetime.now(IST)
 def _fetch_dyield_cached(files):
     """Yield files (DATE, ITEM, <X>-SHED) jodkar ek table banata hai.
     files = (("D Shed", url), ("F Shed", url, "F-Shed"), ...). 3rd cheez = sheet(tab) ka naam (na ho to pehli tab).
@@ -2727,7 +2763,12 @@ def get_sheet(name):
             return df, None, fetched
 
         if cfg.get("type") == "dyield":
-            df, fetched = _fetch_dyield_cached(tuple(cfg["files"]))
+            # Check if this is the M-Shed file and use the custom column-based reader
+            if name == "m_yield":
+                url = cfg["files"][0][1] # Extract the URL
+                df, fetched = _fetch_m_shed_custom(url)
+            else:
+                df, fetched = _fetch_dyield_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
