@@ -1864,12 +1864,19 @@ def compute_kpi(df, spec, day):
                 "extra": txt or "Koi dead stock nahi"}
 
     # ---------- MAINTENANCE ----------
+    # ---------- MAINTENANCE ----------
     if calc == "generic_count":
         col = spec.get("col")
         where = spec.get("where", {})
-        sub = df[df["_date"] <= day]
+        
+        # Sirf un rows ko uthao jinki date daali hui hai (khali rows ignore karo)
+        sub = df[df["_date"].notna() & (df["_date"] <= day)]
         if sub.empty:
             return {"value": "0", "desc": "No records found till this date", "color": BLUE}
+
+        # Exact us din ki breakdown nikalne ke liye logic
+        if spec.get("mode") == "on_date":
+            sub = sub[sub["_date"] == day]
 
         for c, val in where.items():
             if c in sub.columns:
@@ -2390,10 +2397,10 @@ KPI_SOURCES = {
     # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
         "sheet": "maintenance_logs",
-        "mode": "as_of",
+        "mode": "on_date",  # <-- Yahan "as_of" ki jagah "on_date" kar dein
         "calc": "generic_count",
         "col": "Issue Resolved",
-        "where": {"Issue Resolved": "FALSE"},  # <--- CHANGED THIS LINE
+        "where": {"Issue Resolved": "FALSE"},
     },
     ("maint", "Preventive Maintenance %"): {
         "sheet": "maintenance_logs",
