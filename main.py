@@ -1275,10 +1275,123 @@ def shed_card(df, day, kind, y_sheet, label):
         "sections": sections,
         "details": details,
     }
+# ====================================================================
+# TONNAGE FOAMING: daily chemical-consumption files (chemicals = rows, dates = columns)
+# ====================================================================
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_chem_daily_cached(files):
+    """files = ((url,), (url2,), ...) ya ((url, "tab name"), ...). Har file ek mahine ki daily consumption.
+    Header row = jis row ke pehle cell mein 'CHEMICALS' likha ho. Output: chem, _date, kg."""
+    frames = []
+    for item in files:
+        url = item[0]
+        want_tab = item[1] if len(item) > 1 else None
+        src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+        if str(url).lower().split("?")[0].endswith(".csv"):
+            raw = pd.read_csv(src, dtype=str, header=None, encoding="utf-8-sig")
+        else:
+            xl = pd.ExcelFile(src, engine="openpyxl")
+            tab = want_tab if want_tab in xl.sheet_names else xl.sheet_names[0]
+            raw = xl.parse(tab, dtype=object, header=None)
+        hdr = next((i for i in range(min(15, len(raw)))
+                    if str(raw.iloc[i, 0]).strip().upper() == "CHEMICALS"), None)
+        if hdr is None:
+            raise DataError(f"Tonnage file mein 'CHEMICALS' wali header row nahi mili: {url}")
+        dates = _parse_mixed_dates(pd.Series(raw.iloc[hdr, 2:].tolist()))
+        body = raw.iloc[hdr + 1:]
+        names = (body.iloc[:, 0].astype(str).str.strip().str.upper()
+                 .str.replace(r"\s+", " ", regex=True))
+        keep = ~names.isin(["", "NAN", "NONE"])
+        body, names = body[keep], names[keep]
+        parts = []
+        for j in range(len(dates)):
+            dt = dates.iloc[j]
+            if pd.isna(dt) or 2 + j >= body.shape[1]:
+                continue
+            parts.append(pd.DataFrame({
+                "chem": names.values,
+                "_date": dt.date(),
+                "kg": _num(body.iloc[:, 2 + j]).fillna(0.0).values,
+            }))
+        if not parts:
+            continue
+        f = pd.concat(parts, ignore_index=True)
+        f["chem"] = f["chem"].replace({"GRAND TOTAL": "GRAND TOTAL", "TOTAL": "GRAND TOTAL"})
+        if "GRAND TOTAL" not in set(f["chem"]):          # Grand Total row na ho to khud jod do
+            s = f.groupby("_date", as_index=False)["kg"].sum()
+            s["chem"] = "GRAND TOTAL"
+            f = pd.concat([f, s], ignore_index=True)
+        frames.append(f)
+    if not frames:
+        raise DataError("Tonnage daily files mein koi valid date nahi mili")
+    return pd.concat(frames, ignore_index=True), datetime.datetime.now(IST)
+
+
+def tonnage_card(day):
+    """Tonnage Foaming: selected din ki consumption + mahine ka total (daily file se, warna monthly sheet se)."""
+    d_df, d_err, _ = get_sheet("foaming_daily")
+    m_df, m_err, _ = get_sheet("foaming_chemicals")
+    m_start, m_end = _month_range(day)
+    day_val = month_val = None
+    n_days = 0
+    src = ""
+    chem = None
+    if d_df is not None:
+        tot = d_df[d_df["chem"] == "GRAND TOTAL"]
+        t_day = tot[tot["_date"] == day]
+        if not t_day.empty and t_day["kg"].sum() > 0:
+            day_val = float(t_day["kg"].sum())
+        t_mon = tot[(tot["_date"] >= m_start) & (tot["_date"] <= m_end)]
+        if not t_mon.empty and t_mon["kg"].sum() > 0:
+            month_val = float(t_mon["kg"].sum())
+            n_days = int((t_mon.groupby("_date")["kg"].sum() > 0).sum())
+            src = "daily"
+        chem = d_df[d_df["chem"] != "GRAND TOTAL"]
+    if month_val is None and m_df is not None and "CONS" in m_df.columns:
+        sub = m_df[m_df["_date"].apply(lambda d: d.year == day.year and d.month == day.month)]
+        if not sub.empty:
+            month_val = float(_num(sub["CONS"]).sum())
+            src = "monthly"
+    if month_val is None and day_val is None:
+        return None
+
+    tiles = [(f"{day_val:,.0f}" if day_val is not None else "—", f"{day:%d-%m} Kg")]
+    if month_val is not None:
+        tiles += [(f"{month_val:,.0f}", f"{day:%b-%y} Kg"),
+                  (f"{month_val / 1000:,.1f}", f"Tons {day:%b-%y}")]
+
+    if src == "daily":
+        desc = f"Consumption {day:%b-%Y} · {n_days} working days · avg {month_val / max(n_days, 1):,.0f} kg/day"
+    else:
+        desc = f"Consumption for {day:%b-%Y} (monthly total, daily data not added)"
+
+    details = []
+    if chem is not None and not chem.empty:
+        c_day = chem[chem["_date"] == day].groupby("chem")["kg"].sum().sort_values(ascending=False)
+        c_day = c_day[c_day > 0]
+        if not c_day.empty:
+            details.append((f"📅 {day:%d-%m-%y} · Chemical wise",
+                            [(k.title(), f"{v:,.0f} kg") for k, v in c_day.items()]))
+        c_mon = (chem[(chem["_date"] >= m_start) & (chem["_date"] <= m_end)]
+                 .groupby("chem")["kg"].sum().sort_values(ascending=False))
+        c_mon = c_mon[c_mon > 0]
+        if not c_mon.empty:
+            details.append((f"🗓 Month {day:%b-%y} · Chemical wise",
+                            [(k.title(), f"{v:,.0f} kg") for k, v in c_mon.items()]))
+    return {
+        "value": f"{(month_val if month_val is not None else day_val):,.0f}",
+        "desc": desc,
+        "color": BLUE,
+        "metrics": tiles,
+        "details": details,
+    }
 
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    # ---------- FOAMING: TONNAGE (daily + monthly) ----------
+    if calc == "tonnage_daily":
+        return tonnage_card(day)
 
     # ---------- PRODUCTION: PILLOW (J shed, Prod. Summary se) ----------
     if calc == "pillow_sum":
@@ -2186,6 +2299,17 @@ SHEETS = {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSbP2V-mXI6R5hS_u_aktc7B0j4N3fiVV-bm3BgAgkgxKpcrzUP4_esIunwZsyQILmFpuRu-643OOFV/pubhtml",
         "worksheet": "0", 
     },
+    # Tonnage Foaming daily files: har mahine ki nayi file ka ek ("url", "tab name") neeche add karte jao
+SHEETS["foaming_daily"] = {
+    "type": "chem_daily",
+    "url": "foaming_daily",
+    "files": (
+        ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Oct-2026%20daily.xlsx",
+         "Chemical consumption Oct-2026 d"),
+        # ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Nov-2026%20daily.xlsx",
+        #  "Chemical consumption Nov-2026 d"),
+    ),
+},
     # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
     "prod_summary": {
         "type": "yield",
@@ -2314,11 +2438,12 @@ KPI_SOURCES = {
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
     ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept"},
 
-    ("foaming", "Tonnage Foaming"): {
-        "sheet": "foaming_chemicals",
-        "calc": "sum_consumption",
-        "col": "CONS"
-    },
+KPI_SOURCES[("foaming", "Tonnage Foaming")] = {
+    "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
+    "calc": "tonnage_daily",
+    "date_label": "as on",
+    "col": "CONS",
+}
 
     ("foaming", "Poly Stock"): {
         "sheet": "poly_data",
@@ -2761,6 +2886,11 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+        if cfg.get("type") == "chem_daily":
+            df, fetched = _fetch_chem_daily_cached(tuple(cfg["files"]))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
 
         if cfg.get("type") == "dyield":
             # Check if this is the M-Shed file and use the custom column-based reader
@@ -2919,6 +3049,12 @@ def render_kpi(dept_key, idx, title, desc):
                 _y, _e, _t = get_sheet("prod_summary")
                 if _y is not None and "_date" in _y.columns:
                     dates = sorted(set(_y["_date"].dropna().unique()), reverse=True)
+            # TONNAGE FOAMING: monthly dates + daily file ki dates
+            if spec.get("calc") == "tonnage_daily":
+                _td, _e, _t = get_sheet("foaming_daily")
+                if _td is not None:
+                    _tt = _td[(_td["chem"] == "GRAND TOTAL") & (_td["kg"] > 0)]
+                    dates = sorted(set(dates) | set(_tt["_date"].dropna().unique()), reverse=True)
 
             # PILLOW: dates sirf wo jin din J shed pillow bana (Prod. Summary se)
             if spec.get("calc") == "pillow_sum":
