@@ -2386,12 +2386,14 @@ KPI_SOURCES = {
     },
 
     # <<< Maintenance  >>>
+    # <<< Maintenance  >>>
+    # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
         "sheet": "maintenance_logs",
         "mode": "as_of",
         "calc": "generic_count",
         "col": "Issue Resolved",
-        "where": {"Issue Resolved": ""},
+        "where": {"Issue Resolved": "FALSE"},  # <--- CHANGED THIS LINE
     },
     ("maint", "Preventive Maintenance %"): {
         "sheet": "maintenance_logs",
