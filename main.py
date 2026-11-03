@@ -2300,16 +2300,16 @@ SHEETS = {
         "worksheet": "0", 
     },
     # Tonnage Foaming daily files: har mahine ki nayi file ka ek ("url", "tab name") neeche add karte jao
-SHEETS["foaming_daily"] = {
-    "type": "chem_daily",
-    "url": "foaming_daily",
-    "files": (
-        ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Oct-2026%20daily.xlsx",
-         "Chemical consumption Oct-2026 d"),
-        # ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Nov-2026%20daily.xlsx",
-        #  "Chemical consumption Nov-2026 d"),
-    ),
-},
+    "foaming_daily": {
+        "type": "chem_daily",
+        "url": "foaming_daily",
+        "files": (
+            ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Oct-2026%20daily.xlsx",
+             "Chemical consumption Oct-2026 d"),
+            # ("https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20consumption%20Nov-2026%20daily.xlsx",
+            #  "Chemical consumption Nov-2026 d"),
+        ),
+    },
     # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
     "prod_summary": {
         "type": "yield",
@@ -2438,12 +2438,12 @@ KPI_SOURCES = {
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
     ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept"},
 
-KPI_SOURCES[("foaming", "Tonnage Foaming")] = {
-    "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
-    "calc": "tonnage_daily",
-    "date_label": "as on",
-    "col": "CONS",
-}
+    ("foaming", "Tonnage Foaming"): {
+        "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
+        "calc": "tonnage_daily",
+        "date_label": "as on",
+        "col": "CONS",
+    },
 
     ("foaming", "Poly Stock"): {
         "sheet": "poly_data",
