@@ -1810,6 +1810,7 @@ def compute_kpi(df, spec, day):
         return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
 
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
+    # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     if calc == "lb_stock":
         def find_col(name_part):
             for c in df.columns:
@@ -1844,16 +1845,28 @@ def compute_kpi(df, spec, day):
             density_wise = mtr_vals.groupby(densities).sum().sort_values(ascending=False)
             density_wise_txt = " | ".join(f"{d} Dens: {v:,.0f} Mtr" for d, v in density_wise.head(3).items() if d and d != "NAN" and v > 0)
 
+        # Grade + Density Mixture Calculation (Jo aapko chahiye)
+        mix_wise = None
+        if col_density:
+            # Grade aur Density ko mila kar ek naya label banaya (jaise "CL+ 32", "FG 40")
+            mix_labels = grades + " " + densities
+            mix_wise = mtr_vals.groupby(mix_labels).sum().sort_values(ascending=False)
+            mix_wise_txt = " | ".join(f"{k}: {v:,.0f} Mtr" for k, v in mix_wise.head(3).items() if k and "NAN" not in k and v > 0)
+        else:
+            mix_wise_txt = grade_wise.head(3)
+
         # Details expander ke liye data ready karna
         details = []
-        details.append(("📊 Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items() if g and g != "NAN"]))
+        if mix_wise is not None:
+            details.append(("📊 Grade + Density MTR", [(k, f"{v:,.1f} Mtr") for k, v in mix_wise.items() if k and "NAN" not in k]))
+        details.append(("⚖ Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items() if g and g != "NAN"]))
         
         if col_density:
-            details.append(("⚖ Density-wise MTR", [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "NAN"]))
+            details.append(("📏 Density-wise MTR", [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "NAN"]))
         
         return {
             "value": f"{total_mtr:,.0f} Mtr", 
-            "desc": f"Total {total_blocks:,} Blocks | {density_wise_txt}", 
+            "desc": f"Total {total_blocks:,} Blocks | {mix_wise_txt}",  # Yahan mixture dikhega
             "color": BLUE, 
             "extra": f"Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0),
             "details": details
