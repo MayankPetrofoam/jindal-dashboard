@@ -5,7 +5,7 @@ import logging
 import re
 import urllib.parse
 import urllib.request
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfoa
 
 import pandas as pd
 import streamlit as st
@@ -1816,20 +1816,48 @@ def compute_kpi(df, spec, day):
                 if name_part in str(c).upper():
                     return c
             return None
+            
+        col_density = find_col("DENSITY")
         col_grade = find_col("GRADE")
         col_mtr = find_col("MTR")
+        
         if not col_grade or not col_mtr:
             raise DataError(f"LB Stock sheet mein 'GRADE' ya 'MTR' column nahi mila. Columns: {list(df.columns)}")
+            
         df_clean = df[df[col_mtr].astype(str).str.strip() != ""].copy()
         mtr_vals = _num(df_clean[col_mtr]).fillna(0)
+        
         if df_clean.empty or mtr_vals.sum() == 0:
             return {"value": "0 Mtr", "desc": "No long block stock found", "color": GREY}
+            
         total_mtr = mtr_vals.sum()
+        total_blocks = len(df_clean)
+        
+        # Grade wise calculation
         grades = df_clean[col_grade].astype(str).str.strip().str.upper()
         grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
-        top_grades_txt = " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0)
-        total_rows = len(df_clean)
-        return {"value": f"{total_mtr:,.0f} Mtr", "desc": f"Total {total_rows:,} Blocks | {top_grades_txt}", "color": BLUE, "extra": "Live data from BLOCK STOCK sheet"}
+        
+        # Density wise calculation
+        density_wise_txt = ""
+        if col_density:
+            densities = df_clean[col_density].astype(str).str.strip()
+            density_wise = mtr_vals.groupby(densities).sum().sort_values(ascending=False)
+            density_wise_txt = " | ".join(f"{d} Dens: {v:,.0f} Mtr" for d, v in density_wise.head(3).items() if d and d != "NAN" and v > 0)
+
+        # Details expander ke liye data ready karna
+        details = []
+        details.append(("📊 Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items() if g and g != "NAN"]))
+        
+        if col_density:
+            details.append(("⚖ Density-wise MTR", [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "NAN"]))
+        
+        return {
+            "value": f"{total_mtr:,.0f} Mtr", 
+            "desc": f"Total {total_blocks:,} Blocks | {density_wise_txt}", 
+            "color": BLUE, 
+            "extra": f"Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0),
+            "details": details
+        }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
