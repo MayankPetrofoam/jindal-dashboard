@@ -5,7 +5,7 @@ import logging
 import re
 import urllib.parse
 import urllib.request
-from zoneinfo import ZoneInfoa
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
