@@ -1327,8 +1327,20 @@ def _fetch_chem_daily_cached(files):
     return pd.concat(frames, ignore_index=True), datetime.datetime.now(IST)
 
 
+def _tonnage_net(frame):
+    """Formula: TOTAL - (ADDTIVE 90250 x 2.5 + MCL (METHYLENE CHLORIDE)). Data na ho to None."""
+    if frame is None or frame.empty:
+        return None
+    g = frame.groupby("chem")["kg"].sum()
+    total = float(g.get("GRAND TOTAL", 0.0))
+    add = float(sum(v for k, v in g.items() if str(k).startswith("ADDTIVE 90250")))
+    mcl = float(sum(v for k, v in g.items() if str(k).startswith("MCL")))
+    return {"total": total, "add": add, "mcl": mcl, "net": total - (add * 2.5 + mcl)}
+
+
 def tonnage_card(day):
-    """Tonnage Foaming: selected din ki consumption + mahine ka total (daily file se, warna monthly sheet se)."""
+    """Tonnage Foaming: selected din ki consumption + mahine ka total (daily file se, warna monthly sheet se).
+    Daily file par formula: TOTAL - (ADDTIVE 90250 x 2.5 + MCL)  (din ka bhi aur mahine ka bhi)."""
     d_df, d_err, _ = get_sheet("foaming_daily")
     m_df, m_err, _ = get_sheet("foaming_chemicals")
     m_start, m_end = _month_range(day)
@@ -1336,28 +1348,16 @@ def tonnage_card(day):
     n_days = 0
     src = ""
     chem = None
-    if chem is not None and not chem.empty:
-        # Aapka naya formula apply karne ke liye
-        def get_adjusted_val(frame):
-            if frame.empty: return 0.0
-            tot = frame[frame["chem"] == "GRAND TOTAL"]["kg"].sum()
-            add = frame[frame["chem"].str.contains("ADDTIVE 90250", na=False)]["kg"].sum()
-            mcl = frame[frame["chem"].str.contains("MCL", na=False)]["kg"].sum()
-            return float(tot - (add * 2.5 + mcl))
-
-        # Din ka adjusted value
-        day_val = get_adjusted_val(chem[chem["_date"] == day])
-        
-        # Mahine ka adjusted value
-        month_val = get_adjusted_val(chem[(chem["_date"] >= m_start) & (chem["_date"] <= m_end)])
+    f_day = f_mon = None
     if d_df is not None:
         tot = d_df[d_df["chem"] == "GRAND TOTAL"]
-        t_day = tot[tot["_date"] == day]
-        if not t_day.empty and t_day["kg"].sum() > 0:
-            day_val = float(t_day["kg"].sum())
-        t_mon = tot[(tot["_date"] >= m_start) & (tot["_date"] <= m_end)]
-        if not t_mon.empty and t_mon["kg"].sum() > 0:
-            month_val = float(t_mon["kg"].sum())
+        f_day = _tonnage_net(d_df[d_df["_date"] == day])
+        f_mon = _tonnage_net(d_df[(d_df["_date"] >= m_start) & (d_df["_date"] <= m_end)])
+        if f_day and f_day["total"] > 0:
+            day_val = f_day["net"]
+        if f_mon and f_mon["total"] > 0:
+            month_val = f_mon["net"]
+            t_mon = tot[(tot["_date"] >= m_start) & (tot["_date"] <= m_end)]
             n_days = int((t_mon.groupby("_date")["kg"].sum() > 0).sum())
             src = "daily"
         chem = d_df[d_df["chem"] != "GRAND TOTAL"]
@@ -1385,6 +1385,13 @@ def tonnage_card(day):
         desc = f"Consumption for {day:%b-%Y} (monthly total, daily data not added)"
 
     details = []
+    for lbl, f in ((f"📅 {day:%d-%m-%y} · Formula", f_day), (f"🗓 Month {day:%b-%y} · Formula", f_mon)):
+        if f and f["total"] > 0:
+            details.append((lbl, [
+                ("Total chemicals", f"{f['total']:,.0f} kg"),
+                ("Additive 90250 x 2.5", f"- {f['add'] * 2.5:,.0f} kg  ({f['add']:,.0f} x 2.5)"),
+                ("MCL", f"- {f['mcl']:,.0f} kg"),
+                ("Net tonnage", f"{f['net']:,.0f} kg")]))
     if chem is not None and not chem.empty:
         c_day = chem[chem["_date"] == day].groupby("chem")["kg"].sum().sort_values(ascending=False)
         c_day = c_day[c_day > 0]
@@ -1812,63 +1819,69 @@ def compute_kpi(df, spec, day):
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     if calc == "lb_stock":
-        def find_col(name_part):
+        # Sirf DENSITY, GRADE, WIDTH aur MTR liye jaate hain (HEIGHT(MTR) aur COLOUR ignore).
+        def exact_col(*names):
+            want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
             for c in df.columns:
-                if name_part in str(c).upper():
+                if re.sub(r"[^A-Z0-9]", "", str(c).upper()) in want:
                     return c
             return None
-            
-        col_density = find_col("DENSITY")
-        col_grade = find_col("GRADE")
-        col_mtr = find_col("MTR")
-        
+
+        col_density = exact_col("DENSITY")
+        col_grade = exact_col("GRADE")
+        col_width = exact_col("WIDTH", "WIDGHT")
+        col_mtr = exact_col("MTR")      # exact: 'HEIGHT(MTR)' is column se match nahi hoga
+
         if not col_grade or not col_mtr:
             raise DataError(f"LB Stock sheet mein 'GRADE' ya 'MTR' column nahi mila. Columns: {list(df.columns)}")
-            
-        df_clean = df[df[col_mtr].astype(str).str.strip() != ""].copy()
-        mtr_vals = _num(df_clean[col_mtr]).fillna(0)
-        
+
+        df_clean = df.copy()
+        df_clean["_m"] = _num(df_clean[col_mtr]).fillna(0)
+        df_clean = df_clean[(df_clean["_m"] > 0) & (df_clean[col_grade].astype(str).str.strip() != "")]
+        mtr_vals = df_clean["_m"]
+
         if df_clean.empty or mtr_vals.sum() == 0:
             return {"value": "0 Mtr", "desc": "No long block stock found", "color": GREY}
-            
+
         total_mtr = mtr_vals.sum()
         total_blocks = len(df_clean)
-        
-        # Grade wise calculation
-        grades = df_clean[col_grade].astype(str).str.strip().str.upper()
+
+        grades = df_clean[col_grade].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True)
         grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
-        
-        # Density wise calculation
-        density_wise_txt = ""
+
+        density_wise = None
+        densities = None
         if col_density:
             densities = df_clean[col_density].astype(str).str.strip()
             density_wise = mtr_vals.groupby(densities).sum().sort_values(ascending=False)
-            density_wise_txt = " | ".join(f"{d} Dens: {v:,.0f} Mtr" for d, v in density_wise.head(3).items() if d and d != "NAN" and v > 0)
 
-        # Grade + Density Mixture Calculation (Jo aapko chahiye)
         mix_wise = None
-        if col_density:
-            # Grade aur Density ko mila kar ek naya label banaya (jaise "CL+ 32", "FG 40")
-            mix_labels = grades + " " + densities
-            mix_wise = mtr_vals.groupby(mix_labels).sum().sort_values(ascending=False)
+        if densities is not None:
+            mix_wise = mtr_vals.groupby(grades + " " + densities).sum().sort_values(ascending=False)
             mix_wise_txt = " | ".join(f"{k}: {v:,.0f} Mtr" for k, v in mix_wise.head(3).items() if k and "NAN" not in k and v > 0)
         else:
-            mix_wise_txt = grade_wise.head(3)
+            mix_wise_txt = " | ".join(f"{k}: {v:,.0f} Mtr" for k, v in grade_wise.head(3).items())
 
-        # Details expander ke liye data ready karna
         details = []
         if mix_wise is not None:
             details.append(("📊 Grade + Density MTR", [(k, f"{v:,.1f} Mtr") for k, v in mix_wise.items() if k and "NAN" not in k]))
         details.append(("⚖ Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items() if g and g != "NAN"]))
-        
-        if col_density:
+        if density_wise is not None:
             details.append(("📏 Density-wise MTR", [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "NAN"]))
-        
+        if col_width:
+            widths = df_clean[col_width].astype(str).str.strip()
+            width_wise = mtr_vals.groupby(widths).sum().sort_values(ascending=False)
+            details.append(("↔ Width-wise MTR", [(f"Width {w}", f"{v:,.1f} Mtr") for w, v in width_wise.items() if w and w != "NAN"]))
+            if densities is not None:
+                gdw = mtr_vals.groupby([grades, densities, widths]).sum().sort_values(ascending=False)
+                details.append(("📋 Grade + Density + Width MTR",
+                                [(f"{g} · {d} · W{w}", f"{v:,.1f} Mtr") for (g, d, w), v in gdw.items() if v > 0]))
+
         return {
-            "value": f"{total_mtr:,.0f} Mtr", 
-            "desc": f"Total {total_blocks:,} Blocks | {mix_wise_txt}",  # Yahan mixture dikhega
-            "color": BLUE, 
-            "extra": f"Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0),
+            "value": f"{total_mtr:,.0f} Mtr",
+            "desc": f"Total {total_blocks:,} Blocks | {mix_wise_txt}",
+            "color": BLUE,
+            "extra": "Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0),
             "details": details
         }
 
