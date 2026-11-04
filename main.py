@@ -1413,6 +1413,55 @@ def tonnage_card(day):
     }
 
 
+def stock_balance_card(df, day, issued_col, label):
+    """TDI / POP / POLYOL: bold value = sheet ke 'Balance Qty' column ki aakhri entry (selected date tak).
+    Niche: us din ki movement aur mahine ka Recd / Issued (OPN. opening rows ginti mein nahi)."""
+    def find(*names):
+        want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
+        for c in df.columns:
+            if re.sub(r"[^A-Z0-9]", "", str(c).upper()) in want:
+                return c
+        return None
+
+    c_bal = find("Balance Qty")
+    c_rec = find("Recd Qty")
+    c_iss = find(issued_col, "Issued Qty", "Issues Qty")
+    c_typ = find("Vech Type", "Vch Type", "Voucher Type")
+    if not c_bal or not c_rec or not c_iss:
+        raise DataError(f"{label} sheet mein 'Balance Qty' / 'Recd Qty' / 'Issued Qty' column nahi mila. "
+                        f"Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
+
+    sub = df[df["_date"] <= day].copy()
+    sub["_b"] = _num(sub[c_bal])
+    sub = sub[sub["_b"].notna()]
+    if sub.empty:
+        return None
+    last = sub.iloc[-1]                      # sheet ki aakhri entry (us date tak)
+    balance = float(last["_b"])
+    last_dt = last["_date"]
+
+    def io(frame):
+        if c_typ is not None:
+            frame = frame[~frame[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        return (float(_num(frame[c_rec]).fillna(0).sum()), float(_num(frame[c_iss]).fillna(0).sum()))
+
+    d_in, d_out = io(df[df["_date"] == day])
+    m_start, _m_end = _month_range(day)
+    m_in, m_out = io(df[(df["_date"] >= m_start) & (df["_date"] <= day)])
+
+    if last_dt == day:
+        note = f"Balance as on {day.strftime('%d-%b-%Y')}"
+    else:
+        note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
+    return {
+        "value": f"{balance:,.2f} Kg",
+        "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
+        "color": RED if balance < 0 else BLUE,
+        "sections": [(f"🗓 Month {day:%b-%y} (till {day:%d-%m})",
+                      [("Recd (In)", f"{m_in:,.0f} Kg"), ("Issued (Out)", f"{m_out:,.0f} Kg")])],
+    }
+
+
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
@@ -1761,60 +1810,15 @@ def compute_kpi(df, spec, day):
         return {"value": f"{total_cons:,.2f}", "desc": f"Consumption for {day.strftime('%b-%Y')}", "color": BLUE}
     # ---------- FOAMING: TDI BALANCE ----------
     if calc == "tdi_balance":
-        if "Recd Qty" not in df.columns or "Issues Qty" not in df.columns:
-            raise DataError(f"TDI sheet mein 'Recd Qty' ya 'Issues Qty' column nahi mila. Columns: {list(df.columns)}")
-        sub = df[df["_date"] <= day]
-        if sub.empty:
-            return None
-        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
-        total_issues = _num(sub["Issues Qty"]).fillna(0).sum()
-        balance = total_recd - total_issues
-        today_data = df[df["_date"] == day]
-        if not today_data.empty:
-            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
-            day_issues = _num(today_data["Issues Qty"]).fillna(0).sum()
-            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
-        else:
-            day_note = " | No movement on this date"
-        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
+        return stock_balance_card(df, day, "Issues Qty", "TDI")
 
     # ---------- FOAMING: POP POLYMER BALANCE ----------
     if calc == "pop_balance":
-        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
-            raise DataError(f"POP sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
-        sub = df[df["_date"] <= day]
-        if sub.empty:
-            return None
-        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
-        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
-        balance = total_recd - total_issues
-        today_data = df[df["_date"] == day]
-        if not today_data.empty:
-            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
-            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
-            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
-        else:
-            day_note = " | No movement on this date"
-        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
+        return stock_balance_card(df, day, "Issued Qty", "POP")
 
     # ---------- FOAMING: POLYOL STOCK BALANCE ----------
     if calc == "poly_balance":
-        if "Recd Qty" not in df.columns or "Issued Qty" not in df.columns:
-            raise DataError(f"POLYOL sheet mein 'Recd Qty' ya 'Issued Qty' column nahi mila. Columns: {list(df.columns)}")
-        sub = df[df["_date"] <= day]
-        if sub.empty:
-            return None
-        total_recd = _num(sub["Recd Qty"]).fillna(0).sum()
-        total_issues = _num(sub["Issued Qty"]).fillna(0).sum()
-        balance = total_recd - total_issues
-        today_data = df[df["_date"] == day]
-        if not today_data.empty:
-            day_recd = _num(today_data["Recd Qty"]).fillna(0).sum()
-            day_issues = _num(today_data["Issued Qty"]).fillna(0).sum()
-            day_note = f" | Today: +{day_recd:,.0f} In, -{day_issues:,.0f} Out"
-        else:
-            day_note = " | No movement on this date"
-        return {"value": f"{balance:,.2f} Kg", "desc": f"Balance as on {day.strftime('%d-%b-%Y')}{day_note}", "color": BLUE}
+        return stock_balance_card(df, day, "Issued Qty", "POLYOL")
 
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
@@ -1877,11 +1881,28 @@ def compute_kpi(df, spec, day):
                 details.append(("📋 Grade + Density + Width MTR",
                                 [(f"{g} · {d} · W{w}", f"{v:,.1f} Mtr") for (g, d, w), v in gdw.items() if v > 0]))
 
+        # Har list ke aakhir mein TOTAL (taaki sum seedha check ho sake)
+        details = [(h, rows + [("TOTAL", f"{total_mtr:,.1f} Mtr")]) for h, rows in details]
+
+        # Sheet ke apne total (aakhri row, jahan grade khali hai) se milaan
+        _grade_blank = df[df[col_grade].astype(str).str.strip() == ""]
+        _sheet_tot = _num(_grade_blank[col_mtr]).fillna(0).sum() if not _grade_blank.empty else 0
+        if _sheet_tot > 0:
+            _ok = abs(_sheet_tot - total_mtr) < 0.5
+            details.append(("🧮 Check", [("Sum of MTR rows", f"{total_mtr:,.1f} Mtr"),
+                                        ("Sheet ka apna total", f"{_sheet_tot:,.1f} Mtr"),
+                                        ("Result", "✅ Match" if _ok else "⚠ Match nahi - sheet check karein")]))
+
+        width_line = ""
+        if col_width:
+            _w = mtr_vals.groupby(df_clean[col_width].astype(str).str.strip()).sum().sort_values(ascending=False)
+            width_line = "<br>Width-wise: " + " | ".join(f"{w}: {v:,.0f} Mtr" for w, v in _w.items() if w and w != "NAN" and v > 0)
+
         return {
             "value": f"{total_mtr:,.0f} Mtr",
             "desc": f"Total {total_blocks:,} Blocks | {mix_wise_txt}",
             "color": BLUE,
-            "extra": "Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0),
+            "extra": "Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0) + width_line,
             "details": details
         }
 
