@@ -123,6 +123,104 @@ st.markdown(
 )
 
 # ====================================================================
+# 2b. PROFESSIONAL THEME (upar wali CSS ke upar override; purani CSS jyon ki tyon hai)
+# ====================================================================
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    html, body, [class*="css"], .stApp { font-family: 'Inter', 'Segoe UI', Arial, sans-serif !important; }
+    .stApp { background: linear-gradient(180deg, #EEF2F8 0%, #E6ECF5 100%) !important; }
+    header[data-testid="stHeader"] { background: transparent !important; }
+    .block-container { padding-top: 3.2rem !important; padding-left: 1.6rem !important; padding-right: 1.6rem !important; }
+
+    /* purana simple header chhupa do, naya corporate header neeche hai */
+    .header-box { display: none !important; }
+
+    /* ---------- CORPORATE HEADER ---------- */
+    .corp-header {
+        position: relative; overflow: hidden;
+        background: linear-gradient(120deg, #0B1F4B 0%, #14337A 55%, #1E4FB3 100%);
+        border-radius: 16px; padding: 18px 26px; margin-bottom: 10px;
+        display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+        box-shadow: 0 10px 28px rgba(11,31,75,.28);
+        border-bottom: 4px solid #F5B301;
+    }
+    .corp-header::after {
+        content: ""; position: absolute; right: -60px; top: -80px; width: 260px; height: 260px;
+        border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.14), rgba(255,255,255,0) 70%);
+    }
+    .corp-left { display: flex; align-items: center; gap: 16px; z-index: 1; }
+    .corp-logo {
+        width: 56px; height: 56px; border-radius: 14px; flex: 0 0 56px;
+        background: linear-gradient(135deg, #F5B301, #FFD65A); color: #0B1F4B;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 22px; letter-spacing: 1px;
+        box-shadow: 0 4px 12px rgba(0,0,0,.25);
+    }
+    .corp-name { color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: .6px; line-height: 1.15; text-transform: uppercase; }
+    .corp-sub  { color: #C7D5F5; font-size: 13px; font-weight: 500; letter-spacing: .4px; margin-top: 3px; }
+    .corp-title { color: #F5B301; font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-top: 6px; }
+    .corp-right { text-align: right; z-index: 1; }
+    .corp-date  { color: #ffffff; font-size: 18px; font-weight: 700; }
+    .corp-time  { color: #C7D5F5; font-size: 13px; font-weight: 500; margin-top: 2px; }
+    .corp-live  { display: inline-block; margin-top: 6px; background: rgba(34,197,94,.18); color: #86EFAC;
+                  border: 1px solid rgba(134,239,172,.5); border-radius: 999px; padding: 2px 12px;
+                  font-size: 12px; font-weight: 700; letter-spacing: .5px; }
+
+    /* ---------- DEPARTMENT CARDS (bahar wale container) ---------- */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: #ffffff !important; border: 1px solid #DCE4F0 !important;
+        border-radius: 16px !important; box-shadow: 0 4px 16px rgba(15,23,42,.07) !important;
+    }
+    /* ---------- KPI CARDS (andar wale container) ---------- */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: #FBFCFE !important; border: 1px solid #E3E9F3 !important; border-top: 4px solid #1E4FB3 !important;
+        border-radius: 12px !important; box-shadow: 0 2px 8px rgba(15,23,42,.06) !important;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        transform: translateY(-2px); box-shadow: 0 8px 20px rgba(30,79,179,.18) !important;
+    }
+
+    /* ---------- DEPARTMENT BUTTON ---------- */
+    div[data-testid="stPopover"] > button,
+    div[data-testid="stPopover"] button[data-testid="stPopoverButton"],
+    a[data-testid="stBaseLinkButton-secondary"] {
+        background: linear-gradient(90deg, #0B1F4B, #1E4FB3) !important;
+        border-radius: 10px !important; min-height: 38px !important;
+        box-shadow: 0 3px 8px rgba(11,31,75,.25) !important;
+    }
+    div[data-testid="stPopover"] > button p { letter-spacing: .8px !important; font-size: 15px !important; }
+    div[data-testid="stPopover"] > button:hover,
+    a[data-testid="stBaseLinkButton-secondary"]:hover { background: linear-gradient(90deg, #14337A, #2B63D6) !important; }
+
+    /* ---------- KPI TEXT ---------- */
+    .kpi-title { color: #0B1F4B !important; font-size: 14px !important; letter-spacing: .8px !important; }
+    .kpi-value { color: #0B1F4B !important; font-size: 28px !important; }
+    .kpi-date  { background: linear-gradient(90deg, #E0E7FF, #EEF2FF) !important; border: 1px solid #C7D2FE; color: #1E3A8A !important; }
+    .kpi-tile  { background: linear-gradient(180deg, #F8FAFD, #EEF2F9) !important; border: 1px solid #DCE4F0 !important;
+                 border-radius: 12px !important; box-shadow: inset 0 1px 0 #fff; }
+    .kpi-tile.yield { background: linear-gradient(180deg, #ECFDF3, #D1FAE5) !important; border-color: #6EE7B7 !important; }
+    .kpi-sec   { border-top: 1px dashed #CBD5E1 !important; }
+    .kpi-rv    { color: #0B1F4B !important; }
+
+    /* ---------- DROPDOWNS / EXPANDER / BUTTONS ---------- */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        border-radius: 8px !important; background: #F1F5FB !important; border: 1px solid #D5DEEC !important;
+    }
+    div[data-testid="stExpander"] { border: 1px solid #DCE4F0 !important; border-radius: 10px !important; background: #F8FAFD; }
+    button[kind="secondary"] { border-radius: 10px !important; border: 1px solid #C7D2E8 !important; font-weight: 700 !important; }
+
+    /* ---------- FOOTER ---------- */
+    .corp-footer { text-align: center; color: #64748B; font-size: 12px; font-weight: 500; padding: 14px 0 4px 0; letter-spacing: .4px; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ====================================================================
 # 3. HEADER
 # ====================================================================
 st.markdown(
@@ -132,6 +230,28 @@ st.markdown(
         <p style="margin:2px 0 0 0; color:#475569; font-size:0.8rem; font-weight:500;">
             Centralized Management Control • Jindal Petrofoam Pvt. Ltd. • JTM Execution
         </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+_now_hdr = datetime.datetime.now(IST)
+st.markdown(
+    f"""
+    <div class="corp-header">
+        <div class="corp-left">
+            <div class="corp-logo">JP</div>
+            <div>
+                <div class="corp-name">Jindal Petrofoam Private Limited</div>
+                <div class="corp-sub">Centralized Management Control &nbsp;•&nbsp; JTM Execution</div>
+                <div class="corp-title">Enterprise Master Dashboard</div>
+            </div>
+        </div>
+        <div class="corp-right">
+            <div class="corp-date">{_now_hdr:%A, %d %B %Y}</div>
+            <div class="corp-time">{_now_hdr:%I:%M %p} IST</div>
+            <div class="corp-live">● LIVE DATA</div>
+        </div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -3458,3 +3578,8 @@ def dashboard_body():
 
 
 dashboard_body()
+
+st.markdown(
+    '<div class="corp-footer">© Jindal Petrofoam Private Limited • Enterprise Master Dashboard • Data auto-refreshes every 5 minutes</div>',
+    unsafe_allow_html=True,
+)
