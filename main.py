@@ -2770,7 +2770,9 @@ DEPARTMENTS = [
         ],
         "links": [
             ("📊 Order Dispatch Console (Power BI)", None),
-            ("📋 Booking Tracker (Google Sheets)", None),
+            # ("📋 Booking Tracker (Google Sheets)", None),   # purani line (link nahi tha)
+            ("📋 Order Sheet 1 (Google Sheets)", "https://docs.google.com/spreadsheets/d/e/2PACX-1vQQZiVAgR2AeNLr-IZ-mW2g7Zp-Kye0IRyKtn7KjI_ygm_fGNPE4SB2BljpBmAHf4unirihIGmHrksr/pubhtml"),
+            ("📋 Order Sheet 2 (Google Sheets)", "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml"),
         ],
     },
     {
