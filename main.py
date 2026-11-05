@@ -872,13 +872,15 @@ def _grade_table(frame):
 
 # ---------------- PILLOW (J shed): bundle no. "26-J....." + item PILLOW ----------------
 PILLOW_ITEM = "PILLOW"
-PILLOW_BUNDLE_RE = r"^\d{2}-J"        # 26-J00001, 27-J00001 ...
+PILLOW_BUNDLE_RE = r"^\d{2}-[JK]"      # 26-J00001 (J shed) + 26-K00001 (K shed) ...
 
 
 def pillow_rows(y_df):
     """Prod. Summary se sirf J shed ke PILLOW rows (BUNDLES column 26-J..... se shuru)."""
     b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
-    return y_df[(y_df["item"] == PILLOW_ITEM) & b.str.match(PILLOW_BUNDLE_RE)]
+    # return y_df[(y_df["item"] == PILLOW_ITEM) & b.str.match(PILLOW_BUNDLE_RE)]   # purani line: sirf PILLOW item
+    # Ab J + K shed ki SAARI rows (item chahe PILLOW, MATTRESS HOSPITAL, SOFA CUM BED kuch bhi ho): 2358 + 4663 = 7021 bundles
+    return y_df[b.str.match(PILLOW_BUNDLE_RE)]
 
 
 def pillow_agg(frame):
@@ -925,7 +927,7 @@ def pillow_card(day):
 
     return {
         "value": pillow_txt(d_day),
-        "desc": "Pillow production (J shed)",
+        "desc": "Pillow production (J + K shed)",
         "color": BLUE,
         "metrics": [(f"{d_day['bdl']:,}", "Bundles"), (f"{d_day['sheets']:,.0f}", "Sheets"),
                     (f"{d_day['kg']:,.1f}", "Kg")],
