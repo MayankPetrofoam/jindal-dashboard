@@ -2392,7 +2392,7 @@ SHEETS = {
         "type": "bdls_de",
         "url": "bdls_de",
         "files": (
-            ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-D%20Bdls%2BProd%20(1).xlsx", "Shed-D Bdls+Prod"),
+            ("D Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-D%20Bdls%2BProd.xlsx", "Shed-D Bdls+Prod"),
             ("E Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Shed-E%20Bdls%2BProd.xlsx", "Shed-E Bdls+Prod"),
         ),
     },
