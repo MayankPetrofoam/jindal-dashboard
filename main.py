@@ -213,6 +213,11 @@ st.markdown(
     div[data-testid="stExpander"] { border: 1px solid #DCE4F0 !important; border-radius: 10px !important; background: #F8FAFD; }
     button[kind="secondary"] { border-radius: 10px !important; border: 1px solid #C7D2E8 !important; font-weight: 700 !important; }
 
+    button[kind="secondary"] { border-radius: 10px !important; border: 1px solid #C7D2E8 !important; font-weight: 700 !important; }
+
+    /* ---------- YIELD TILE: har KPI block mein sabse pehle (first position) ---------- */
+    .kpi-tiles .kpi-tile.yield { order: -1; }
+
     /* ---------- FOOTER ---------- */
     .corp-footer { text-align: center; color: #64748B; font-size: 12px; font-weight: 500; padding: 14px 0 4px 0; letter-spacing: .4px; }
     </style>
