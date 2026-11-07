@@ -940,13 +940,23 @@ def _fetch_yield_cached(url, sheet_name):
     raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
 
     def pick(exact, *contains):
+        # 1. Exact match
         if exact in raw.columns:
             return exact
-        return next((c for c in raw.columns if any(w in c for w in contains)), None)
+        # 2. Case-insensitive exact match (KGS == KGS)
+        for c in raw.columns:
+            if str(c).strip().upper() == exact.upper():
+                return c
+        # 3. Contains match (agar KGS kahin beech mein ho)
+        for c in raw.columns:
+            if any(str(w).upper() in str(c).upper() for w in contains):
+                return c
+        return None
 
     date_col = pick("DATE", "DATE")
     item_col = pick("ITEM NAME", "ITEM", "NAME")
-    kg_col = pick("KGS", "KG", "WEIGHT")
+    # Yahan 'KGS' ko priority do
+    kg_col = pick("KGS", "KGS", "KG", "WEIGHT") 
     bdl_col = pick("BUNDLES", "BUNDLE", "BDL")
     sheet_col = pick("SHEET", "SHEET")
     if not all([date_col, item_col, kg_col]):
@@ -965,7 +975,7 @@ def _fetch_yield_cached(url, sheet_name):
         "_date": d.dt.date,
         "ym": d.dt.year * 100 + d.dt.month,
         "item": item,
-        "kg": _num(raw[kg_col]).fillna(0.0),
+        "kg": _num(raw[kg_col].astype(str).str.replace(',', '', regex=False)).fillna(0.0),
         "sheet": _num(raw[sheet_col]).fillna(0.0) if sheet_col else 0.0,
         "BUNDLES": raw[bdl_col].astype(str).str.strip().replace({"nan": "", "None": ""}) if bdl_col else "",
     })
@@ -1062,21 +1072,44 @@ def pillow_card(day):
 
 
 def mattress_card(day):
-    """Mattress: yield M-Shed se, production (bundles / sheets / weight) Prod. Summary ke H shed se."""
+    """Mattress: yield M-Shed se, production (bundles / sheets / weight) Prod. Summary ke H shed + M-Shed se."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    
+    # H Shed ka data
     h = shed_rows(y_df, "H")
+    
+    # M Shed ka data
     m_df, m_err, _ = get_sheet("m_yield")
 
     m_start, m_end = _month_range(day)
+    
     a_day = pillow_agg(h[h["_date"] == day])
     a_mon = pillow_agg(h[(h["_date"] >= m_start) & (h["_date"] <= m_end)])
     a_all = pillow_agg(h)
+
+    # M Shed ka weight calculate karo
+    m_kg_day = 0.0
+    m_kg_mon = 0.0
+    m_kg_all = 0.0
+    if m_df is not None:
+        m_sub_day = m_df[m_df["_date"] == day]
+        m_kg_day = float(m_sub_day["kg"].sum()) if not m_sub_day.empty else 0.0
+        
+        m_sub_mon = m_df[(m_df["_date"] >= m_start) & (m_df["_date"] <= m_end)]
+        m_kg_mon = float(m_sub_mon["kg"].sum()) if not m_sub_mon.empty else 0.0
+        
+        m_kg_all = float(m_df["kg"].sum())
+
+    # Total Weight (H + M)
+    total_kg_day = a_day['kg'] + m_kg_day
+    total_kg_mon = a_mon['kg'] + m_kg_mon
+    total_kg_all = a_all['kg'] + m_kg_all
+
     dy = None
     if m_df is not None:
         dy = d_yield(m_df, day, day)
-        # Agar exact selected date ka data nahi hai, toh pichli available date (jaise 31-Oct) ka data utha lo
         if dy is None:
             available_m_dates = m_df[m_df["_date"] <= day]["_date"]
             if not available_m_dates.empty:
@@ -1088,24 +1121,35 @@ def mattress_card(day):
     def ys(r):
         return f"{r['pct']:.2f}%" if r else "no data"
 
-    def rows(a):
-        return [("Bundles", f"{a['bdl']:,}"), ("Sheets", f"{a['sheets']:,.0f}"), ("Weight", f"{a['kg']:,.1f} Kg")]
+    def rows(a, m_kg, total_kg):
+        return [
+            ("Bundles", f"{a['bdl']:,}"), 
+            ("Sheets", f"{a['sheets']:,.0f}"), 
+            ("H-Shed Weight", f"{a['kg']:,.1f} Kg"),
+            ("M-Shed Weight", f"{m_kg:,.1f} Kg"),
+            ("Total Weight", f"{total_kg:,.1f} Kg")
+        ]
 
     details = []
     if not h.empty:
-        details.append((f"📆 Total ({h['_date'].min():%d-%m-%y} to {h['_date'].max():%d-%m-%y})", rows(a_all)))
+        details.append((f"📆 Total ({h['_date'].min():%d-%m-%y} to {h['_date'].max():%d-%m-%y})", 
+                        rows(a_all, m_kg_all, total_kg_all)))
     if dy:
         details.append((f"⚖ M Shed grade-wise · {day:%d-%m-%y}",
                         [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
+
     return {
         "value": f"{ys(dy)} Yield | {a_day['bdl']:,} Bdls | {a_day['sheets']:,.0f} Sheets",
         "desc": "Mattress production (H shed) & yield (M shed)" if m_df is not None
                 else f"⚠ M-Shed yield nahi mili: {m_err}",
         "color": BLUE if m_df is not None else AMBER,
-        "metrics": [(f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
-                    (f"{a_day['bdl']:,}", "Bundles"), (f"{a_day['sheets']:,.0f}", "Sheets"),
-                    (f"{a_day['kg']:,.1f}", "Kg")],
-        "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon))],
+        "metrics": [
+            (f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
+            (f"{a_day['bdl']:,}", "Bundles"), 
+            (f"{a_day['sheets']:,.0f}", "Sheets"),
+            (f"{total_kg_day:,.1f}", "Total Kg"), # Yahan H + M ka Total Kg dikhega
+        ],
+        "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon, m_kg_mon, total_kg_mon))],
         "details": details,
     }
 
