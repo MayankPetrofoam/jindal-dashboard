@@ -2415,7 +2415,7 @@ SHEETS = {
         "type": "dyield",
         "url": "bc_yield",
         "files": (
-            ("B Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed.xlsx"),
+            ("B Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed%20(1).xlsx"),
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed.xlsx"),
         ),
     },
