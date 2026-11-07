@@ -1674,7 +1674,18 @@ def compute_kpi(df, spec, day):
                                 [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
             tiles = [(ys(dy) if dy else "—", "Yield", "yield")]
             if dy:
-                tiles += [(f"{dy['first']:,.0f}", "1st Grade Kg"), (f"{dy['total']:,.0f}", "Total Kg")]
+                # Yahan 1000 se divide karke Tons kar diya aur label 'Tons' kar diya
+                tiles += [(f"{dy['first']/1000:,.3f}", "1st Grade Tons"), 
+                          (f"{dy['total']/1000:,.3f}", "Total Tons")]
+            
+            # Section (Month wale box) ke andar bhi Tons kar diya
+            sections = []
+            if my:
+                sections.append((f"🗓 Month {day:%b-%y}", [
+                    ("Yield", ys(my)),
+                    ("1st Grade weight", f"{my['first']/1000:,.3f} Tons"),
+                    ("Total weight", f"{my['total']/1000:,.3f} Tons")]))
+                    
             return {
                 "value": ys(dy) + " Yield",
                 "desc": "Rollpack 1st Grade yield (F shed)",
