@@ -1125,9 +1125,9 @@ def mattress_card(day):
         return [
             ("Bundles", f"{a['bdl']:,}"), 
             ("Sheets", f"{a['sheets']:,.0f}"), 
-            ("H-Shed Weight", f"{a['kg']:,.1f} Kg"),
-            ("M-Shed Weight", f"{m_kg:,.1f} Kg"),
-            ("Total Weight", f"{total_kg:,.1f} Kg")
+            ("H-Shed Weight", f"{a['kg'] / 1000:,.3f} Tons"),     # Kg se Tons
+            ("M-Shed Weight", f"{m_kg / 1000:,.3f} Tons"),         # Kg se Tons
+            ("Total Weight", f"{total_kg / 1000:,.3f} Tons")       # Kg se Tons
         ]
 
     details = []
@@ -1147,7 +1147,7 @@ def mattress_card(day):
             (f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
             (f"{a_day['bdl']:,}", "Bundles"), 
             (f"{a_day['sheets']:,.0f}", "Sheets"),
-            (f"{total_kg_day:,.1f}", "Total Kg"), # Yahan H + M ka Total Kg dikhega
+            (f"{total_kg_day / 1000:,.3f}", "Total Tons"), # Yahan Kg ko 1000 se divide karke Tons kar diya
         ],
         "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon, m_kg_mon, total_kg_mon))],
         "details": details,
