@@ -1207,6 +1207,7 @@ def _fetch_shed_cached(files):
         d = _parse_dates(pd.Series([str(v)]), True).iloc[0]
         return d.date() if pd.notna(d) else None
 
+    
     frames = []
     for shed, path, sheet in files:
         raw = pd.read_excel(path, sheet_name=sheet, header=None, dtype=object, engine="openpyxl")
