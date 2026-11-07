@@ -2372,7 +2372,7 @@ SHEETS = {
     # B-Shed (Yield ke liye)
     "b_shed": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed%20Mtrs%2BRolls%2BProd.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/B-Shed%20Mtrs%2BRolls%2BProd%20(1).xlsx",
         "sheet_name": "B-Shed Mtrs+Rolls+Prod",
         "date_col": "DATE",
         "dayfirst": True,
