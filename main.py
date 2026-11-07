@@ -3263,6 +3263,11 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
+            # HR: dates sirf wo jin din attendance / OT bhara hai (aaj ki date nahi)
+            if str(spec.get("calc", "")).startswith("hr_"):
+                _hd = _hr_dates(df)
+                if _hd:
+                    dates = _hd
 
             # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
             if spec.get("type") == "rollpack":
