@@ -2536,7 +2536,7 @@ SHEETS = {
     # Prod. Summary 26-27 (sheet "DATA") - grade-wise yield ke liye
     "prod_summary": {
         "type": "yield",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Prod.%20Summary%2026-27.xlsx?v=2",
         "sheet_name": "Prod. Summary 26-27",
     },
     "m_shed": {
