@@ -262,23 +262,50 @@ st.markdown(
     unsafe_allow_html=True,
 )
 # ====================================================================
-# 3.1 GLOBAL DATE & MONTH SELECTOR (Sabhi KPI ke liye)
+# ====================================================================
+# 3.1 GLOBAL DATE & MONTH SELECTOR (Professional Control Panel)
 # ====================================================================
 import datetime
 from zoneinfo import ZoneInfo
 IST = ZoneInfo("Asia/Kolkata")
 
-# Default values set karein
 if "global_date" not in st.session_state:
     st.session_state.global_date = datetime.datetime.now(IST).date()
 if "global_month" not in st.session_state:
     st.session_state.global_month = (datetime.datetime.now(IST).year, datetime.datetime.now(IST).month)
 
-# UI banayein (Header ke neeche)
-gcol1, gcol2, _ = st.columns([2, 2, 4], gap="medium")
+# CSS for Global Control Panel
+st.markdown(
+    """
+    <style>
+    .global-panel {
+        background: linear-gradient(90deg, #F8FAFC, #EEF2F9);
+        border: 1px solid #DCE4F0;
+        border-left: 6px solid #1E4FB3;
+        border-radius: 12px;
+        padding: 12px 18px;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 4px 12px rgba(15,23,42,.05);
+    }
+    .global-panel-title {
+        font-size: 14px; font-weight: 800; color: #0B1F4B; text-transform: uppercase; letter-spacing: 1px;
+    }
+    .global-panel-sub {
+        font-size: 12px; color: #64748B; font-weight: 500; margin-top: 2px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
+st.markdown('<div class="global-panel"><div><div class="global-panel-title">🌍 Global Dashboard Controls</div><div class="global-panel-sub">Change date/month here to update all KPIs at once. (Individual cards have their own controls below).</div></div></div>', unsafe_allow_html=True)
+
+gcol1, gcol2, _ = st.columns([2, 2, 4], gap="medium")
 with gcol1:
-    new_date = st.date_input("📅 Global Date (Sabhi Cards Ke Liye)", st.session_state.global_date, format="DD/MM/YYYY", key="global_date_input")
+    new_date = st.date_input("📅 Global Date", st.session_state.global_date, format="DD/MM/YYYY", key="global_date_input")
 with gcol2:
     current_yr = datetime.datetime.now(IST).year
     month_options = []
@@ -286,21 +313,18 @@ with gcol2:
         for m in range(1, 13):
             month_options.append((y, m))
     month_options = sorted(month_options, reverse=True)
-    
     try:
         default_idx = month_options.index(st.session_state.global_month)
     except ValueError:
         default_idx = 0
-
     new_month = st.selectbox(
-        "🗓 Global Month (Sabhi Cards Ke Liye)", 
+        "🗓 Global Month", 
         month_options, 
         index=default_idx,
         format_func=lambda x: datetime.date(x[0], x[1], 1).strftime("%b-%Y"),
         key="global_month_input"
     )
 
-# Agar user ne change kiya, toh session state update karein aur page refresh karein
 if new_date != st.session_state.global_date:
     st.session_state.global_date = new_date
     st.rerun()
@@ -3442,6 +3466,7 @@ def render_kpi(dept_key, idx, title, desc):
                     dates = sorted(_dset, reverse=True)
 
             # --- MONTH dropdown ---
+            # --- MONTH dropdown (Local to this card) ---
             all_months = set()
             for d in dates:
                 all_months.add((d.year, d.month))
@@ -3454,27 +3479,24 @@ def render_kpi(dept_key, idx, title, desc):
             other_months = sorted([m for m in all_months if m not in months_with_data], reverse=True)
             months = months_with_data + other_months
 
-            # --- GLOBAL MONTH CHECK ---
-            # --- GLOBAL MONTH CHECK ---
-            if "global_month" in st.session_state:
-                chosen_m = st.session_state.global_month
-            else:
-                mcol, dcol = st.columns([1, 1], gap="small")
-                chosen_m = mcol.selectbox(
-                    f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
-                    format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
-                )
+            # Local dropdown
+            mcol, dcol = st.columns([1, 1], gap="small")
+            
+            # Set default local month to Global Month if it exists in this card's data
+            default_m_idx = 0
+            if st.session_state.get("global_month") in months:
+                default_m_idx = months.index(st.session_state.global_month)
+
+            chosen_m = mcol.selectbox(
+                f"{title} month", months, index=default_m_idx, key=f"{key}_m", label_visibility="collapsed",
+                format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
+            )
 
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             
-            # LB Stock mein date column nahi hota, isliye agar month_dates khali hai toh aaj ki date force karein
             if not month_dates and spec.get("calc") == "lb_stock":
                 month_dates = [datetime.datetime.now(IST).date()]
                 
-            if not month_dates:
-                _disabled_date(title, key)
-                _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
-                return
             if not month_dates:
                 _disabled_date(title, key)
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
@@ -3491,17 +3513,16 @@ def render_kpi(dept_key, idx, title, desc):
                 chosen = month_dates[0]
                 date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
-                # --- GLOBAL DATE CHECK ---
-                if "global_date" in st.session_state:
-                    chosen = st.session_state.global_date
-                    if chosen not in month_dates and month_dates:
-                        chosen = month_dates[0]  # Agar global date us month mein nahi hai, toh latest date
-                else:
-                    chosen = dcol.selectbox(
-                        f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
-                        label_visibility="collapsed",
-                        format_func=lambda d: d.strftime("%d-%m-%y"),
-                    )
+                # Set default local date to Global Date if it exists in this card's dates
+                default_d_idx = 0
+                if st.session_state.get("global_date") in month_dates:
+                    default_d_idx = month_dates.index(st.session_state.global_date)
+
+                chosen = dcol.selectbox(
+                    f"{title} date", month_dates, index=default_d_idx, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
+                    label_visibility="collapsed",
+                    format_func=lambda d: d.strftime("%d-%m-%y"),
+                )
                 date_label = chosen.strftime(DATE_FMT)
 
             st.session_state[key] = chosen
