@@ -796,7 +796,7 @@ def _direct_url(url):
     return url
 
 
-@st.cache_data(ttl=None, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
     if re.match(r"^https?://", url or ""):
         data = _http_get(_direct_url(url))
@@ -878,7 +878,7 @@ def _hr_dates(df):
     return sorted(t[(t["man"] > 0) | (t["ot"] > 0)].index, reverse=True)
 
 
-@st.cache_data(ttl=None, show_spinner="Stock file load ho rahi hai (badi file hai)...")
+@st.cache_data(ttl=900, show_spinner="Stock file load ho rahi hai (badi file hai)...")
 def _fetch_stock_cached(url, sheet_name):
     src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
     raw = pd.read_excel(src, sheet_name=sheet_name, dtype=object, engine="openpyxl")
@@ -924,7 +924,7 @@ _YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
                        "%d-%b-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d/%m/%y"]
 
 
-@st.cache_data(ttl=None, show_spinner="Production summary load ho rahi hai (badi file hai)...")
+@st.cache_data(ttl=900, show_spinner="Production summary load ho rahi hai (badi file hai)...")
 def _fetch_yield_cached(url, sheet_name):
     """Columns: DATE, ITEM NAME, BUNDLES, KGS  ->  _date, ym, item, kg, BUNDLES, grade (1/2/3)."""
     is_csv = str(url).lower().split("?")[0].endswith(".csv")
@@ -1197,7 +1197,7 @@ def yield_card(day):
     }
 
 
-@st.cache_data(ttl=None, show_spinner=False)
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def _fetch_shed_cached(files):
     """D/E shed jaisi files (Date=col C, Type=col D, Value=col E) jodta hai."""
     def _to_date(v):
