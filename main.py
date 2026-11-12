@@ -3382,6 +3382,17 @@ def _disabled_date(title, key):
     # alag key (_off): warna purani chuni hui date (jaise kal ki 31/10) is box mein atak jaati hai
     st.date_input(f"{title} date", datetime.datetime.now(IST).date(), key=f"{key}_off",
                 label_visibility="collapsed", format="DD/MM/YYYY", disabled=True)
+def _fix_sheets_to_pcs(obj):
+    """Recursively replace 'Sheets' with 'Pcs' in any string or tuple."""
+    if isinstance(obj, str):
+        return obj.replace("Sheets", "Pcs").replace("SHEETS", "PCS").replace("sheets", "pcs")
+    elif isinstance(obj, tuple):
+        return tuple(_fix_sheets_to_pcs(i) for i in obj)
+    elif isinstance(obj, list):
+        return [_fix_sheets_to_pcs(i) for i in obj]
+    elif isinstance(obj, dict):
+        return {k: _fix_sheets_to_pcs(v) for k, v in obj.items()}
+    return obj
 @st.fragment
 def render_kpi(dept_key, idx, title, desc):
     """One KPI block, fully independent: own source, own dates, own dropdown, own errors."""
@@ -3543,11 +3554,11 @@ def render_kpi(dept_key, idx, title, desc):
             if res is None:
                 _card(slot, title, "No Data Available for This Date", desc, GREY, chosen.strftime(DATE_FMT))
             elif err:
-                _card(slot, title, res["value"], f"⚠ Stale: last updated {fetched:%d-%m %H:%M}", AMBER, label,
-                      extra=res.get("extra"), metrics=res.get("metrics"), sections=res.get("sections"))
+                _card(slot, title, _fix_sheets_to_pcs(res["value"]), f"⚠ Stale: last updated {fetched:%d-%m %H:%M}", AMBER, label,
+                      extra=_fix_sheets_to_pcs(res.get("extra")), metrics=_fix_sheets_to_pcs(res.get("metrics")), sections=_fix_sheets_to_pcs(res.get("sections")))
             else:
-                _card(slot, title, res["value"], res["desc"] or desc, res["color"] or BLUE, label,
-                      extra=res.get("extra"), metrics=res.get("metrics"), sections=res.get("sections"))
+                _card(slot, title, _fix_sheets_to_pcs(res["value"]), _fix_sheets_to_pcs(res["desc"] or desc), res["color"] or BLUE, label,
+                      extra=_fix_sheets_to_pcs(res.get("extra")), metrics=_fix_sheets_to_pcs(res.get("metrics")), sections=_fix_sheets_to_pcs(res.get("sections")))
         except Exception as exc:                  # never let one block break the others
             log.exception("KPI %s/%s crashed", dept_key, title)
             _card(slot, title, "Error", f"{type(exc).__name__}: {exc}", RED, error=True)
