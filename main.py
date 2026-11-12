@@ -2126,6 +2126,7 @@ def compute_kpi(df, spec, day):
         total_blocks = len(df_clean)
 
         grades = df_clean[col_grade].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True)
+        grades = grades.apply(lambda x: "CL" if "CL" in x else ("SOFTY" if "SOFTY" in x else ("HF" if "HF" in x else ("MJR" if "MJR" in x else ("FG" if "FG" in x else ("RESPONCE" if "RESPONCE" in x else ("COOLGEL" if "COOLGEL" in x else ("HR" if "HR" in x else ("RG" if "RG" in x else x)))))))))
         grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
 
         density_wise = None
@@ -2152,7 +2153,7 @@ def compute_kpi(df, spec, day):
             width_wise = mtr_vals.groupby(widths).sum().sort_values(ascending=False)
             details.append(("↔ Width-wise MTR", [(f"Width {w}", f"{v:,.1f} Mtr") for w, v in width_wise.items() if w and w != "NAN"]))
             if densities is not None:
-                gdw = mtr_vals.groupby([grades, densities, widths]).sum().sort_values(ascending=False)
+                gdw = mtr_vals.groupby([grades, densities, widths]).sum().sort_index()
                 details.append(("📋 Grade + Density + Width MTR",
                                 [(f"{g} · {d} · W{w}", f"{v:,.1f} Mtr") for (g, d, w), v in gdw.items() if v > 0]))
 
