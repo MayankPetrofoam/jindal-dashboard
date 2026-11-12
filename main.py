@@ -1585,64 +1585,6 @@ def tonnage_card(day):
         "details": details,
     }
 def stock_balance_card(df, day, issued_col, label):
-    """TDI / POP / POLYOL: Balance as on selected date, with EXACT TOTAL In/Out totals for the selected month."""
-    def find(*names):
-        want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
-        for c in df.columns:
-            if re.sub(r"[^A-Z0-9]", "", str(c).upper()) in want:
-                return c
-        return None
-
-    c_bal = find("Balance Qty")
-    c_rec = find("Recd Qty")
-    c_iss = find(issued_col, "Issued Qty", "Issues Qty")
-    c_typ = find("Vech Type", "Vch Type", "Voucher Type")
-    
-    if not c_bal or not c_rec or not c_iss:
-        raise DataError(f"{label} sheet mein columns nahi mile.")
-
-    # 1. Balance as on selected date (last entry up to that date)
-    sub = df[df["_date"] <= day].copy()
-    sub["_b"] = _num(sub[c_bal])
-    sub = sub[sub["_b"].notna()]
-    if sub.empty:
-        return None
-        
-    last = sub.iloc[-1]
-    balance = float(last["_b"])
-    last_dt = last["_date"]
-
-    # 2. TOTAL Recd & Issued (Selected month ke 1st date se lekar selected date tak)
-    m_start = day.replace(day=1)
-    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
-    
-    # Yahan hum OPN. ko nahi hata rahe, kyunki ERP Total mein OPN. count karta hai
-    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
-    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
-    
-    # 3. Aaj ki date ka single-day movement (agar aaj ka data hai toh)
-    day_df = df[df["_date"] == day].copy()
-    if c_typ is not None and not day_df.empty:
-        day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
-        
-    d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
-    d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
-
-    # 4. Card Description
-    if last_dt == day:
-        note = f"Balance as on {day.strftime('%d-%b-%Y')}"
-    else:
-        note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
-
-    return {
-        "value": f"{balance:,.2f} Kg",
-        "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
-        "color": RED if balance < 0 else BLUE,
-        "sections": [(f"Σ Total {day:%b-%y} (till {day:%d-%m})", [
-            ("Recd (In)", f"{t_in:,.2f} Kg"), 
-            ("Issued (Out)", f"{t_out:,.2f} Kg")
-        ])],
-    }
 
 
 def compute_kpi(df, spec, day):
