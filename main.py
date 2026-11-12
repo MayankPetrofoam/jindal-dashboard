@@ -261,6 +261,49 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+# ====================================================================
+# COMMON DATE & MONTH SELECTOR (GLOBAL)
+# ====================================================================
+import datetime
+from zoneinfo import ZoneInfo
+IST = ZoneInfo("Asia/Kolkata")
+
+# Default values set karein agar pehli baar load ho raha hai
+if "global_date" not in st.session_state:
+    st.session_state.global_date = datetime.datetime.now(IST).date()
+if "global_month" not in st.session_state:
+    st.session_state.global_month = (datetime.datetime.now(IST).year, datetime.datetime.now(IST).month)
+
+# UI banayein (Header ke neeche)
+col1, col2, _ = st.columns([2, 2, 6])
+with col1:
+    new_date = st.date_input("📅 Global Date", st.session_state.global_date, format="DD/MM/YYYY", key="global_date_input")
+with col2:
+    # Month dropdown (Pichle 2 saal ke months)
+    current_yr = datetime.datetime.now(IST).year
+    month_options = []
+    for y in [current_yr, current_yr - 1]:
+        for m in range(1, 13):
+            month_options.append((y, m))
+    month_options = sorted(month_options, reverse=True)
+    
+    new_month_tuple = st.selectbox(
+        "🗓 Global Month", 
+        month_options, 
+        index=month_options.index(st.session_state.global_month) if st.session_state.global_month in month_options else 0,
+        format_func=lambda x: datetime.date(x[0], x[1], 1).strftime("%b-%Y"),
+        key="global_month_input"
+    )
+
+# Agar user ne change kiya, toh session state update karein
+if new_date != st.session_state.global_date:
+    st.session_state.global_date = new_date
+    st.rerun() # Poora dashboard refresh hoga nayi date ke saath
+
+if new_month_tuple != st.session_state.global_month:
+    st.session_state.global_month = new_month_tuple
+    st.rerun()
+
 
 # ====================================================================
 # DATA ENGINE
@@ -1586,8 +1629,6 @@ def tonnage_card(day):
 
 
 def stock_balance_card(df, day, issued_col, label):
-    """TDI / POP / POLYOL: bold value = sheet ke 'Balance Qty' column ki aakhri entry (selected date tak).
-    Niche: us din ki movement aur mahine ka Recd / Issued (OPN. opening rows ginti mein nahi)."""
     def find(*names):
         want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
         for c in df.columns:
@@ -1599,32 +1640,56 @@ def stock_balance_card(df, day, issued_col, label):
     c_rec = find("Recd Qty")
     c_iss = find(issued_col, "Issued Qty", "Issues Qty")
     c_typ = find("Vech Type", "Vch Type", "Voucher Type")
+    
     if not c_bal or not c_rec or not c_iss:
-        raise DataError(f"{label} sheet mein 'Balance Qty' / 'Recd Qty' / 'Issued Qty' column nahi mila. "
-                        f"Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
+        raise DataError(f"{label} sheet mein columns nahi mile.")
 
+    # --- FIX: Opening Qty alag karein ---
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
     if sub.empty:
         return None
-    last = sub.iloc[-1]                      # sheet ki aakhri entry (us date tak)
+        
+    # Sheet ki aakhri entry (Balance)
+    last = sub.iloc[-1]
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    def io(frame):
-        if c_typ is not None:
-            frame = frame[~frame[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
-        return (float(_num(frame[c_rec]).fillna(0).sum()), float(_num(frame[c_iss]).fillna(0).sum()))
+    # --- FIX: Movement (In / Out) calculate karne ka sahi tarika ---
+    # Sirf selected date ki rows uthayein
+    day_df = df[df["_date"] == day]
+    
+    if day_df.empty:
+        d_in, d_out = 0.0, 0.0
+    else:
+        # Opening row ko ignore karein
+        if c_typ:
+            day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        
+        # Recd Qty = In
+        d_in = float(_num(day_df[c_rec]).fillna(0).sum())
+        
+        # Issued Qty = Out (Agar aap SALE aur CONS dono ko "Issued" maanti hain toh yahan sum hoga)
+        # Aapke sheet mein CONS aur SALE dono "Issued" column mein hain? 
+        # Agar haan, toh neeche wala sahi hai. Agar nahi, toh condition lagayein.
+        d_out = float(_num(day_df[c_iss]).fillna(0).sum())
 
-    d_in, d_out = io(df[df["_date"] == day])
-    m_start, _m_end = _month_range(day)
-    m_in, m_out = io(df[(df["_date"] >= m_start) & (df["_date"] <= day)])
+    # Month ka calculation (1st date se lekar selected date tak)
+    m_start = day.replace(day=1)
+    mon_df = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
+    
+    if c_typ:
+        mon_df = mon_df[~mon_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        
+    m_in = float(_num(mon_df[c_rec]).fillna(0).sum())
+    m_out = float(_num(mon_df[c_iss]).fillna(0).sum())
 
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
         note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
+        
     return {
         "value": f"{balance:,.2f} Kg",
         "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
@@ -3291,7 +3356,7 @@ def _disabled_date(title, key):
     st.date_input(f"{title} date", datetime.datetime.now(IST).date(), key=f"{key}_off",
                 label_visibility="collapsed", format="DD/MM/YYYY", disabled=True)
 
-
+@st.fragment  # <--- YEH LINE ADD KAREIN
 def render_kpi(dept_key, idx, title, desc):
     """One KPI block, fully independent: own source, own dates, own dropdown, own errors."""
     key = f"{dept_key}_date_{idx}"
@@ -3602,9 +3667,7 @@ def render_diagnostics():
 # ====================================================================
 # 10. MAIN LAYOUT (original: two departments per row, auto-refresh fragment)
 # ====================================================================
-@st.fragment
 def dashboard_body():
-    st.session_state["_errors"] = {}
 
     status_col, button_col = st.columns([6, 1])
     status_slot = status_col.empty()
