@@ -3494,9 +3494,18 @@ def render_kpi(dept_key, idx, title, desc):
                 chosen = month_dates[0]
                 date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
-            if hide_date:
-                chosen = month_dates[0]
-                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
+                # --- GLOBAL DATE CHECK ---
+                if "global_date" in st.session_state:
+                    chosen = st.session_state.global_date
+                    if chosen not in month_dates and month_dates:
+                        chosen = month_dates[0]  # Agar global date us month mein nahi hai, toh latest date
+                else:
+                    chosen = dcol.selectbox(
+                        f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
+                        label_visibility="collapsed",
+                        format_func=lambda d: d.strftime("%d-%m-%y"),
+                    )
+                date_label = chosen.strftime(DATE_FMT)
             else:
                 # --- GLOBAL DATE CHECK ---
                 if "global_date" in st.session_state:
