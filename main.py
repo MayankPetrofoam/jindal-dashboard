@@ -1586,7 +1586,7 @@ def tonnage_card(day):
     }
 
 def stock_balance_card(df, day, issued_col, label):
-    """TDI / POP / POLYOL: Balance as on selected date, with accurate monthly In/Out totals."""
+    """TDI / POP / POLYOL: Balance as on selected date, with accurate TOTAL In/Out totals (including OPN)."""
     def find(*names):
         want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
         for c in df.columns:
@@ -1602,7 +1602,7 @@ def stock_balance_card(df, day, issued_col, label):
     if not c_bal or not c_rec or not c_iss:
         raise DataError(f"{label} sheet mein columns nahi mile.")
 
-    # 1. Find Balance as on selected date (last entry up to that date)
+    # 1. Balance as on selected date (last entry up to that date)
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
@@ -1613,34 +1613,22 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Helper to filter ONLY the selected month's rows (and ignore OPN.)
-    def get_month_data(target_day):
-        m_start = target_day.replace(day=1)
-        # Month ka aakhri din nikalne ke liye
-        next_month = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-        m_end = next_month - datetime.timedelta(days=1)
-        
-        # Sirf us mahine ka data (aaj tak ka)
-        m_df = df[(df["_date"] >= m_start) & (df["_date"] <= target_day)].copy()
-        
-        # OPN. (Opening) wali rows ko hata dein
-        if c_typ is not None:
-            m_df = m_df[~m_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
-        return m_df
-
-    # 3. Calculate Month-to-date In and Out
-    m_df = get_month_data(day)
-    m_in = float(_num(m_df[c_rec]).fillna(0).sum())
-    m_out = float(_num(m_df[c_iss]).fillna(0).sum())
+    # 2. TOTAL Recd & Issued (Poori sheet ka data, aaj tak ka)
+    df_total = df[df["_date"] <= day].copy()
     
-    # 4. Aaj ki date ka single-day movement (agar aaj ka data hai toh)
-    day_df = df[df["_date"] == day]
+    # Yahan hum OPN. ko nahi hata rahe kyunki ERP total mein OPN. bhi count karta hai
+    t_in = float(_num(df_total[c_rec]).fillna(0).sum())
+    t_out = float(_num(df_total[c_iss]).fillna(0).sum())
+    
+    # 3. Aaj ki date ka single-day movement (agar aaj ka data hai toh)
+    day_df = df[df["_date"] == day].copy()
     if c_typ is not None and not day_df.empty:
         day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        
     d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
     d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
 
-    # 5. Card Description
+    # 4. Card Description
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
@@ -1650,9 +1638,9 @@ def stock_balance_card(df, day, issued_col, label):
         "value": f"{balance:,.2f} Kg",
         "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
         "color": RED if balance < 0 else BLUE,
-        "sections": [(f"🗓 Month {day:%b-%y} (till {day:%d-%m})", [
-            ("Recd (In)", f"{m_in:,.0f} Kg"), 
-            ("Issued (Out)", f"{m_out:,.0f} Kg")
+        "sections": [(f"Σ Total (All Time)", [
+            ("Recd (In)", f"{t_in:,.0f} Kg"), 
+            ("Issued (Out)", f"{t_out:,.0f} Kg")
         ])],
     }
 
