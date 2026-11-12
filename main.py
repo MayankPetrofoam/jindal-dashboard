@@ -261,6 +261,53 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+# ====================================================================
+# 3.1 GLOBAL DATE & MONTH SELECTOR (Sabhi KPI ke liye)
+# ====================================================================
+import datetime
+from zoneinfo import ZoneInfo
+IST = ZoneInfo("Asia/Kolkata")
+
+# Default values set karein
+if "global_date" not in st.session_state:
+    st.session_state.global_date = datetime.datetime.now(IST).date()
+if "global_month" not in st.session_state:
+    st.session_state.global_month = (datetime.datetime.now(IST).year, datetime.datetime.now(IST).month)
+
+# UI banayein (Header ke neeche)
+gcol1, gcol2, _ = st.columns([2, 2, 4], gap="medium")
+
+with gcol1:
+    new_date = st.date_input("📅 Global Date (Sabhi Cards Ke Liye)", st.session_state.global_date, format="DD/MM/YYYY", key="global_date_input")
+with gcol2:
+    current_yr = datetime.datetime.now(IST).year
+    month_options = []
+    for y in [current_yr, current_yr - 1]:
+        for m in range(1, 13):
+            month_options.append((y, m))
+    month_options = sorted(month_options, reverse=True)
+    
+    try:
+        default_idx = month_options.index(st.session_state.global_month)
+    except ValueError:
+        default_idx = 0
+
+    new_month = st.selectbox(
+        "🗓 Global Month (Sabhi Cards Ke Liye)", 
+        month_options, 
+        index=default_idx,
+        format_func=lambda x: datetime.date(x[0], x[1], 1).strftime("%b-%Y"),
+        key="global_month_input"
+    )
+
+# Agar user ne change kiya, toh session state update karein aur page refresh karein
+if new_date != st.session_state.global_date:
+    st.session_state.global_date = new_date
+    st.rerun()
+
+if new_month != st.session_state.global_month:
+    st.session_state.global_month = new_month
+    st.rerun()
 
 
 # ====================================================================
@@ -3407,7 +3454,15 @@ def render_kpi(dept_key, idx, title, desc):
             other_months = sorted([m for m in all_months if m not in months_with_data], reverse=True)
             months = months_with_data + other_months
 
-            mcol, dcol = st.columns([1, 1], gap="small")
+            # --- GLOBAL MONTH CHECK ---
+            if "global_month" in st.session_state:
+                chosen_m = st.session_state.global_month
+            else:
+                mcol, dcol = st.columns([1, 1], gap="small")
+                chosen_m = mcol.selectbox(
+                    f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
+                    format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
+                )
             chosen_m = mcol.selectbox(
                 f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
                 format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
@@ -3439,11 +3494,21 @@ def render_kpi(dept_key, idx, title, desc):
                 chosen = month_dates[0]
                 date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
-                chosen = dcol.selectbox(
-                f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
-                    label_visibility="collapsed",
-                    format_func=lambda d: d.strftime("%d-%m-%y"),
-                )
+            if hide_date:
+                chosen = month_dates[0]
+                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
+            else:
+                # --- GLOBAL DATE CHECK ---
+                if "global_date" in st.session_state:
+                    chosen = st.session_state.global_date
+                    if chosen not in month_dates and month_dates:
+                        chosen = month_dates[0]  # Agar global date us month mein nahi hai, toh latest date
+                else:
+                    chosen = dcol.selectbox(
+                        f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
+                        label_visibility="collapsed",
+                        format_func=lambda d: d.strftime("%d-%m-%y"),
+                    )
                 date_label = chosen.strftime(DATE_FMT)
 
             st.session_state[key] = chosen
