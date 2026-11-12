@@ -304,8 +304,11 @@ st.markdown(
 st.markdown('<div class="global-panel"><div><div class="global-panel-title">🌍 Global Dashboard Controls</div><div class="global-panel-sub">Change date/month here to update all KPIs at once. (Individual cards have their own controls below).</div></div></div>', unsafe_allow_html=True)
 
 gcol1, gcol2, _ = st.columns([2, 2, 4], gap="medium")
+
 with gcol1:
-    new_date = st.date_input("📅 Global Date", st.session_state.global_date, format="DD/MM/YYYY", key="global_date_input")
+    # Date Input mein "key" nahi daalenge warna Streamlit purani value pakad leta hai
+    new_date = st.date_input("📅 Global Date", st.session_state.global_date, format="DD/MM/YYYY")
+
 with gcol2:
     current_yr = datetime.datetime.now(IST).year
     month_options = []
@@ -317,16 +320,28 @@ with gcol2:
         default_idx = month_options.index(st.session_state.global_month)
     except ValueError:
         default_idx = 0
+    
+    # Month Input mein bhi "key" nahi daalenge
     new_month = st.selectbox(
         "🗓 Global Month", 
         month_options, 
         index=default_idx,
         format_func=lambda x: datetime.date(x[0], x[1], 1).strftime("%b-%Y"),
-        key="global_month_input"
     )
 
+# Logic: Agar Month change hua hai, toh Date ko us month ki 1st date par set karo
+if new_month != st.session_state.global_month:
+    st.session_state.global_month = new_month
+    # Naya month change hua -> Date ko us month ki 1st date (ya aaj ki date) par set karo
+    st.session_state.global_date = datetime.date(new_month[0], new_month[1], 1)
+    st.rerun()
+
+# Logic: Agar Date change hui hai
 if new_date != st.session_state.global_date:
     st.session_state.global_date = new_date
+    # Agar user ne aisi date chuni hai jo current month mein nahi hai, toh month ko auto-update kar do
+    if (new_date.year, new_date.month) != st.session_state.global_month:
+        st.session_state.global_month = (new_date.year, new_date.month)
     st.rerun()
 
 if new_month != st.session_state.global_month:
