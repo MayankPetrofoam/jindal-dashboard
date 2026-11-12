@@ -3602,8 +3602,9 @@ def render_diagnostics():
 # ====================================================================
 # 10. MAIN LAYOUT (original: two departments per row, auto-refresh fragment)
 # ====================================================================
+# 1. Yahan @st.fragment lagayein
+@st.fragment 
 def dashboard_body():
-
     st.session_state["_errors"] = {}
 
     status_col, button_col = st.columns([6, 1])
@@ -3644,7 +3645,7 @@ def dashboard_body():
             for m in missing:
                 st.write(f"- {m}")
 
-@st.fragment
+# 2. Yahan se @st.fragment hata dein
 dashboard_body()
 
 st.markdown(
