@@ -3499,7 +3499,7 @@ def render_kpi(dept_key, idx, title, desc):
                     chosen = st.session_state.global_date
                     if chosen not in month_dates and month_dates:
                         chosen = month_dates[0]  # Agar global date us month mein nahi hai, toh latest date
-                else:
+            else:
                     chosen = dcol.selectbox(
                         f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
                         label_visibility="collapsed",
