@@ -3455,6 +3455,7 @@ def render_kpi(dept_key, idx, title, desc):
             months = months_with_data + other_months
 
             # --- GLOBAL MONTH CHECK ---
+            # --- GLOBAL MONTH CHECK ---
             if "global_month" in st.session_state:
                 chosen_m = st.session_state.global_month
             else:
@@ -3463,10 +3464,6 @@ def render_kpi(dept_key, idx, title, desc):
                     f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
                     format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
                 )
-            chosen_m = mcol.selectbox(
-                f"{title} month", months, key=f"{key}_m", label_visibility="collapsed",
-                format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
-            )
 
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             
@@ -3499,7 +3496,7 @@ def render_kpi(dept_key, idx, title, desc):
                     chosen = st.session_state.global_date
                     if chosen not in month_dates and month_dates:
                         chosen = month_dates[0]  # Agar global date us month mein nahi hai, toh latest date
-            else:
+                else:
                     chosen = dcol.selectbox(
                         f"{title} date", month_dates, key=f"{key}_{chosen_m[0]}_{chosen_m[1]}_v2",
                         label_visibility="collapsed",
