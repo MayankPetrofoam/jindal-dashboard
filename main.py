@@ -1584,9 +1584,8 @@ def tonnage_card(day):
         "metrics": tiles,
         "details": details,
     }
-
 def stock_balance_card(df, day, issued_col, label):
-    """TDI / POP / POLYOL: Balance as on selected date, with accurate TOTAL In/Out totals (including OPN)."""
+    """TDI / POP / POLYOL: Balance as on selected date, with EXACT TOTAL In/Out totals for the selected month."""
     def find(*names):
         want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
         for c in df.columns:
@@ -1613,12 +1612,13 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. TOTAL Recd & Issued (Poori sheet ka data, aaj tak ka)
-    df_total = df[df["_date"] <= day].copy()
+    # 2. TOTAL Recd & Issued (Selected month ke 1st date se lekar selected date tak)
+    m_start = day.replace(day=1)
+    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
     
-    # Yahan hum OPN. ko nahi hata rahe kyunki ERP total mein OPN. bhi count karta hai
-    t_in = float(_num(df_total[c_rec]).fillna(0).sum())
-    t_out = float(_num(df_total[c_iss]).fillna(0).sum())
+    # Yahan hum OPN. ko nahi hata rahe, kyunki ERP Total mein OPN. count karta hai
+    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
+    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
     
     # 3. Aaj ki date ka single-day movement (agar aaj ka data hai toh)
     day_df = df[df["_date"] == day].copy()
@@ -1638,9 +1638,9 @@ def stock_balance_card(df, day, issued_col, label):
         "value": f"{balance:,.2f} Kg",
         "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
         "color": RED if balance < 0 else BLUE,
-        "sections": [(f"Σ Total (All Time)", [
-            ("Recd (In)", f"{t_in:,.0f} Kg"), 
-            ("Issued (Out)", f"{t_out:,.0f} Kg")
+        "sections": [(f"Σ Total {day:%b-%y} (till {day:%d-%m})", [
+            ("Recd (In)", f"{t_in:,.2f} Kg"), 
+            ("Issued (Out)", f"{t_out:,.2f} Kg")
         ])],
     }
 
