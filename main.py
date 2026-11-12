@@ -1585,10 +1585,8 @@ def tonnage_card(day):
         "details": details,
     }
 
-
 def stock_balance_card(df, day, issued_col, label):
-    """TDI / POP / POLYOL: bold value = sheet ke 'Balance Qty' column ki aakhri entry (selected date tak).
-    Niche: us din ki movement aur mahine ka Recd / Issued (OPN. opening rows ginti mein nahi)."""
+    """TDI / POP / POLYOL: Balance as on selected date, with accurate monthly In/Out totals."""
     def find(*names):
         want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
         for c in df.columns:
@@ -1600,38 +1598,62 @@ def stock_balance_card(df, day, issued_col, label):
     c_rec = find("Recd Qty")
     c_iss = find(issued_col, "Issued Qty", "Issues Qty")
     c_typ = find("Vech Type", "Vch Type", "Voucher Type")
+    
     if not c_bal or not c_rec or not c_iss:
-        raise DataError(f"{label} sheet mein 'Balance Qty' / 'Recd Qty' / 'Issued Qty' column nahi mila. "
-                        f"Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
+        raise DataError(f"{label} sheet mein columns nahi mile.")
 
+    # 1. Find Balance as on selected date (last entry up to that date)
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
     if sub.empty:
         return None
-    last = sub.iloc[-1]                      # sheet ki aakhri entry (us date tak)
+        
+    last = sub.iloc[-1]
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    def io(frame):
+    # 2. Helper to filter ONLY the selected month's rows (and ignore OPN.)
+    def get_month_data(target_day):
+        m_start = target_day.replace(day=1)
+        # Month ka aakhri din nikalne ke liye
+        next_month = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        m_end = next_month - datetime.timedelta(days=1)
+        
+        # Sirf us mahine ka data (aaj tak ka)
+        m_df = df[(df["_date"] >= m_start) & (df["_date"] <= target_day)].copy()
+        
+        # OPN. (Opening) wali rows ko hata dein
         if c_typ is not None:
-            frame = frame[~frame[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
-        return (float(_num(frame[c_rec]).fillna(0).sum()), float(_num(frame[c_iss]).fillna(0).sum()))
+            m_df = m_df[~m_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        return m_df
 
-    d_in, d_out = io(df[df["_date"] == day])
-    m_start, _m_end = _month_range(day)
-    m_in, m_out = io(df[(df["_date"] >= m_start) & (df["_date"] <= day)])
+    # 3. Calculate Month-to-date In and Out
+    m_df = get_month_data(day)
+    m_in = float(_num(m_df[c_rec]).fillna(0).sum())
+    m_out = float(_num(m_df[c_iss]).fillna(0).sum())
+    
+    # 4. Aaj ki date ka single-day movement (agar aaj ka data hai toh)
+    day_df = df[df["_date"] == day]
+    if c_typ is not None and not day_df.empty:
+        day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+    d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
+    d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
 
+    # 5. Card Description
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
         note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
+
     return {
         "value": f"{balance:,.2f} Kg",
         "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
         "color": RED if balance < 0 else BLUE,
-        "sections": [(f"🗓 Month {day:%b-%y} (till {day:%d-%m})",
-                      [("Recd (In)", f"{m_in:,.0f} Kg"), ("Issued (Out)", f"{m_out:,.0f} Kg")])],
+        "sections": [(f"🗓 Month {day:%b-%y} (till {day:%d-%m})", [
+            ("Recd (In)", f"{m_in:,.0f} Kg"), 
+            ("Issued (Out)", f"{m_out:,.0f} Kg")
+        ])],
     }
 
 
