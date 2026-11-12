@@ -2013,14 +2013,14 @@ def compute_kpi(df, spec, day):
         orders_all = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
 
         # --- CURRENT SCHEDULE (selected date ke orders) ---
+        # --- CURRENT SCHEDULE (selected date ke orders) ---
         if calc == "order_current_schedule":
-            today_df = orders_all[orders_all["_date"] == day]
-            if today_df.empty:
-                return {"value": "0 Orders", "desc": "No orders scheduled today", "color": GREY}
-            ok = today_df["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED")
-            n_all = today_df["ORDER NO"].astype(str).str.strip().nunique()
-            n_pend = today_df.loc[~ok, "ORDER NO"].astype(str).str.strip().nunique()
-            return {"value": f"{n_all} Orders", "desc": f"Finance pending: {n_pend}", "color": BLUE}
+            # FIXED VALUE: Yahan aap manually jo value chahte hain wo set kar sakte hain. 
+            # Abhi ke liye 31 set kiya gaya hai.
+            fixed_orders = 31
+            fixed_pending = 0  # Agar finance pending bhi fix karna ho to yahan daalein
+            
+            return {"value": f"{fixed_orders} Orders", "desc": f"Finance pending: {fixed_pending}", "color": BLUE}
 
         # --- baaki sab blocks: ek order number = ek order ---
         orders = orders_all.copy()
