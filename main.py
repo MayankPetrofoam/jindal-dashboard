@@ -845,6 +845,96 @@ def purchase_mtd(df, day, overrides=None, basis="received", all_time=False):
     )
     return {"value": float((qty * rate).sum()), "warn_items": sorted(flagged & used), "table": table,
             "issues": issues, "formula": formula, "columns": c}
+# ====================================================================
+# PENDING PO AGEING (0-15 / 15-30 / 30-60 / 60+ days)  -- NAYA BLOCK
+# ====================================================================
+PO_AGE_BUCKETS = {
+    "po_age_0_15":    ("0-15 Days", 0, 15),
+    "po_age_15_30":   ("15-30 Days", 15, 30),
+    "po_age_30_60":   ("30-60 Days", 30, 60),
+    "po_age_60_plus": ("60+ Days", 60, None),
+}
+
+
+def po_ageing(df, day, overrides=None):
+    """Har PO line ka pending aur uski age (day - PO date). Pending > 0 wali lines hi wapas aati hain."""
+    issues = []
+    c = _resolve_columns(df, overrides)
+    w = df[df["_date"] <= day]
+    if w.empty:
+        return None
+    w = _po_rows(w, c, issues)
+    rd = _receipt_dates(w, c)
+    if rd is not None:
+        by_day = rd.apply(lambda d: _is_date(d, lambda x: x <= day)).astype(bool)
+        w["_rec_asof"] = w["_inv"].where(by_day, 0.0)
+    else:
+        w["_rec_asof"] = w["_inv"]
+
+    pick = lambda name: next((x for x in w.columns if str(x).strip().lower() == name), None)
+    sup, cat = pick("supplier name"), pick("category")
+    agg = {c["po_no"]: "first", c["item"]: "first", "_po_qty": "first", "_rec_asof": "sum", "_date": "first"}
+    if "uom" in c:
+        agg[c["uom"]] = "first"
+    if sup:
+        agg[sup] = "first"
+    if cat:
+        agg[cat] = "first"
+    g = w.groupby("_grp", sort=False).agg(agg).reset_index(drop=True)
+    g = g.rename(columns={c["po_no"]: "PO", c["item"]: "Item", "_po_qty": "po_qty",
+                          "_rec_asof": "received", "_date": "po_date"})
+    g["UoM"] = g[c["uom"]].astype(str).str.strip() if "uom" in c else ""
+    g["Supplier"] = g[sup].astype(str).str.strip() if sup else ""
+    g["Category"] = g[cat].astype(str).str.strip() if cat else ""
+    g = g[g["po_qty"].notna() & (g["po_qty"] >= 0)].copy()
+    g["pending"] = (g["po_qty"] - g["received"]).clip(lower=0)
+    g = g[g["pending"] > 0].copy()
+    g["age"] = g["po_date"].apply(lambda d: (day - d).days)
+    return g, issues
+
+
+def po_ageing_card(df, spec, day):
+    import html as _html
+    r = po_ageing(df, day, spec.get("columns"))
+    if r is None:
+        return {"value": "0 POs", "desc": "No PO on or before this date", "color": GREY}
+    g, issues = r
+    label, lo, hi = PO_AGE_BUCKETS[spec["calc"]]
+
+    def pick_bucket(lo_, hi_):
+        m = (g["age"] >= lo_) if lo_ == 0 else (g["age"] > lo_)
+        if hi_ is not None:
+            m = m & (g["age"] <= hi_)
+        return g[m]
+
+    b = pick_bucket(lo, hi).sort_values("age", ascending=False)
+    n_pos = int(b["PO"].nunique())
+    by_uom = b.groupby("UoM")["pending"].sum().sort_values(ascending=False)
+    uom_txt = " · ".join(f"{k or 'units'}: {v:,.0f}" for k, v in by_uom.items()) or "No pending"
+
+    counts = [int(pick_bucket(l, h)["PO"].nunique()) for _, l, h in PO_AGE_BUCKETS.values()]
+    total_open = int(g["PO"].nunique())
+    extra = (f"0-15: {counts[0]} + 15-30: {counts[1]} + 30-60: {counts[2]} + 60+: {counts[3]} "
+             f"= {sum(counts)} (total open POs: {total_open})")
+
+    esc = lambda x: _html.escape(str(x))
+    details = []
+    if not b.empty:
+        details.append((f"📋 {label} · {n_pos} POs / {len(b)} lines", [
+            (f"PO {esc(r_.PO)}",
+             f"{esc(r_.Supplier[:22])} · {esc(r_.Item[:24])} · {r_.pending:,.0f} {esc(r_.UoM)} · {r_.age}d")
+            for r_ in b.itertuples()]))
+        sw = b.groupby("Supplier")["PO"].nunique().sort_values(ascending=False)
+        details.append(("🏭 Supplier wise", [(esc(s[:26]), f"{n} POs") for s, n in sw.items() if s]))
+        cw = b.groupby("Category")["PO"].nunique().sort_values(ascending=False)
+        details.append(("🗂 Category wise", [(esc(k), f"{n} POs") for k, n in cw.items() if k]))
+    return {
+        "value": f"{n_pos} POs",
+        "desc": uom_txt,
+        "color": RED if (lo >= 60 and n_pos) else BLUE,
+        "extra": extra,
+        "details": details,
+    }
 
 
 def _inr(x):
@@ -2298,6 +2388,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: ROLLS (B + C Shed) ----------
     if calc == "rolls_bc":
         return shed_card(df, day, "rolls", "bc_yield", "B+C")
+    # ---------- PURCHASE: PENDING PO AGEING ----------
+    if calc in PO_AGE_BUCKETS:
+        return po_ageing_card(df, spec, day)
 
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
@@ -2748,6 +2841,10 @@ KPI_SOURCES = {
         "date_label": "PO date",
         "calc": "po_pending",
     },
+    ("purchase", "PO 0-15 Days Old"):  {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_0_15"},
+    ("purchase", "PO 15-30 Days Old"): {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_15_30"},
+    ("purchase", "PO 30-60 Days Old"): {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_30_60"},
+    ("purchase", "PO 60+ Days Old"):   {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_60_plus"},
     ("purchase", "Goods Below MS"): {"sheet": "min_stock", "calc": "min_stock"},
     ("purchase", "Purchase Till Date"): {
         "sheet": "purchase_po",
@@ -2964,6 +3061,10 @@ DEPARTMENTS = [
             ("Goods Below MS", "Below minimum stock"),
             ("Purchase Till Date", "Value, month to date"),
         ],
+            ("PO 0-15 Days Old", "Naye pending PO"),
+            ("PO 15-30 Days Old", "Pending 15 to 30 days"),
+            ("PO 30-60 Days Old", "Pending 30 to 60 days"),
+            ("PO 60+ Days Old", "Critical: Pending > 60 days"),
         "links": [
             ("📊 Purchase Dashboard (Power BI)", PURCHASE_POWERBI),
             ("📋 PO Tracker (Google Sheets)", PURCHASE_SHEET),
