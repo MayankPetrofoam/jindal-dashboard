@@ -2739,10 +2739,10 @@ SHEETS = {
     },
     "min_stock": {
         "type": "excel",
-        "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=3",
+        "static": True,  # <-- Yeh batata hai ki date ki zaroorat nahi
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=6", # v=6 kar dein
         "sheet_name": "Sheet1",
-        "date_col": "STATUS",
+        # "date_col": "STATUS",  <-- Ise hata dein ya comment kar dein
     },
     # D + E shed ka Bdls + Prod
     "bdls_de": {
@@ -3627,7 +3627,8 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # Main Dates nikalne ka code
-            if spec.get("sheet") == "manual" or str(spec.get("calc", "")).startswith("hr_"):
+            # Main Dates nikalne ka code
+            if spec.get("sheet") == "manual" or spec.get("calc") == "min_stock" or str(spec.get("calc", "")).startswith("hr_"):
                 dates = [datetime.datetime.now(IST).date()]
             elif spec.get("calc") == "lb_stock":
                 dates = [datetime.datetime.now(IST).date()]
