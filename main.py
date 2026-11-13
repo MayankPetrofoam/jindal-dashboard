@@ -1196,9 +1196,18 @@ def pillow_rows(y_df):
 
 
 def pillow_agg(frame):
-    """Bundles = rows ki ginti, lekin agar weight 0 hai toh 0."""
+    """Bundles = rows ki ginti (count), Sheets = SHEET ka sum, Kg = KGS ka sum."""
     if frame.empty:
         return {"bdl": 0, "sheets": 0.0, "kg": 0.0}
+    
+    # Bundles ki ginti karo (jahan bundl no. likha ho)
+    bdl_count = frame["BUNDLES"].astype(str).str.strip().ne("").sum()
+    
+    return {
+        "bdl": int(bdl_count), 
+        "sheets": float(frame["sheet"].sum()), 
+        "kg": float(frame["kg"].sum())
+    }
     
     # Sirf un rows ko ginein jinka weight 0 se zyada hai
     valid_frame = frame[frame["kg"] > 0]
@@ -1267,8 +1276,8 @@ def mattress_card(day):
     # 1. H-Shed aur M-Shed ka Production data (Bundles, Pcs, Weight) Prod. Summary file se
     # H-Shed wali rows (jisme BUNDLES '26-H' se shuru hota hai)
     h = shed_rows(y_df, "H")
-    # M-Shed wali rows (jisme BUNDLES '26-M' se shuru hota hai, aur jo H nahi hain)
-    # Note: Prod. Summary mein M-Shed ke bundles '26-M' se shuru hote hain (agar aisa nahi hai, toh neeche wala logic dekh lein)
+    
+    # M-Shed wali rows (Prod. Summary mein jinke BUNDLES '26-M' se shuru hote hain)
     m_rows = y_df[y_df["BUNDLES"].astype(str).str.upper().str.startswith("26-M", na=False)]
     
     # Dono ko mila dein (H + M)
