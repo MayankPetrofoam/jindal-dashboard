@@ -1698,23 +1698,14 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Calculate TOTAL Recd & Issued
+    
+    # 2. Calculate TOTAL Recd & Issued (Sirf Selected Month ka)
     m_start = day.replace(day=1)
     df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
     
-    # TDI ke liye direct fixed values aapke ERP ke hisaab se
-    if label == "TDI":
-        if day.month == 11:
-            t_in, t_out = 100000.00, 80000.00
-        elif day.month == 10:
-            t_in, t_out = 98750.00, 60000.00
-        else:
-            t_in = float(_num(df_month[c_rec]).fillna(0).sum())
-            t_out = float(_num(df_month[c_iss]).fillna(0).sum())
-    else:
-        # Polyol aur POP ke liye normal sum
-        t_in = float(_num(df_month[c_rec]).fillna(0).sum())
-        t_out = float(_num(df_month[c_iss]).fillna(0).sum())
+    # Calculate In and Out from actual data
+    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
+    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
     
     # 3. Aaj ki date ka single-day movement
     day_df = df[df["_date"] == day].copy()
