@@ -2741,12 +2741,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
-    "min_stock": {
-        "type": "excel",
-        "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=8", 
-        "sheet_name": "Sheet1",
-    },
+"min_stock": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=8", 
+    "sheet_name": "Sheet1",
+    "date_col": "ITEM NAME",  # <--- Ye line add karein
+},
     # D + E shed ka Bdls + Prod
     "bdls_de": {
         "type": "bdls_de",
@@ -2856,13 +2857,13 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
-    "tdi_data": {
-        "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi_v2.xls",
-        "sheet_name": "tdi",
-        "date_col": "Date",
-        "dayfirst": True,
-    },
+"tdi_data": {
+    "type": "excel",
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi_v2.xlsx", # Yahan .xlsx kar diya
+    "sheet_name": "tdi",
+    "date_col": "Date",
+    "dayfirst": True,
+},
     "pop_data": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xls",
