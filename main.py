@@ -2858,7 +2858,7 @@ SHEETS = {
     },
     "tdi_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xls?v=4",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi_v2.xls",
         "sheet_name": "tdi",
         "date_col": "Date",
         "dayfirst": True,
