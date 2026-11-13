@@ -2353,8 +2353,13 @@ def compute_kpi(df, spec, day):
                 min_qty = _num(pd.Series([r["MIN BAL QTY"]])).iloc[0]
                 sts = str(r["STOCK HEALTH"]).strip()
                 
-                val_str = f"Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f} | {sts}"
+                val_str = f"Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f}"
+                if "below" in sts.lower():
+                    val_str += " | ⚠ Low"
+                elif "out" in sts.lower():
+                    val_str += " | ❌ Out"
                 rows.append((itm_name, val_str))
+
                 
             details.append((f"📦 {grp.title()} ({len(grp_df)} items)", rows))
 
@@ -3585,8 +3590,13 @@ def _tiles_html(metrics):
 def _sections_html(sections):
     out = []
     for heading, rows in sections:
-        body = "".join(f'<div class="kpi-row"><span class="kpi-rl">{l}</span><span class="kpi-rv">{v}</span></div>'
-                       for l, v in rows)
+        body = "".join(
+            f'<div class="kpi-row" style="display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 6px;">'
+            f'<span class="kpi-rl" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;" title="{l}">{l}</span>'
+            f'<span class="kpi-rv" style="white-space: nowrap; text-align: right; font-size: 13px;">{v}</span>'
+            f'</div>'
+            for l, v in rows
+        )
         out.append(f'<div class="kpi-sec"><div class="kpi-sec-h">{heading}</div>{body}</div>')
     return "".join(out)
 
