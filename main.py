@@ -1284,14 +1284,12 @@ def mattress_card(day):
     total_kg_mon = a_mon['kg'] + m_kg_mon
     total_kg_all = a_all['kg'] + m_kg_all
 
+    # Agar us din ka weight (KGS) 0 hai, toh Yield ko None rakho (No Data dikhane ke liye)
     dy = None
     if m_df is not None:
-        dy = d_yield(m_df, day, day)
-        if dy is None:
-            available_m_dates = m_df[m_df["_date"] <= day]["_date"]
-            if not available_m_dates.empty:
-                latest_m_date = available_m_dates.max()
-                dy = d_yield(m_df, latest_m_date, latest_m_date)
+        m_day_data = m_df[m_df["_date"] == day]
+        if not m_day_data.empty and m_day_data["kg"].sum() > 0:
+            dy = d_yield(m_df, day, day)
                 
     my = d_yield(m_df, m_start, m_end) if m_df is not None else None
 
