@@ -951,6 +951,10 @@ def _inr(x):
         s = ",".join(parts + [tail])
     return ("-" if n < 0 else "") + "₹" + s
 
+def _inr_cr(x):
+    """Rupees ko Crores mein convert karta hai (e.g. 2344259 -> ₹0.23 Cr)"""
+    crores = x / 10000000
+    return f"₹{crores:,.2f} Cr"
 
 PROD_TYPES = {
     "total":    {"col": None,   "words": [],                        "qty": "SHEET", "unit": "Sheets"},
@@ -2020,7 +2024,7 @@ def compute_kpi(df, spec, day):
                 return {"value": "₹0", "desc": f"Amount is empty in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
 
             return {
-                "value": _inr(total_amt),
+                "value": _inr_cr(total_amt),  # <--- Yahan _inr_cr kar diya
                 "desc": f"Last recorded sale on {day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
                 "color": BLUE
             }
@@ -2040,7 +2044,7 @@ def compute_kpi(df, spec, day):
             total_parties = _num(sub[party_col]).sum() if party_col else 0
 
             return {
-                "value": _inr(total_amt),
+                "value": _inr_cr(total_amt),  # <--- Yahan _inr_cr kar diya
                 "desc": f"Month-to-date | {total_parties:,.0f} Parties",
                 "color": BLUE
             }
