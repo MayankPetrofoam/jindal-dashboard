@@ -2293,27 +2293,27 @@ def compute_kpi(df, spec, day):
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
-        # Columns ke naam clean karein (spaces hatayein aur capital karein)
+        # 1. Columns ke naam clean karein (spaces hatayein aur capital karein)
         df.columns = [str(c).strip().upper() for c in df.columns]
         
-        # Check karein ki zaroori columns hain ya nahi
+        # 2. Check karein ki zaroori columns hain ya nahi
         required = ["ITEM NAME", "STOCK HEALTH", "STOCK GROUP", "MIN BAL QTY", "CURRENT QTY"]
         missing = [c for c in required if c not in df.columns]
         
         if missing:
-            # Agar columns nahi mile, toh error mat dein, balki ek accha sa message dikhayein
+            # Agar columns nahi mile, toh error dikhayein
             return {
                 "value": "Config Error", 
                 "desc": f"Missing Columns: {missing}. Found: {list(df.columns)}", 
                 "color": RED
             }
 
-        # Data clean karein
+        # 3. Data clean karein
         item = df["ITEM NAME"].astype(str).str.strip()
         status = df["STOCK HEALTH"].astype(str).str.strip().str.lower()
         group = df["STOCK GROUP"].astype(str).str.strip()
         
-        # Sirf woh items filter karein jo 'Below minimum' ya 'Out of Stock' hain
+        # 4. Sirf woh items filter karein jo 'Below minimum' ya 'Out of stock' hain
         below = item.ne("") & (status.isin(["below minimum", "out of stock"]))
 
         n_below = int(below.sum())
@@ -2321,11 +2321,11 @@ def compute_kpi(df, spec, day):
         if n_below == 0:
             return {"value": "0 Items", "desc": "Sab items minimum se upar hain", "color": BLUE, "extra": "Healthy Stock"}
 
-        # 1. Card ke liye Top 3 names
+        # 5. Card ke liye Top 3 names
         names = ", ".join(item[below].head(3).tolist())
         by_group = " | ".join(f"{g.title()}: {c}" for g, c in group[below].value_counts().items())
         
-        # 2. View Full Details ke liye list banayein
+        # 6. View Full Details ke liye list banayein
         import html as _html
         esc = lambda x: _html.escape(str(x))
         
@@ -2739,10 +2739,9 @@ SHEETS = {
     },
     "min_stock": {
         "type": "excel",
-        "static": True,  # <-- Yeh batata hai ki date ki zaroorat nahi
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=6", # v=6 kar dein
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=8", 
         "sheet_name": "Sheet1",
-        # "date_col": "STATUS",  <-- Ise hata dein ya comment kar dein
     },
     # D + E shed ka Bdls + Prod
     "bdls_de": {
