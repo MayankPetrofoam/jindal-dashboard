@@ -1196,8 +1196,18 @@ def pillow_rows(y_df):
 
 
 def pillow_agg(frame):
-    """Bundles = rows ki ginti (count), Sheets = SHEET ka sum, Kg = KGS ka sum."""
-    return {"bdl": int(len(frame)), "sheets": float(frame["sheet"].sum()), "kg": float(frame["kg"].sum())}
+    """Bundles = rows ki ginti, lekin agar weight 0 hai toh 0."""
+    if frame.empty:
+        return {"bdl": 0, "sheets": 0.0, "kg": 0.0}
+    
+    # Sirf un rows ko ginein jinka weight 0 se zyada hai
+    valid_frame = frame[frame["kg"] > 0]
+    
+    return {
+        "bdl": int(len(valid_frame)), 
+        "sheets": float(valid_frame["sheet"].sum()), 
+        "kg": float(valid_frame["kg"].sum())
+    }
 
 
 def pillow_txt(a):
@@ -1249,42 +1259,33 @@ def pillow_card(day):
 
 
 def mattress_card(day):
-    """Mattress: yield M-Shed se, production (bundles / sheets / weight) Prod. Summary ke H shed + M-Shed se."""
+    """Mattress: production (bundles / sheets / weight) Prod. Summary se (H+M combined), Yield M-Shed se."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
     
-    # H Shed ka data
+    # 1. H-Shed aur M-Shed ka Production data (Bundles, Pcs, Weight) Prod. Summary file se
+    # H-Shed wali rows (jisme BUNDLES '26-H' se shuru hota hai)
     h = shed_rows(y_df, "H")
+    # M-Shed wali rows (jisme BUNDLES '26-M' se shuru hota hai, aur jo H nahi hain)
+    # Note: Prod. Summary mein M-Shed ke bundles '26-M' se shuru hote hain (agar aisa nahi hai, toh neeche wala logic dekh lein)
+    m_rows = y_df[y_df["BUNDLES"].astype(str).str.upper().str.startswith("26-M", na=False)]
     
-    # M Shed ka data
-    m_df, m_err, _ = get_sheet("m_yield")
-
+    # Dono ko mila dein (H + M)
+    combined_prod = pd.concat([h, m_rows], ignore_index=True)
+    
     m_start, m_end = _month_range(day)
     
-    a_day = pillow_agg(h[h["_date"] == day])
-    a_mon = pillow_agg(h[(h["_date"] >= m_start) & (h["_date"] <= m_end)])
-    a_all = pillow_agg(h)
+    # Din ka production
+    a_day = pillow_agg(combined_prod[combined_prod["_date"] == day])
+    # Mahine ka production
+    a_mon = pillow_agg(combined_prod[(combined_prod["_date"] >= m_start) & (combined_prod["_date"] <= m_end)])
+    # Total production
+    a_all = pillow_agg(combined_prod)
 
-    # M Shed ka weight calculate karo
-    m_kg_day = 0.0
-    m_kg_mon = 0.0
-    m_kg_all = 0.0
-    if m_df is not None:
-        m_sub_day = m_df[m_df["_date"] == day]
-        m_kg_day = float(m_sub_day["kg"].sum()) if not m_sub_day.empty else 0.0
-        
-        m_sub_mon = m_df[(m_df["_date"] >= m_start) & (m_df["_date"] <= m_end)]
-        m_kg_mon = float(m_sub_mon["kg"].sum()) if not m_sub_mon.empty else 0.0
-        
-        m_kg_all = float(m_df["kg"].sum())
-
-    # Total Weight (H + M)
-    total_kg_day = a_day['kg'] + m_kg_day
-    total_kg_mon = a_mon['kg'] + m_kg_mon
-    total_kg_all = a_all['kg'] + m_kg_all
-
-    # Agar us din ka weight (KGS) 0 hai, toh Yield ko None rakho (No Data dikhane ke liye)
+    # 2. Yield M-Shed (4) file se
+    m_df, m_err, _ = get_sheet("m_yield")
+    
     dy = None
     if m_df is not None:
         m_day_data = m_df[m_df["_date"] == day]
@@ -1296,35 +1297,33 @@ def mattress_card(day):
     def ys(r):
         return f"{r['pct']:.2f}%" if r else "no data"
 
-    def rows(a, m_kg, total_kg):
+    def rows(a):
         return [
             ("Bundles", f"{a['bdl']:,}"), 
             ("Sheets", f"{a['sheets']:,.0f}"), 
-            ("H-Shed Weight", f"{a['kg'] / 1000:,.3f} Tons"),     # Kg se Tons
-            ("M-Shed Weight", f"{m_kg / 1000:,.3f} Tons"),         # Kg se Tons
-            ("Total Weight", f"{total_kg / 1000:,.3f} Tons")       # Kg se Tons
+            ("Weight", f"{a['kg'] / 1000:,.3f} Tons")
         ]
 
     details = []
-    if not h.empty:
-        details.append((f"📆 Total ({h['_date'].min():%d-%m-%y} to {h['_date'].max():%d-%m-%y})", 
-                        rows(a_all, m_kg_all, total_kg_all)))
+    if not combined_prod.empty:
+        details.append((f"📆 Total ({combined_prod['_date'].min():%d-%m-%y} to {combined_prod['_date'].max():%d-%m-%y})", 
+                        rows(a_all)))
     if dy:
         details.append((f"⚖ M Shed grade-wise · {day:%d-%m-%y}",
                         [(k.title(), f"{v:,.1f} kg") for k, v in dy["by_item"].items() if v > 0]))
 
     return {
         "value": f"{ys(dy)} Yield | {a_day['bdl']:,} Bdls | {a_day['sheets']:,.0f} Sheets",
-        "desc": "Mattress production (H shed) & yield (M shed)" if m_df is not None
+        "desc": "Mattress production (H + M shed) & yield (M shed)" if m_df is not None
                 else f"⚠ M-Shed yield nahi mili: {m_err}",
         "color": BLUE if m_df is not None else AMBER,
         "metrics": [
             (f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
             (f"{a_day['bdl']:,}", "Bundles"), 
             (f"{a_day['sheets']:,.0f}", "Sheets"),
-            (f"{total_kg_day / 1000:,.3f}", "Total Tons"), # Yahan Kg ko 1000 se divide karke Tons kar diya
+            (f"{a_day['kg'] / 1000:,.3f}", "Total Tons"),
         ],
-        "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon, m_kg_mon, total_kg_mon))],
+        "sections": [(f"🗓 Month {day:%b-%y}", [("Yield", ys(my))] + rows(a_mon))],
         "details": details,
     }
 
