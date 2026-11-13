@@ -2291,19 +2291,60 @@ def compute_kpi(df, spec, day):
         }
 
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
+    # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
-        item = _pcol(df, "ITEM NAME").astype(str).str.strip()
-        status = _pcol(df, "STATUS").astype(str).str.strip().str.lower()
-        group = _pcol(df, "STOCK GROUP").astype(str).str.strip()
-        valid = item != ""
-        below = valid & status.str.startswith("below")
-        n_below, n_all = int(below.sum()), int(valid.sum())
+        # Columns dhoondein
+        item_col = _pcol(df, "ITEM NAME")
+        status_col = _pcol(df, "STOCK HEALTH")
+        group_col = _pcol(df, "STOCK GROUP")
+        min_col = _pcol(df, "MIN BAL QTY")
+        curr_col = _pcol(df, "CURRENT QTY")
+
+        # Data clean karein
+        item = item_col.astype(str).str.strip()
+        status = status_col.astype(str).str.strip().str.lower()
+        group = group_col.astype(str).str.strip()
+        
+        # Sirf woh items filter karein jo 'Below minimum' ya 'Out of Stock' hain
+        below = item.ne("") & (status.isin(["below minimum", "out of stock"]))
+
+        n_below = int(below.sum())
+        
+        # Agar kuch nahi mila toh
+        if n_below == 0:
+            return {"value": "0 Items", "desc": "Sab items minimum se upar hain", "color": BLUE, "extra": "Healthy Stock"}
+
+        # 1. Card ke liye Top 3 names
         names = ", ".join(item[below].head(3).tolist())
         by_group = " | ".join(f"{g.title()}: {c}" for g, c in group[below].value_counts().items())
-        return {"value": f"{n_below} Items",
-                "desc": (names + ("..." if n_below > 3 else "")) if n_below else "Sab items minimum se upar",
-                "color": RED if n_below else BLUE,
-                "extra": f"{by_group} | Total tracked: {n_all}" if n_below else f"Total tracked: {n_all}"}
+        
+        # 2. View Full Details ke liye list banayein
+        import html as _html
+        esc = lambda x: _html.escape(str(x))
+        
+        details = []
+        # Group by Group (e.g., Raw Material, Packing Material)
+        for grp, grp_df in df[below].groupby(group_col):
+            rows = []
+            for _, r in grp_df.iterrows():
+                itm_name = esc(str(r[item_col])[:30])
+                cur_qty = _num(pd.Series([r[curr_col]])).iloc[0]
+                min_qty = _num(pd.Series([r[min_col]])).iloc[0]
+                sts = str(r[status_col]).strip()
+                
+                # Format: Item Name | Current Qty | Min Qty | Status
+                val_str = f"Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f} | {sts}"
+                rows.append((itm_name, val_str))
+                
+            details.append((f"📦 {grp.title()} ({len(grp_df)} items)", rows))
+
+        return {
+            "value": f"{n_below} Items",
+            "desc": names + ("..." if n_below > 3 else ""),
+            "color": RED, # Kyunki stock kam hai
+            "extra": f"{by_group} | Total tracked: {len(item[item.ne('')])}",
+            "details": details
+        }
 
     # ---------- INVENTORY ----------
     if calc == "stock_value":
