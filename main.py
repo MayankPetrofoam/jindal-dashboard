@@ -3726,12 +3726,14 @@ def render_kpi(dept_key, idx, title, desc):
                 _card(slot, title, "No Data Available for This Month", desc, GREY, datetime.date(chosen_m[0], chosen_m[1], 1).strftime("%b-%Y"))
                 return
 
-            # --- PILLOW / FINANCE / FOAMING / SALES: sirf month, date hidden ---
+            # --- PILLOW / FINANCE / FOAMING / SALES / MIN_STOCK: sirf month, date hidden ---
             is_pillow = (spec.get("calc") == "prod_log" and spec.get("type") == "pillow")
             is_finance = str(spec.get("calc", "")).startswith("finance_")
             is_foaming = str(spec.get("calc", "")).startswith("sum_consumption")
+            is_min_stock = (spec.get("calc") == "min_stock")
 
-            hide_date = is_pillow or is_finance or is_foaming or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
+            # Yahan is_min_stock add karna zaroori tha
+            hide_date = is_pillow or is_finance or is_foaming or is_min_stock or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
 
             if hide_date:
                 chosen = month_dates[0]
