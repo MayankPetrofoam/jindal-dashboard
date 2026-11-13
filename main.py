@@ -2293,17 +2293,25 @@ def compute_kpi(df, spec, day):
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
-        # Columns dhoondein
-        item_col = _pcol(df, "ITEM NAME")
-        status_col = _pcol(df, "STOCK HEALTH")
-        group_col = _pcol(df, "STOCK GROUP")
-        min_col = _pcol(df, "MIN BAL QTY")
-        curr_col = _pcol(df, "CURRENT QTY")
+        # Columns ke naam clean karein (spaces hatayein)
+        df.columns = [str(c).strip().upper() for c in df.columns]
+        
+        # Ab exact naam se columns dhoondein
+        item_col = "ITEM NAME"
+        status_col = "STOCK HEALTH"
+        group_col = "STOCK GROUP"
+        min_col = "MIN BAL QTY"
+        curr_col = "CURRENT QTY"
+
+        # Check karein ki sab columns hain ya nahi
+        missing = [c for c in [item_col, status_col, group_col, min_col, curr_col] if c not in df.columns]
+        if missing:
+            return {"value": "Config error", "desc": f"Columns nahi mile: {missing}. Sheet columns: {list(df.columns)}", "color": RED}
 
         # Data clean karein
-        item = item_col.astype(str).str.strip()
-        status = status_col.astype(str).str.strip().str.lower()
-        group = group_col.astype(str).str.strip()
+        item = df[item_col].astype(str).str.strip()
+        status = df[status_col].astype(str).str.strip().str.lower()
+        group = df[group_col].astype(str).str.strip()
         
         # Sirf woh items filter karein jo 'Below minimum' ya 'Out of Stock' hain
         below = item.ne("") & (status.isin(["below minimum", "out of stock"]))
