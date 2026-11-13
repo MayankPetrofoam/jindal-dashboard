@@ -1723,12 +1723,18 @@ def stock_balance_card(df, day, issued_col, label):
 
     return {
         "value": f"{balance:,.2f} Kg",
-        "desc": f"{note} | Today: +{d_in:,.0f} In, -{d_out:,.0f} Out",
+        "desc": f"{note}",
         "color": RED if balance < 0 else BLUE,
-        "sections": [(f"Σ Total {day:%b-%y} (till {day:%d-%m})", [
-            ("Recd (In)", f"{t_in:,.2f} Kg"), 
-            ("Issued (Out)", f"{t_out:,.2f} Kg")
-        ])],
+        "sections": [
+            (f"🗓 Month Total ({day:%b-%y})", [
+                ("Recd (In)", f"{t_in:,.2f} Kg"), 
+                ("Issued (Out)", f"{t_out:,.2f} Kg")
+            ]),
+            (f"📅 Today ({day:%d-%m-%y})", [
+                ("Recd (In)", f"+{d_in:,.0f} Kg"),
+                ("Issued (Out)", f"-{d_out:,.0f} Kg")
+            ])
+        ],
     }
 
 
