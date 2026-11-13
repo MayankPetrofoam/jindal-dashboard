@@ -3060,11 +3060,11 @@ DEPARTMENTS = [
             ("Pending PO", "Awaiting delivery"),
             ("Goods Below MS", "Below minimum stock"),
             ("Purchase Till Date", "Value, month to date"),
-        ],
             ("PO 0-15 Days Old", "Naye pending PO"),
             ("PO 15-30 Days Old", "Pending 15 to 30 days"),
             ("PO 30-60 Days Old", "Pending 30 to 60 days"),
             ("PO 60+ Days Old", "Critical: Pending > 60 days"),
+        ],
         "links": [
             ("📊 Purchase Dashboard (Power BI)", PURCHASE_POWERBI),
             ("📋 PO Tracker (Google Sheets)", PURCHASE_SHEET),
