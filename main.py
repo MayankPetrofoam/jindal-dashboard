@@ -1787,7 +1787,7 @@ def stock_balance_card(df, day, issued_col, label):
     if not c_bal or not c_rec or not c_iss:
         raise DataError(f"{label} sheet mein columns nahi mile.")
 
-    # 1. Selected Date tak ka Balance (Sabse aakhri valid balance)
+    # 1. Selected Date tak ka sabse aakhri sahi Balance
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
@@ -1803,27 +1803,31 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Aaj ki date (Selected Date) ka exact movement
-    day_df = df[df["_date"] == day].copy()
-    if c_typ is not None and not day_df.empty:
-        # Opening balance ko hatao
-        day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+    # 2. Helper function: Sirf us date range ka data uthayega aur OPN. hata dega
+    def calc_sum(start_date, end_date):
+        # Date filter lagao
+        data = df[(df["_date"] >= start_date) & (df["_date"] <= end_date)]
+        if data.empty:
+            return 0.0, 0.0
         
-    d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
-    d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
+        # Opening Balance (OPN.) wali entry ko hatao warna total galat aayega
+        if c_typ is not None:
+            is_opn = data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
+            data = data[~is_opn]
+        
+        # Sirf Recd aur Issued ko sum karo
+        t_in = float(_num(data[c_rec]).fillna(0).sum())
+        t_out = float(_num(data[c_iss]).fillna(0).sum())
+        return t_in, t_out
 
-    # 3. Month Total (Web ERP ke TOTAL column jaisa exact sum)
+    # 3. Selected Date (Today) ka In/Out (Sirf usi din ka)
+    d_in, d_out = calc_sum(day, day)
+
+    # 4. Month Total (Selected Month ki 1st date se Selected Date tak)
     m_start = day.replace(day=1)
-    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
-    
-    # Yahan hum puri month ki Recd aur Issued ko SUM kar rahe hain (Opening ko chhod kar)
-    if c_typ is not None and not df_month.empty:
-        df_month = df_month[~df_month[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
-        
-    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
-    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
+    t_in, t_out = calc_sum(m_start, day)
 
-    # 4. Card Description
+    # 5. Card Description
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
