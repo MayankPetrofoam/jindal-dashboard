@@ -2857,13 +2857,13 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
-"tdi_data": {
-    "type": "excel",
-    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi_v2.xlsx", # Yahan .xlsx kar diya
-    "sheet_name": "tdi",
-    "date_col": "Date",
-    "dayfirst": True,
-},
+    "tdi_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi(1).xlsx?v=9", # <-- Yahan exact naam aur version dala hai
+        "sheet_name": "tdi",
+        "date_col": "Date",
+        "dayfirst": True,
+    },
     "pop_data": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xls",
