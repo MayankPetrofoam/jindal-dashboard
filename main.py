@@ -1787,7 +1787,7 @@ def stock_balance_card(df, day, issued_col, label):
     if not c_bal or not c_rec or not c_iss:
         raise DataError(f"{label} sheet mein columns nahi mile.")
 
-    # 1. Selected Date tak ka sabse aakhri sahi Balance
+    # 1. Selected Date tak ka Balance (Sabse aakhri valid balance)
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
@@ -1803,26 +1803,32 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Data ko filter karo (Selected Month ke 1st din se Selected Date tak)
+    # 2. Web ERP ke TOTAL jaisa exact logic (Sirf 'Recd' aur 'Issued' columns par)
+    # Hum DataFrame ko seedha filter karenge taaki koi row na chhoote.
+    
     m_start = day.replace(day=1)
-    month_data = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
-
-    # Opening Balance (OPN.) wali row ko hatao warna total galat aayega
+    
+    # Sirf month ka data uthao (1 Nov se 11 Nov tak)
+    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
+    
+    # 'OPN.' (Opening) wali entry ko hatao. Web ERP mein 'OPN.' total mein nahi jodta.
     if c_typ is not None:
-        is_opn = month_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
-        month_data = month_data[~is_opn]
+        # Check karo jahan Type mein 'OPN' ya 'Opening' likha hai
+        is_opn = df_month[c_typ].astype(str).str.strip().str.upper().str.contains("OPN|OPEN", na=False)
+        df_month = df_month[~is_opn]
 
-    # Web ERP jaisa EXACT SUM nikaalo (bina kisi row ko chhode)
-    t_in = float(_num(month_data[c_rec]).fillna(0).sum())
-    t_out = float(_num(month_data[c_iss]).fillna(0).sum())
+    # Ab seedha In aur Out nikaalo
+    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
+    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
 
     # 3. Aaj ki date (Today) ka In/Out
-    day_data = df[df["_date"] == day].copy()
+    day_df = df[df["_date"] == day].copy()
     if c_typ is not None:
-        is_opn = day_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
-        day_data = day_data[~is_opn]
-    d_in = float(_num(day_data[c_rec]).fillna(0).sum())
-    d_out = float(_num(day_data[c_iss]).fillna(0).sum())
+        is_opn = day_df[c_typ].astype(str).str.strip().str.upper().str.contains("OPN|OPEN", na=False)
+        day_df = day_df[~is_opn]
+        
+    d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
+    d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
 
     # 4. Card Description
     if last_dt == day:
