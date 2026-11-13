@@ -1803,31 +1803,28 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Helper function: Sirf us date range ka data uthayega aur OPN. hata dega
-    def calc_sum(start_date, end_date):
-        # Date filter lagao
-        data = df[(df["_date"] >= start_date) & (df["_date"] <= end_date)]
-        if data.empty:
-            return 0.0, 0.0
-        
-        # Opening Balance (OPN.) wali entry ko hatao warna total galat aayega
-        if c_typ is not None:
-            is_opn = data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
-            data = data[~is_opn]
-        
-        # Sirf Recd aur Issued ko sum karo
-        t_in = float(_num(data[c_rec]).fillna(0).sum())
-        t_out = float(_num(data[c_iss]).fillna(0).sum())
-        return t_in, t_out
-
-    # 3. Selected Date (Today) ka In/Out (Sirf usi din ka)
-    d_in, d_out = calc_sum(day, day)
-
-    # 4. Month Total (Selected Month ki 1st date se Selected Date tak)
+    # 2. Data ko filter karo (Selected Month ke 1st din se Selected Date tak)
     m_start = day.replace(day=1)
-    t_in, t_out = calc_sum(m_start, day)
+    month_data = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
 
-    # 5. Card Description
+    # Opening Balance (OPN.) wali row ko hatao warna total galat aayega
+    if c_typ is not None:
+        is_opn = month_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
+        month_data = month_data[~is_opn]
+
+    # Web ERP jaisa EXACT SUM nikaalo (bina kisi row ko chhode)
+    t_in = float(_num(month_data[c_rec]).fillna(0).sum())
+    t_out = float(_num(month_data[c_iss]).fillna(0).sum())
+
+    # 3. Aaj ki date (Today) ka In/Out
+    day_data = df[df["_date"] == day].copy()
+    if c_typ is not None:
+        is_opn = day_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
+        day_data = day_data[~is_opn]
+    d_in = float(_num(day_data[c_rec]).fillna(0).sum())
+    d_out = float(_num(day_data[c_iss]).fillna(0).sum())
+
+    # 4. Card Description
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
