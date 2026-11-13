@@ -2293,32 +2293,31 @@ def compute_kpi(df, spec, day):
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     # ---------- PURCHASE: GOODS BELOW MIN STOCK ----------
     if calc == "min_stock":
-        # Columns ke naam clean karein (spaces hatayein)
+        # Columns ke naam clean karein (spaces hatayein aur capital karein)
         df.columns = [str(c).strip().upper() for c in df.columns]
         
-        # Ab exact naam se columns dhoondein
-        item_col = "ITEM NAME"
-        status_col = "STOCK HEALTH"
-        group_col = "STOCK GROUP"
-        min_col = "MIN BAL QTY"
-        curr_col = "CURRENT QTY"
-
-        # Check karein ki sab columns hain ya nahi
-        missing = [c for c in [item_col, status_col, group_col, min_col, curr_col] if c not in df.columns]
+        # Check karein ki zaroori columns hain ya nahi
+        required = ["ITEM NAME", "STOCK HEALTH", "STOCK GROUP", "MIN BAL QTY", "CURRENT QTY"]
+        missing = [c for c in required if c not in df.columns]
+        
         if missing:
-            return {"value": "Config error", "desc": f"Columns nahi mile: {missing}. Sheet columns: {list(df.columns)}", "color": RED}
+            # Agar columns nahi mile, toh error mat dein, balki ek accha sa message dikhayein
+            return {
+                "value": "Config Error", 
+                "desc": f"Missing Columns: {missing}. Found: {list(df.columns)}", 
+                "color": RED
+            }
 
         # Data clean karein
-        item = df[item_col].astype(str).str.strip()
-        status = df[status_col].astype(str).str.strip().str.lower()
-        group = df[group_col].astype(str).str.strip()
+        item = df["ITEM NAME"].astype(str).str.strip()
+        status = df["STOCK HEALTH"].astype(str).str.strip().str.lower()
+        group = df["STOCK GROUP"].astype(str).str.strip()
         
         # Sirf woh items filter karein jo 'Below minimum' ya 'Out of Stock' hain
         below = item.ne("") & (status.isin(["below minimum", "out of stock"]))
 
         n_below = int(below.sum())
         
-        # Agar kuch nahi mila toh
         if n_below == 0:
             return {"value": "0 Items", "desc": "Sab items minimum se upar hain", "color": BLUE, "extra": "Healthy Stock"}
 
@@ -2331,16 +2330,14 @@ def compute_kpi(df, spec, day):
         esc = lambda x: _html.escape(str(x))
         
         details = []
-        # Group by Group (e.g., Raw Material, Packing Material)
-        for grp, grp_df in df[below].groupby(group_col):
+        for grp, grp_df in df[below].groupby("STOCK GROUP"):
             rows = []
             for _, r in grp_df.iterrows():
-                itm_name = esc(str(r[item_col])[:30])
-                cur_qty = _num(pd.Series([r[curr_col]])).iloc[0]
-                min_qty = _num(pd.Series([r[min_col]])).iloc[0]
-                sts = str(r[status_col]).strip()
+                itm_name = esc(str(r["ITEM NAME"])[:30])
+                cur_qty = _num(pd.Series([r["CURRENT QTY"]])).iloc[0]
+                min_qty = _num(pd.Series([r["MIN BAL QTY"]])).iloc[0]
+                sts = str(r["STOCK HEALTH"]).strip()
                 
-                # Format: Item Name | Current Qty | Min Qty | Status
                 val_str = f"Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f} | {sts}"
                 rows.append((itm_name, val_str))
                 
@@ -2349,7 +2346,7 @@ def compute_kpi(df, spec, day):
         return {
             "value": f"{n_below} Items",
             "desc": names + ("..." if n_below > 3 else ""),
-            "color": RED, # Kyunki stock kam hai
+            "color": RED,
             "extra": f"{by_group} | Total tracked: {len(item[item.ne('')])}",
             "details": details
         }
@@ -2743,7 +2740,7 @@ SHEETS = {
     "min_stock": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Stock%20Minimum%20Balance%20(2).xlsx?v=3",
         "sheet_name": "Sheet1",
         "date_col": "STATUS",
     },
