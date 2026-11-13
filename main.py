@@ -1787,7 +1787,7 @@ def stock_balance_card(df, day, issued_col, label):
     if not c_bal or not c_rec or not c_iss:
         raise DataError(f"{label} sheet mein columns nahi mile.")
 
-    # 1. Balance as on selected date (Sabse aakhri valid balance jo 0 se zyada ho)
+    # 1. Selected Date tak ka Balance (Sabse aakhri valid balance)
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
@@ -1803,19 +1803,20 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Calculate TOTAL Recd & Issued (Sirf Selected Date ka exact data)
+    # 2. Aaj ki date (Selected Date) ka exact movement
     day_df = df[df["_date"] == day].copy()
-    
-    # Opening balance wali row ko hatao, warna galti se uski qty In/Out mein jud jayegi
     if c_typ is not None and not day_df.empty:
+        # Opening balance ko hatao
         day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
         
     d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
     d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
 
-    # 3. Month Total (Agar aap month ka total dikhana chahte hain toh ye rahega)
+    # 3. Month Total (Web ERP ke TOTAL column jaisa exact sum)
     m_start = day.replace(day=1)
     df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
+    
+    # Yahan hum puri month ki Recd aur Issued ko SUM kar rahe hain (Opening ko chhod kar)
     if c_typ is not None and not df_month.empty:
         df_month = df_month[~df_month[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
         
