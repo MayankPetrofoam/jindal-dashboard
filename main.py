@@ -1787,33 +1787,40 @@ def stock_balance_card(df, day, issued_col, label):
     if not c_bal or not c_rec or not c_iss:
         raise DataError(f"{label} sheet mein columns nahi mile.")
 
-    # 1. Find Balance as on selected date (last entry up to that date)
+    # 1. Balance as on selected date (Sabse aakhri valid balance jo 0 se zyada ho)
     sub = df[df["_date"] <= day].copy()
     sub["_b"] = _num(sub[c_bal])
     sub = sub[sub["_b"].notna()]
     if sub.empty:
         return None
         
-    last = sub.iloc[-1]
+    valid_bal_rows = sub[sub["_b"] > 0]
+    if not valid_bal_rows.empty:
+        last = valid_bal_rows.iloc[-1]
+    else:
+        last = sub.iloc[-1]
+        
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    
-    # 2. Calculate TOTAL Recd & Issued (Sirf Selected Month ka)
-    m_start = day.replace(day=1)
-    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
-    
-    # Calculate In and Out from actual data
-    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
-    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
-    
-    # 3. Aaj ki date ka single-day movement
+    # 2. Calculate TOTAL Recd & Issued (Sirf Selected Date ka exact data)
     day_df = df[df["_date"] == day].copy()
+    
+    # Opening balance wali row ko hatao, warna galti se uski qty In/Out mein jud jayegi
     if c_typ is not None and not day_df.empty:
         day_df = day_df[~day_df[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
         
     d_in = float(_num(day_df[c_rec]).fillna(0).sum()) if not day_df.empty else 0.0
     d_out = float(_num(day_df[c_iss]).fillna(0).sum()) if not day_df.empty else 0.0
+
+    # 3. Month Total (Agar aap month ka total dikhana chahte hain toh ye rahega)
+    m_start = day.replace(day=1)
+    df_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
+    if c_typ is not None and not df_month.empty:
+        df_month = df_month[~df_month[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")]
+        
+    t_in = float(_num(df_month[c_rec]).fillna(0).sum())
+    t_out = float(_num(df_month[c_iss]).fillna(0).sum())
 
     # 4. Card Description
     if last_dt == day:
