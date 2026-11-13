@@ -2662,9 +2662,9 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
-        "tdi_data": {
+    "tdi_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xls",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xls?v=2",
         "sheet_name": "tdi",
         "date_col": "Date",
         "dayfirst": True,
