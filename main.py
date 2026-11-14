@@ -3733,13 +3733,13 @@ def _sections_html(sections):
     out = []
     for heading, rows in sections:
         body = "".join(
-            f'<div class="kpi-row" style="display: flex; justify-content: space-between; align-items: center; gap: 15px; margin-bottom: 6px;">'
-            f'<span class="kpi-rl" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%;" title="{l}">{l}</span>'
-            f'<span class="kpi-rv" style="white-space: nowrap; text-align: right; font-size: 13px;">{v}</span>'
+            f'<div class="kpi-row" style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #E2E8F0;">'
+            f'<span class="kpi-rl" style="font-size: 13px; font-weight: 700; color: #334155; white-space: normal; text-align: left; line-height: 1.3;">{l}</span>'
+            f'<span class="kpi-rv" style="font-size: 13px; font-weight: 800; color: #0F172A; text-align: left; line-height: 1.2;">{v}</span>'
             f'</div>'
             for l, v in rows
         )
-        out.append(f'<div class="kpi-sec"><div class="kpi-sec-h">{heading}</div>{body}</div>')
+        out.append(f'<div class="kpi-sec"><div class="kpi-sec-h" style="margin-bottom: 6px;">{heading}</div>{body}</div>')
     return "".join(out)
 
 
