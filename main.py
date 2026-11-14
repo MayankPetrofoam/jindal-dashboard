@@ -140,6 +140,23 @@ st.markdown(
     div[data-testid="stExpander"] summary { padding: 4px 8px !important; }
     div[data-testid="stExpander"] summary p { font-size: 14px !important; font-weight: 800 !important; color: #1E3A8A; }
     .kpi-wrap { padding-bottom: 4px; }
+    /* 4 cards wali line mein dropdowns ko chhota karne ke liye */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+        min-height: 32px !important;
+        font-size: 13px !important;
+        padding-left: 4px !important;
+        padding-right: 0px !important;
+    }
+    div[data-testid="stSelectbox"] label {
+        font-size: 11px !important;
+    }
+    /* Date Input ko chhota karne ke liye */
+    div[data-testid="stDateInput"] { 
+        width: 100% !important; 
+    }
+    div[data-testid="stDateInput"] input { 
+        font-size: 13px !important; 
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -3968,10 +3985,10 @@ def render_department(dept):
         per_row = 4 if dept["key"] == "production" else KPI_PER_ROW
         
         for start in range(0, len(kpis), per_row):
+            # Yahan gap="small" kiya hai taaki 4 cards mein space bache
             cols = st.columns(per_row, gap="small")
             for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
-                    # Har column ko same height stretch karne ke liye
                     with st.container():
                         render_kpi(dept["key"], start + offset, title, desc)
 
