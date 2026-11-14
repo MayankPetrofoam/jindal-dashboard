@@ -1244,15 +1244,50 @@ def _month_range(day):
     m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
     return m_start, m_end
 
+def mould_card(day):
+    """Mould (J Shed): selected date, month aur total production (Bundles, Sheets, Weight)."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    
+    # Sirf J Shed (Bundles '26-J' se shuru hone wale)
+    b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
+    m_rows = y_df[b.str.match(r"^\d{2}-J")]
+    
+    if m_rows.empty:
+        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-J mould row nahi mili", "color": GREY}
+
+    m_start, m_end = _month_range(day)
+    d_day = pillow_agg(m_rows[m_rows["_date"] == day])
+    d_mon = pillow_agg(m_rows[(m_rows["_date"] >= m_start) & (m_rows["_date"] <= m_end)])
+    d_all = pillow_agg(m_rows)
+    first, last = m_rows["_date"].min(), m_rows["_date"].max()
+
+    def rows(a):
+        return [("Bundles", f"{a['bdl']:,}"), ("Pcs", f"{a['sheets']:,.0f}"), ("Weight", f"{a['kg']:,.1f} Kg")]
+
+    return {
+        "value": f"{d_day['bdl']:,} Bdls | {d_day['sheets']:,.0f} Pcs | {d_day['kg']:,.1f} Kg",
+        "desc": "Mould production (J Shed)",
+        "color": BLUE,
+        "metrics": [(f"{d_day['bdl']:,}", "Bundles"), (f"{d_day['sheets']:,.0f}", "Pcs"), (f"{d_day['kg']:,.1f}", "Kg")],
+        "sections": [(f"🗓 Month {day:%b-%y}", rows(d_mon))],
+        "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
+    }
+
+
 
 def pillow_card(day):
     """Pillow button: selected date, selected month aur total (April se last date tak)."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
-    p = pillow_rows(y_df)
+    # Sirf K Shed (Bundles '26-K' se shuru hone wale) filter karein
+    b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
+    p = y_df[b.str.match(r"^\d{2}-K")]
+    
     if p.empty:
-        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-J pillow row nahi mili", "color": GREY}
+        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-K pillow row nahi mili", "color": GREY}
 
     m_start, m_end = _month_range(day)
     d_day = pillow_agg(p[p["_date"] == day])
@@ -1861,6 +1896,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: PILLOW (J shed, Prod. Summary se) ----------
     if calc == "pillow_sum":
         return pillow_card(day)
+    # ---------- PRODUCTION: MOULD (J shed) ----------
+    if calc == "mould_sum":
+        return mould_card(day)
 
     # ---------- PRODUCTION: MATTRESS (H shed production + M-Shed yield) ----------
     if calc == "mattress_sum":
@@ -2989,6 +3027,7 @@ KPI_SOURCES = {
     ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
     ("production", "Mattress & Yield"):  {"sheet": "prod_summary", "calc": "mattress_sum"},
     ("production", "Pillow & Yield"):    {"sheet": "prod_summary", "calc": "pillow_sum"},
+    ("production", "Mould"), {"sheet": "prod_summary", "calc": "mould_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
 
     # <<< FREIGHT DATA SOURCE >>>
@@ -3137,6 +3176,7 @@ DEPARTMENTS = [
             ("Rolls & Yield", "Roll production"),
             ("Mattress & Yield", "Mattress production"),
             ("Pillow & Yield", "Pillow production"),
+            ("Mould", "Mould production (J Shed)"),
             ("Rollpack & Yield", "Rollpack production"),
         ],
         "links": [
@@ -3697,9 +3737,17 @@ def render_kpi(dept_key, idx, title, desc):
                     _tt = _td[(_td["chem"] == "GRAND TOTAL") & (_td["kg"] > 0)]
                     dates = sorted(set(dates) | set(_tt["_date"].dropna().unique()), reverse=True)
 
-            # PILLOW: dates sirf wo jin din J shed pillow bana (Prod. Summary se)
+            # PILLOW: dates sirf wo jin din K shed pillow bana
             if spec.get("calc") == "pillow_sum":
-                _p = pillow_rows(df)
+                b = df["BUNDLES"].astype(str).str.strip().str.upper()
+                _p = df[b.str.match(r"^\d{2}-K")]
+                if not _p.empty:
+                    dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            
+            # MOULD: dates sirf wo jin din J shed bana
+            if spec.get("calc") == "mould_sum":
+                b = df["BUNDLES"].astype(str).str.strip().str.upper()
+                _p = df[b.str.match(r"^\d{2}-J")]
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
