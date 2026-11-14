@@ -3919,7 +3919,7 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # Main Dates nikalne ka code
-            if spec.get("sheet") in ["manual", "purchase_excel"] or spec.get("calc") == "min_stock" or str(spec.get("calc", "")).startswith("hr_"):
+            if spec.get("sheet") == "manual" or spec.get("calc") == "min_stock" or str(spec.get("calc", "")).startswith("hr_"):
                 dates = [datetime.datetime.now(IST).date()]
             elif spec.get("calc") == "lb_stock":
                 dates = [datetime.datetime.now(IST).date()]
