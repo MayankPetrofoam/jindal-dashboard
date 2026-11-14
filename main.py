@@ -75,6 +75,12 @@ st.markdown(
                 max-height: 6em; overflow: hidden; }
     .kpi-extra { font-size: 14px; font-weight: 700; color: #0F172A; line-height: 1.4; margin-top: 6px; }
 
+    /* Cards ki height fix karne ke liye */
+    div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlockBorderWrapper"] {
+        min-height: 420px !important;
+        display: flex;
+        flex-direction: column;
+    }
     /* metric tiles: bade number + chhota label */
     .kpi-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px 0; }
     .kpi-tile  { flex: 1 1 88px; background: #F1F5F9; border-radius: 10px; padding: 6px 8px;
@@ -3677,7 +3683,7 @@ def get_sheet(name):
 # ====================================================================
 # 9. RENDER HELPERS
 # ====================================================================
-KPI_PER_ROW = 3
+KPI_PER_ROW = 4
 
 
 def _tiles_html(metrics):
@@ -3940,9 +3946,13 @@ def render_department(dept):
     with st.container(border=True):
         render_department_button(dept)
         kpis = dept["kpis"]
-        for start in range(0, len(kpis), KPI_PER_ROW):
-            cols = st.columns(KPI_PER_ROW)
-            for offset, (title, desc) in enumerate(kpis[start:start + KPI_PER_ROW]):
+        
+        # PRODUCTION ke liye 4 cards ek line mein, baaki sabke liye 3
+        per_row = 4 if dept["key"] == "production" else KPI_PER_ROW
+        
+        for start in range(0, len(kpis), per_row):
+            cols = st.columns(per_row) # Yahan per_row use kiya
+            for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
                     render_kpi(dept["key"], start + offset, title, desc)
 
