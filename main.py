@@ -2065,7 +2065,7 @@ def compute_kpi(df, spec, day):
     if calc == "mattress_sum":
         return mattress_card(day)
 
-    # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
+# ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
         ptype = spec.get("type")
 
@@ -3208,7 +3208,7 @@ KPI_SOURCES = {
     ("purchase", "PO 60+ Days Old"):   {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_60_plus"},
     ("purchase", "Goods Below MS"): {"sheet": "min_stock", "calc": "min_stock"},
     ("purchase", "Purchase Till Date"): {
-        "sheet": "purchase_po",
+        "sheet": "purchase_excel",  # <-- Purana "purchase_po" hata kar yeh likhein
         "mode": "month",
         "date_label": "month to",
         "calc": "purchase_mtd",
