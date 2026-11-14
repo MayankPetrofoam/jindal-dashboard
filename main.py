@@ -2638,30 +2638,34 @@ def compute_kpi(df, spec, day):
                 sub = sub[sub[c].astype(str).str.strip() == str(val).strip()]
 
         count = len(sub)
+        
+        # --- Machine details, Issue aur Month wise Total ---
+        details = []
+        if count > 0:
+            # 1. Din ki detail list (Machine + Issue)
+            day_list = []
+            for _, r in sub.iterrows():
+                machine = str(r.get("Machine Name", "Unknown")).strip()
+                issue = str(r.get("Issue Description", "No issue mentioned")).strip()
+                day_list.append((f"⚙ {machine}", f"❌ {issue}"))
+            
+            details.append((f"📋 {day.strftime('%d-%b-%Y')} Breakdowns", day_list))
+
+            # 2. Month ka Total (1st date se aaj tak)
+            m_start = day.replace(day=1)
+            month_data = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
+            for c, val in where.items():
+                if c in month_data.columns:
+                    month_data = month_data[month_data[c].astype(str).str.strip() == str(val).strip()]
+            
+            m_count = len(month_data)
+            details.append((f"🗓 Month Total ({day:%b-%y})", [("Total Breakdowns", f"{m_count} Machines")]))
+
         return {
             "value": f"{count} Machines",
             "desc": "Currently under breakdown / repair",
-            "color": RED if count > 0 else BLUE
-        }
-
-    if calc == "maintenance_pct":
-        sub = df[df["_date"] <= day]
-        if sub.empty:
-            return {"value": "0%", "desc": "No maintenance records", "color": GREY}
-
-        res_col = next((c for c in sub.columns if "RESOLVED" in str(c).upper()), None)
-        if not res_col:
-            return {"value": "No Column", "desc": "Issue Resolved column not found", "color": GREY}
-
-        total = len(sub)
-        resolved = sub[res_col].astype(str).str.strip().str.lower().isin(["yes", "y", "resolved", "done", "true"]).sum()
-
-        pct = (resolved / total) * 100 if total > 0 else 0
-
-        return {
-            "value": f"{pct:.1f}%",
-            "desc": f"{resolved} Resolved / {total} Total Breakdowns",
-            "color": BLUE if pct > 80 else AMBER
+            "color": RED if count > 0 else BLUE,
+            "details": details
         }
 
     # ---------- PRODUCTION: BDLS (D + E Shed) ----------
