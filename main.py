@@ -2708,25 +2708,32 @@ def compute_kpi(df, spec, day):
             t = t[t["pending"] > 0].sort_values("pending", ascending=False)
             
             # UoM (KGS/MTR/PCS) ki jagah Item Description (Polyol, TDI, etc.) ke hisaab se group karenge
-            if not t.empty:
-                # Item wise total pending nikalna
-                item_summary = t.groupby("Item")["pending"].sum().sort_values(ascending=False)
-                
-                # Card ki description line
-                top_items = " | ".join(f"{k.title()}: {v:,.0f}" for k, v in item_summary.head(4).items())
-                if len(item_summary) > 4:
-                    top_items += " ..."
-                
-                total_txt = f"<b>Pending Summary:</b><br>{top_items}"
-                
-                # Popup details mein list
-                details.append((f"📋 Item-wise Pending (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", 
-                    [(esc(str(k).title()), f"{v:,.0f}") for k, v in item_summary.items()]))
-                
-                # Niche puri list bhi dikha sakte hain
-                details.append((f"📄 Detailed PO List ({day:%d-%m-%y})", [
-                    (f"PO {esc(r_.PO)}", f"{esc(str(r_.Item)[:26])} · {r_.pending:,.0f}")
-                    for r_ in t.itertuples()]))
+        if not t.empty:
+            # Item wise total pending nikalna
+            item_summary = t.groupby("Item")["pending"].sum().sort_values(ascending=False)
+            
+            # NAYA LOGIC: Sirf specific items ko upar dikhane ke liye filter karein
+            allowed_keywords = ["POLYOL", "TDI", "POLYMER"]
+            
+            # Agar upar wale item summary mein wo items hain, toh unhe alag nikaalein
+            filtered_items = item_summary[
+                item_summary.index.str.upper().str.contains("|".join(allowed_keywords), na=False)
+            ]
+            
+            # Card ki description line (Sirf filtered items)
+            top_items = " | ".join(f"{k.title()}: {v:,.0f}" for k, v in filtered_items.items())
+            
+            # View Details wali list ke liye (Yahan sab kuch aayega jaise pehle aa raha tha)
+            total_txt = f"<b>Pending Summary:</b><br>{top_items}"
+            
+            # Popup details mein list (Yahan hum purana item_summary hi use karenge taaki baaki items bhi dikhein)
+            details.append((f"📋 Item-wise Pending (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", 
+                [(esc(str(k).title()), f"{v:,.0f}") for k, v in item_summary.items()]))
+            
+            # Niche puri list bhi dikha sakte hain
+            details.append((f"📄 Detailed PO List ({day:%d-%m-%y})", [
+                (f"PO {esc(r_.PO)}", f"{esc(str(r_.Item)[:26])} · {r_.pending:,.0f}")
+                for r_ in t.itertuples()]))
         else:
             return {"value": "0 POs", "desc": "No pending POs found", "color": GREY, "extra": "No data"}
                     
