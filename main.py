@@ -1141,7 +1141,7 @@ def _fetch_yield_cached(url, sheet_name):
     item_col = pick("ITEM NAME", "ITEM", "NAME")
     # Yahan 'KGS' ko priority do
     kg_col = pick("KGS", "KGS", "KG", "WEIGHT") 
-    bdl_col = pick("BUNDLES", "BUNDLE", "BDL")
+    bdl_col = pick("BUNDLE_NO", "BUNDLES", "BUNDLE", "BDL")
     sheet_col = pick("SHEET", "SHEET")
     if not all([date_col, item_col, kg_col]):
         raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS). Mile hue: {list(raw.columns)}")
@@ -1300,7 +1300,7 @@ def pillow_card(day):
 
     return {
         "value": pillow_txt(d_day),
-        "desc": "Pillow production (J + K shed)",
+        "desc": "Pillow production (K Shed only)",
         "color": BLUE,
         "metrics": [(f"{d_day['bdl']:,}", "Bundles"), (f"{d_day['sheets']:,.0f}", "Sheets"),
                     (f"{d_day['kg']:,.1f}", "Kg")],
