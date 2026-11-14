@@ -4060,7 +4060,7 @@ def render_department(dept):
         
         for start in range(0, len(kpis), per_row):
             # Yahan gap="small" kiya hai taaki 4 cards mein space bache
-cols = st.columns(per_row, gap="small", vertical_alignment="top")
+            cols = st.columns(per_row, gap="small", vertical_alignment="top")
             for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
                     with st.container():
