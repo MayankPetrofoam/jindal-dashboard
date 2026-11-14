@@ -1121,17 +1121,19 @@ def _fetch_yield_cached(url, sheet_name):
         xl = pd.ExcelFile(src, engine="openpyxl")
         tab = sheet_name if sheet_name in xl.sheet_names else ("DATA" if "DATA" in xl.sheet_names else xl.sheet_names[0])
         raw = xl.parse(tab, dtype=object)
+    
+    # Headers ko clean karein (BUNDLES, KGS, DATE etc.)
     raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw.columns]
 
     def pick(exact, *contains):
         # 1. Exact match
         if exact in raw.columns:
             return exact
-        # 2. Case-insensitive exact match (KGS == KGS)
+        # 2. Case-insensitive exact match 
         for c in raw.columns:
             if str(c).strip().upper() == exact.upper():
                 return c
-        # 3. Contains match (agar KGS kahin beech mein ho)
+        # 3. Contains match (agar kahin beech mein ho)
         for c in raw.columns:
             if any(str(w).upper() in str(c).upper() for w in contains):
                 return c
@@ -1139,12 +1141,13 @@ def _fetch_yield_cached(url, sheet_name):
 
     date_col = pick("DATE", "DATE")
     item_col = pick("ITEM NAME", "ITEM", "NAME")
-    # Yahan 'KGS' ko priority do
     kg_col = pick("KGS", "KGS", "KG", "WEIGHT") 
-    bdl_col = pick("BUNDLE_NO", "BUNDLES", "BUNDLE", "BDL")
+    # Yahan BUNDLES ko pehle dhoondhega, phir BUNDLE_NO
+    bdl_col = pick("BUNDLES", "BUNDLE_NO", "BUNDLE", "BDL")
     sheet_col = pick("SHEET", "SHEET")
-    if not all([date_col, item_col, kg_col]):
-        raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS). Mile hue: {list(raw.columns)}")
+    
+    if not all([date_col, item_col, kg_col, bdl_col]):
+        raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS / BUNDLES). Mile hue: {list(raw.columns)}")
 
     txt = raw[date_col].astype(str).str.strip()
     d = pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
