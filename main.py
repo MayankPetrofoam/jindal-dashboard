@@ -2751,34 +2751,47 @@ def compute_kpi(df, spec, day):
                 "color": None, "extra": total_txt}
 
     # ---------- PURCHASE: PURCHASE TILL DATE ----------
-    # ---------- PURCHASE: PURCHASE TILL DATE ----------
     if calc == "purchase_mtd":
-        basis = spec.get("basis", "received")
-        r = purchase_mtd(df, day, spec.get("columns"), basis)
-        r_all = purchase_mtd(df, day, spec.get("columns"), basis, all_time=True)
+        # Aapki sheet mein 'Date' column hai, usko parse karein
+        df["_date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce").dt.date
         
-        extra = f"Total (all dates): {_inr(r_all['value'])}" if r_all else None
-        if r is None:
-            return {"value": "₹0", "desc": "No purchase this month", "color": None, "extra": extra}
+        # 1. Month ka data (1st date se selected date tak)
+        m_start = day.replace(day=1)
+        sub_month = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
         
-        # Yahan card ke liye metrics (Day aur Month ke Bill Amount) set karein
+        # 2. Day ka data (sirf selected date)
+        sub_day = df[df["_date"] == day]
+        
+        # 3. Total data (All time)
+        sub_all = df[df["_date"] <= day]
+
+        if sub_month.empty:
+            return {"value": "₹0", "desc": "No purchase this month", "color": None}
+
+        # Bill Amount nikalne ka function
+        def get_bill_amt(sub_df):
+            if sub_df.empty: return 0.0
+            if "Bill Amount" in sub_df.columns:
+                return float(_num(sub_df["Bill Amount"]).sum())
+            return 0.0
+
+        day_amt = get_bill_amt(sub_day)
+        month_amt = get_bill_amt(sub_month)
+        total_amt = get_bill_amt(sub_all)
+
+        # Card ke upar 3 Tiles (Day, Month, Total)
         metrics = [
-            (f"{r['bill_amt']:,.0f}", f"Day Bill Amt ({day.strftime('%d-%m')})"),
-            (f"{r_all['bill_amt']:,.0f}", f"Month Bill Amt ({day.strftime('%b-%y')})")
+            (f"{day_amt:,.0f}", f"Day Bill Amt ({day.strftime('%d-%m')})"),
+            (f"{month_amt:,.0f}", f"Month Bill Amt ({day.strftime('%b-%y')})"),
+            (f"{total_amt:,.0f}", "Total Bill Amt")
         ]
 
-        out = {
-            "value": _inr(r["value"]), 
-            "desc": None, 
-            "color": None, 
-            "extra": extra,
-            "metrics": metrics  # <-- Ye line add karein taaki tiles card mein dikhein
+        return {
+            "value": _inr(month_amt),  # Bada text Month amount dikhayega
+            "desc": "Purchase Summary", 
+            "color": BLUE, 
+            "metrics": metrics
         }
-        
-        if r["warn_items"]:
-            out["desc"] = "⚠ mixed-currency rates: " + ", ".join(r["warn_items"][:3])
-            out["color"] = AMBER
-        return out
 
     # ---------- HR ----------
     if calc in ("hr_manpower", "hr_overtime", "hr_dept"):
@@ -2946,6 +2959,13 @@ SHEETS = {
                 "UoM", "PO Qty", "PO Rate"],   # copied down onto the invoice rows below
         "extra_date_cols": ["Recd Date"],        # receipt dates also appear in the date dropdown
         "ignore_cols": ["Status"],               # dropdown-only column (not used to detect blank rows)
+    },
+    "purchase_excel": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/purchase.xlsx", # <-- .csv ki jagah .xlsx kar diya
+        "sheet_name": "purchase", # <-- Yeh wahi tab ka naam hai jo screenshot mein neeche highlight hai (purchase)
+        "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
+        "dayfirst": True, 
     },
     "sales_report": {
         "type": "excel",
@@ -3899,8 +3919,7 @@ def render_kpi(dept_key, idx, title, desc):
                 return
 
             # Main Dates nikalne ka code
-            # Main Dates nikalne ka code
-            if spec.get("sheet") == "manual" or spec.get("calc") == "min_stock" or str(spec.get("calc", "")).startswith("hr_"):
+            if spec.get("sheet") in ["manual", "purchase_excel"] or spec.get("calc") == "min_stock" or str(spec.get("calc", "")).startswith("hr_"):
                 dates = [datetime.datetime.now(IST).date()]
             elif spec.get("calc") == "lb_stock":
                 dates = [datetime.datetime.now(IST).date()]
