@@ -2319,7 +2319,6 @@ def compute_kpi(df, spec, day):
         missing = [c for c in required if c not in df.columns]
         
         if missing:
-            # Agar columns nahi mile, toh error dikhayein
             return {
                 "value": "Config Error", 
                 "desc": f"Missing Columns: {missing}. Found: {list(df.columns)}", 
@@ -2343,7 +2342,7 @@ def compute_kpi(df, spec, day):
         names = ", ".join(item[below].head(3).tolist())
         by_group = " | ".join(f"{g.title()}: {c}" for g, c in group[below].value_counts().items())
         
-        # 6. View Full Details ke liye list banayein
+        # 6. View Full Details ke liye list banayein (Bold aur Saaf format mein)
         import html as _html
         esc = lambda x: _html.escape(str(x))
         
@@ -2351,18 +2350,23 @@ def compute_kpi(df, spec, day):
         for grp, grp_df in df[below].groupby("STOCK GROUP"):
             rows = []
             for _, r in grp_df.iterrows():
-                itm_name = esc(str(r["ITEM NAME"])[:30])
+                itm_name = esc(str(r["ITEM NAME"])[:35])
+                
+                # Numbers nikalna
                 cur_qty = _num(pd.Series([r["CURRENT QTY"]])).iloc[0]
                 min_qty = _num(pd.Series([r["MIN BAL QTY"]])).iloc[0]
-                sts = str(r["STOCK HEALTH"]).strip()
+                sts = str(r["STOCK HEALTH"]).strip().lower()
                 
-                val_str = f"Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f}"
-                if "below" in sts.lower():
-                    val_str += " | ⚠ Low"
-                elif "out" in sts.lower():
-                    val_str += " | ❌ Out"
-                rows.append((itm_name, val_str))
-
+                # Status text aur color decide karna
+                if "out" in sts:
+                    sts_html = '<span style="color:#dc2626; font-weight:800;">❌ Out</span>'
+                else:
+                    sts_html = '<span style="color:#b45309; font-weight:800;">⚠ Low</span>'
+                
+                # Item Name (Bold) aur uske niche quantity (choti font mein)
+                left_side = f"<b style='font-size:14px;'>{itm_name}</b><br><span style='font-size:12px; color:#64748B;'>Cur: {cur_qty:,.0f} | Min: {min_qty:,.0f}</span>"
+                
+                rows.append((left_side, sts_html))
                 
             details.append((f"📦 {grp.title()} ({len(grp_df)} items)", rows))
 
