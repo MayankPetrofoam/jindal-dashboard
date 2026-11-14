@@ -2712,21 +2712,20 @@ def compute_kpi(df, spec, day):
             # Item wise total pending nikalna
             item_summary = t.groupby("Item")["pending"].sum().sort_values(ascending=False)
             
-            # NAYA LOGIC: Sirf specific items ko upar dikhane ke liye filter karein
+            # NAYA LOGIC: Sirf specific items (TDI, POLYOL, POLYMER) ko strictly filter karein
             allowed_keywords = ["POLYOL", "TDI", "POLYMER"]
             
-            # Agar upar wale item summary mein wo items hain, toh unhe alag nikaalein
             filtered_items = item_summary[
                 item_summary.index.str.upper().str.contains("|".join(allowed_keywords), na=False)
             ]
             
-            # Card ki description line (Sirf filtered items)
-            top_items = " | ".join(f"{k.title()}: {v:,.0f}" for k, v in filtered_items.items())
+            # Upar card mein dikhane ke liye sirf 3 items
+            top_items = " | ".join(f"{k.title()}: {v:,.0f}" for k, v in filtered_items.head(3).items())
             
-            # View Details wali list ke liye (Yahan sab kuch aayega jaise pehle aa raha tha)
+            # Card ki summary line
             total_txt = f"<b>Pending Summary:</b><br>{top_items}"
             
-            # Popup details mein list (Yahan hum purana item_summary hi use karenge taaki baaki items bhi dikhein)
+            # Popup details mein list (Yahan hum purana item_summary hi use karenge taaki View Details mein saare items dikhein)
             details.append((f"📋 Item-wise Pending (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", 
                 [(esc(str(k).title()), f"{v:,.0f}") for k, v in item_summary.items()]))
             
