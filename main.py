@@ -161,6 +161,60 @@ st.markdown(
     div[data-testid="stDateInput"] input { 
         font-size: 13px !important; 
     }
+        /* =========================================
+       PRODUCTION CARDS SPECIFIC FIX (4x2 Grid)
+       ========================================= */
+    
+    /* Har column ke andar ka content flex container ban jaye */
+    div[data-testid="column"] > div {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* KPI Card ka container poori height le */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Card ke andar ka content flex-grow le taaki space bhar sake */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Andar ka actual HTML content (kpi-wrap) grow kare */
+    .kpi-wrap {
+        flex-grow: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Expander (View Full Details) ko sabse niche push karo */
+    div[data-testid="stExpander"] {
+        margin-top: auto !important;
+        margin-bottom: 0px !important;
+    }
+
+    /* Production section ke andar ke fonts aur gaps ko ekdum tight karo */
+    .kpi-title { font-size: 13px !important; margin-bottom: 2px !important; line-height: 1.1 !important; }
+    .kpi-tiles { margin: 4px 0 2px 0 !important; gap: 4px !important; }
+    .kpi-tile { padding: 4px 4px !important; }
+    .kpi-num { font-size: 18px !important; }
+    .kpi-lbl { font-size: 10px !important; margin-top: 0px !important; }
+    .kpi-desc { font-size: 12px !important; margin: 2px 0 !important; line-height: 1.2 !important; }
+    
+    .kpi-sec { margin-top: 4px !important; padding-top: 4px !important; }
+    .kpi-sec-h { font-size: 12px !important; margin-bottom: 2px !important; }
+    .kpi-row { margin-bottom: 2px !important; padding-bottom: 2px !important; gap: 2px !important; }
+    .kpi-rl, .kpi-rv { font-size: 11px !important; }
+
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div { min-height: 28px !important; font-size: 11px !important; }
+    div[data-testid="stSelectbox"] label { font-size: 10px !important; margin-bottom: 0 !important; }
+    div[data-testid="stDateInput"] input { font-size: 11px !important; min-height: 28px !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -4006,7 +4060,7 @@ def render_department(dept):
         
         for start in range(0, len(kpis), per_row):
             # Yahan gap="small" kiya hai taaki 4 cards mein space bache
-            cols = st.columns(per_row, gap="small")
+cols = st.columns(per_row, gap="small", vertical_alignment="top")
             for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
                     with st.container():
