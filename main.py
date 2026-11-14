@@ -1247,6 +1247,52 @@ def _month_range(day):
     m_end = (m_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
     return m_start, m_end
 
+def bonded_card(day):
+    """Bonded (A Shed): selected date, month aur total production (Bundles, Pcs, Weight). Yield = 100%"""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    
+    # Sirf A Shed (Bundles '26-A' se shuru hone wale)
+    b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
+    m_rows = y_df[b.str.match(r"^\d{2}-A")]
+    
+    if m_rows.empty:
+        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-A bonded row nahi mili", "color": GREY}
+
+    # Agar chuni hui date par data nahi hai, toh pichli latest date ka data uthao
+    actual_day = day
+    if not m_rows[m_rows["_date"] == day].empty:
+        actual_day = day
+    else:
+        past_dates = m_rows[m_rows["_date"] <= day]["_date"]
+        if not past_dates.empty:
+            actual_day = past_dates.max()
+
+    m_start, m_end = _month_range(actual_day)
+    d_day = pillow_agg(m_rows[m_rows["_date"] == actual_day])
+    d_mon = pillow_agg(m_rows[(m_rows["_date"] >= m_start) & (m_rows["_date"] <= m_end)])
+    d_all = pillow_agg(m_rows)
+    first, last = m_rows["_date"].min(), m_rows["_date"].max()
+
+    def rows(a):
+        return [("Bundles", f"{a['bdl']:,}"), ("Pcs", f"{a['sheets']:,.0f}"), ("Weight", f"{a['kg']:,.1f} Kg")]
+
+    return {
+        "value": f"100% Yield | {d_day['bdl']:,} Bdls | {d_day['sheets']:,.0f} Pcs",
+        "desc": f"Bonded production (A Shed) · Showing data for {actual_day.strftime('%d-%b-%Y')}",
+        "color": BLUE,
+        "metrics": [
+            ("100%", "Yield", "yield"),
+            (f"{d_day['bdl']:,}", "Bundles"),
+            (f"{d_day['sheets']:,.0f}", "Pcs"),
+            (f"{d_day['kg']:,.1f}", "Kg"),
+        ],
+        "sections": [(f"🗓 Month {actual_day:%b-%y}", rows(d_mon))],
+        "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
+    }
+
+
 def mould_card(day):
     """Mould (J Shed): selected date, month aur total production (Bundles, Sheets, Weight)."""
     y_df, err, _ = get_sheet("prod_summary")
@@ -1902,6 +1948,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: MOULD (J shed) ----------
     if calc == "mould_sum":
         return mould_card(day)
+    # ---------- PRODUCTION: BONDED (A shed) ----------
+    if calc == "bonded_sum":
+        return bonded_card(day)
 
     # ---------- PRODUCTION: MATTRESS (H shed production + M-Shed yield) ----------
     if calc == "mattress_sum":
@@ -3031,6 +3080,7 @@ KPI_SOURCES = {
     ("production", "Mattress & Yield"):  {"sheet": "prod_summary", "calc": "mattress_sum"},
     ("production", "Pillow & Yield"):    {"sheet": "prod_summary", "calc": "pillow_sum"},
     ("production", "Mould"): {"sheet": "prod_summary", "calc": "mould_sum"},
+    ("production", "Bonded"): {"sheet": "prod_summary", "calc": "bonded_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
 
     # <<< FREIGHT DATA SOURCE >>>
@@ -3180,6 +3230,7 @@ DEPARTMENTS = [
             ("Mattress & Yield", "Mattress production"),
             ("Pillow & Yield", "Pillow production"),
             ("Mould", "Mould production (J Shed)"),
+            ("Bonded", "Bonded production (A Shed)"),
             ("Rollpack & Yield", "Rollpack production"),
         ],
         "links": [
@@ -3751,6 +3802,12 @@ def render_kpi(dept_key, idx, title, desc):
             if spec.get("calc") == "mould_sum":
                 b = df["BUNDLES"].astype(str).str.strip().str.upper()
                 _p = df[b.str.match(r"^\d{2}-J")]
+                if not _p.empty:
+                    dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            # BONDED: dates sirf wo jin din A shed bana
+            if spec.get("calc") == "bonded_sum":
+                b = df["BUNDLES"].astype(str).str.strip().str.upper()
+                _p = df[b.str.match(r"^\d{2}-A")]
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
