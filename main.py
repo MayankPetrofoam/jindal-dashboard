@@ -2468,59 +2468,52 @@ def compute_kpi(df, spec, day):
         return po_ageing_card(df, spec, day)
     # ---------- PURCHASE: PENDING PO (with View Details) ----------
     # ---------- PURCHASE: PENDING PO (with View Details) ----------
+    # ---------- PURCHASE: PENDING PO (Item-wise, without KGS/MTR/PCS) ----------
     if calc == "po_pending":
         import html as _html
         esc = lambda x: _html.escape(str(x))
         cols = spec.get("columns")
         
-        # only_day=True hata diya taaki saare pending PO total mil sakein
         r_day = po_pending(df, day, cols) 
         r_all = po_pending(df, datetime.date.max, cols)
-        
-        uom = lambda r: " · ".join(f"{k or 'units'}: {v:,.0f}" for k, v in r["qty_by_uom"].items())
-        
-        total_txt = (f"Total pending (all dates): {r_all['open_pos']} POs"
-                     + (f" | {uom(r_all)}" if r_all["qty_by_uom"] else "")) if r_all else None
 
         details = []
-        # 1. Selected date tak ke saare PENDING POs
+        total_txt = ""
+        
         if r_day is not None:
             t = r_day["table"]
             t = t[t["pending"] > 0].sort_values("pending", ascending=False)
+            
+            # UoM (KGS/MTR/PCS) ki jagah Item Description (Polyol, TDI, etc.) ke hisaab se group karenge
             if not t.empty:
-                details.append((f"📋 Total Pending POs (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", [
-                    (f"PO {esc(r_.PO)}", f"{esc(str(r_.Item)[:26])} · {r_.pending:,.0f} {esc(r_.UoM)}")
+                # Item wise total pending nikalna
+                item_summary = t.groupby("Item")["pending"].sum().sort_values(ascending=False)
+                
+                # Card ki description line
+                top_items = " | ".join(f"{k.title()}: {v:,.0f}" for k, v in item_summary.head(4).items())
+                if len(item_summary) > 4:
+                    top_items += " ..."
+                
+                total_txt = f"<b>Pending Summary:</b><br>{top_items}"
+                
+                # Popup details mein list
+                details.append((f"📋 Item-wise Pending (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", 
+                    [(esc(str(k).title()), f"{v:,.0f}") for k, v in item_summary.items()]))
+                
+                # Niche puri list bhi dikha sakte hain
+                details.append((f"📄 Detailed PO List ({day:%d-%m-%y})", [
+                    (f"PO {esc(r_.PO)}", f"{esc(str(r_.Item)[:26])} · {r_.pending:,.0f}")
                     for r_ in t.itertuples()]))
-        
-        # 2. Poori sheet ka total pending
-        if r_all:
-            details.append(("🧮 Total pending (all dates)",
-                            [("Open POs", str(r_all["open_pos"])), ("Open lines", str(r_all["open_lines"]))]
-                            + [(k or "units", f"{v:,.0f}") for k, v in r_all["qty_by_uom"].items()]))
-        
-        # 3. Sheet ki sabse nayi 5 POs
-        try:
-            c_ = _resolve_columns(df, cols)
-            if "_is_head" in df.columns:
-                heads = (df[df["_is_head"]].drop_duplicates(subset=[c_["po_no"]])
-                         .sort_values("_date", ascending=False).head(5))
-                sup_ = next((x for x in df.columns if str(x).strip().lower() == "supplier name"), None)
-                rows_ = []
-                for _, h in heads.iterrows():
-                    po_no, po_dt = esc(h[c_["po_no"]]), h["_date"]
-                    who = esc(str(h[sup_])[:22]) if sup_ else ""
-                    rows_.append((f"PO {po_no} ({po_dt:%d-%m})", f"{who} · {esc(str(h[c_['item']])[:22])}"))
-                if rows_:
-                    details.append((f"🆕 Last PO in sheet: {df['_date'].max():%d-%m-%Y}", rows_))
-        except Exception:
-            pass
-
-        if r_day is None:
-            return {"value": "0 POs", "desc": "No pending POs found", "color": GREY,
-                    "extra": total_txt, "details": details}
+        else:
+            return {"value": "0 POs", "desc": "No pending POs found", "color": GREY, "extra": "No data"}
                     
-        return {"value": f"{r_day['open_pos']} POs", "desc": uom(r_day) or "No pending qty", "color": BLUE if r_day['open_pos'] > 0 else GREY,
-                "extra": total_txt, "details": details}
+        return {
+            "value": f"{r_day['open_pos'] if r_day else 0} POs", 
+            "desc": "Pending PO Status", 
+            "color": BLUE if (r_day and r_day['open_pos'] > 0) else GREY,
+            "extra": total_txt, 
+            "details": details
+        }
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
         cols = spec.get("columns")
