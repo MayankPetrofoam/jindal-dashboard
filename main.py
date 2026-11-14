@@ -75,11 +75,28 @@ st.markdown(
                 max-height: 6em; overflow: hidden; }
     .kpi-extra { font-size: 14px; font-weight: 700; color: #0F172A; line-height: 1.4; margin-top: 6px; }
 
-    /* Cards ki height fix karne ke liye */
+    .kpi-extra { font-size: 14px; font-weight: 700; color: #0F172A; line-height: 1.4; margin-top: 6px; }
+
+    /* Cards ki height fix karne aur alignment ke liye */
     div[data-testid="stVerticalBlockBorderWrapper"] div[data-testid="stVerticalBlockBorderWrapper"] {
-        min-height: 420px !important;
-        display: flex;
-        flex-direction: column;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    /* Card ke andar ka content flexible banayein */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div,
+    div[data-testid="stVerticalBlock"] {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    /* Expander (View Full Details) ko hamesha sabse niche push karein */
+    div[data-testid="stExpander"] {
+        margin-top: auto !important;
+    }
+    /* HTML wale content ko flex-grow dein taaki space le sake */
+    .kpi-wrap {
+        flex-grow: 1 !important;
     }
     /* metric tiles: bade number + chhota label */
     .kpi-tiles { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px 0; }
@@ -3951,10 +3968,12 @@ def render_department(dept):
         per_row = 4 if dept["key"] == "production" else KPI_PER_ROW
         
         for start in range(0, len(kpis), per_row):
-            cols = st.columns(per_row) # Yahan per_row use kiya
+            cols = st.columns(per_row, gap="small")
             for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
-                    render_kpi(dept["key"], start + offset, title, desc)
+                    # Har column ko same height stretch karne ke liye
+                    with st.container():
+                        render_kpi(dept["key"], start + offset, title, desc)
 
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
