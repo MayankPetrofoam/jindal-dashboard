@@ -720,9 +720,12 @@ def _po_rows(df, c, issues):
 def po_pending(df, day, overrides=None, only_day=False):
     issues = []
     c = _resolve_columns(df, overrides)
-    w = df[df["_date"] == day] if only_day else df[df["_date"] <= day]
+    
+    # only_day hata diya, ab selected date tak ke saare PO uthayega
+    w = df[df["_date"] <= day]
     if w.empty:
         return None
+        
     w = _po_rows(w, c, issues)
 
     rd = _receipt_dates(w, c)
@@ -730,8 +733,7 @@ def po_pending(df, day, overrides=None, only_day=False):
         by_day = rd.apply(lambda d: _is_date(d, lambda x: x <= day)).astype(bool)
         undated = ((w["_inv"] > 0) & ~rd.apply(lambda d: _is_date(d, lambda x: True)).astype(bool))
         if undated.any():
-            issues.append(f"{int(undated.sum())} invoice rows have a quantity but no valid {c['receipt_date']}: "
-                        "counted as NOT yet received")
+            issues.append(f"{int(undated.sum())} invoice rows have a quantity but no valid {c['receipt_date']}: counted as NOT yet received")
         w["_rec_asof"] = w["_inv"].where(by_day, 0.0)
     else:
         w["_rec_asof"] = w["_inv"]
@@ -758,13 +760,13 @@ def po_pending(df, day, overrides=None, only_day=False):
     if bad.any():
         issues.append(f"{int(bad.sum())} PO lines skipped: PO qty blank, text or negative")
         g = g[~bad].copy()
+        
     g["pending_raw"] = g["po_qty"] - g["received"]
     over = g["pending_raw"] < 0
     if over.any():
         issues.append(f"{int(over.sum())} PO lines are over-received (pending shown as 0)")
     g["pending"] = g["pending_raw"].clip(lower=0)
 
-    # reconcile with the sheet's own Balance Qty (uses ALL receipts, so it is date independent)
     calc_all = g["po_qty"] - g["received_all"]
     checked = g["sheet_balance"].notna()
     diff = (calc_all - g["sheet_balance"]).abs()
@@ -774,6 +776,7 @@ def po_pending(df, day, overrides=None, only_day=False):
 
     open_ = g[g["pending"] > 0]
     by_uom = open_.groupby("UoM")["pending"].sum().sort_values(ascending=False)
+    
     formula = (
         "Per PO line (a PO # row plus the invoice rows under it): pending = PO Qty - sum of "
         f"'{c['received_qty']}' on invoices received on/before the selected date "
@@ -2464,30 +2467,37 @@ def compute_kpi(df, spec, day):
     if calc in PO_AGE_BUCKETS:
         return po_ageing_card(df, spec, day)
     # ---------- PURCHASE: PENDING PO (with View Details) ----------
+    # ---------- PURCHASE: PENDING PO (with View Details) ----------
     if calc == "po_pending":
         import html as _html
         esc = lambda x: _html.escape(str(x))
         cols = spec.get("columns")
-        r_day = po_pending(df, day, cols, only_day=True)
+        
+        # only_day=True hata diya taaki saare pending PO total mil sakein
+        r_day = po_pending(df, day, cols) 
         r_all = po_pending(df, datetime.date.max, cols)
+        
         uom = lambda r: " · ".join(f"{k or 'units'}: {v:,.0f}" for k, v in r["qty_by_uom"].items())
+        
         total_txt = (f"Total pending (all dates): {r_all['open_pos']} POs"
                      + (f" | {uom(r_all)}" if r_all["qty_by_uom"] else "")) if r_all else None
 
         details = []
-        # 1. Selected date ke POs
+        # 1. Selected date tak ke saare PENDING POs
         if r_day is not None:
             t = r_day["table"]
             t = t[t["pending"] > 0].sort_values("pending", ascending=False)
             if not t.empty:
-                details.append((f"📋 PO {day:%d-%m-%y} · {r_day['open_pos']} POs", [
+                details.append((f"📋 Total Pending POs (As on {day:%d-%m-%y}) · {r_day['open_pos']} POs", [
                     (f"PO {esc(r_.PO)}", f"{esc(str(r_.Item)[:26])} · {r_.pending:,.0f} {esc(r_.UoM)}")
                     for r_ in t.itertuples()]))
+        
         # 2. Poori sheet ka total pending
         if r_all:
             details.append(("🧮 Total pending (all dates)",
                             [("Open POs", str(r_all["open_pos"])), ("Open lines", str(r_all["open_lines"]))]
                             + [(k or "units", f"{v:,.0f}") for k, v in r_all["qty_by_uom"].items()]))
+        
         # 3. Sheet ki sabse nayi 5 POs
         try:
             c_ = _resolve_columns(df, cols)
@@ -2506,9 +2516,10 @@ def compute_kpi(df, spec, day):
             pass
 
         if r_day is None:
-            return {"value": "0 POs", "desc": "No PO dated on this date", "color": None,
+            return {"value": "0 POs", "desc": "No pending POs found", "color": GREY,
                     "extra": total_txt, "details": details}
-        return {"value": f"{r_day['open_pos']} POs", "desc": uom(r_day) or None, "color": None,
+                    
+        return {"value": f"{r_day['open_pos']} POs", "desc": uom(r_day) or "No pending qty", "color": BLUE if r_day['open_pos'] > 0 else GREY,
                 "extra": total_txt, "details": details}
     # ---------- PURCHASE: PENDING PO ----------
     if calc == "po_pending":
