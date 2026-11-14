@@ -2196,6 +2196,7 @@ def compute_kpi(df, spec, day):
             return {"value": "Not configured", "desc": f"Unknown production type '{ptype}'", "color": GREY}
 
     # ---------- SALES CALCULATIONS ----------
+    # ---------- SALES CALCULATIONS ----------
     if calc and str(calc).startswith("sales_"):
         # 1. Column Picker (Exact match taaki ST. CODE mil sake)
         def safe_pcol(column_name):
@@ -2236,10 +2237,25 @@ def compute_kpi(df, spec, day):
             if total_amt == 0:
                 return {"value": "₹0", "desc": f"Amount is empty in sheet for {day.strftime('%d-%b-%Y')}", "color": GREY}
 
+            # NAYA: November (selected month) ki daily sales nikalna View Details ke liye
+            m_start = day.replace(day=1)
+            month_data = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
+            
+            details = []
+            if not month_data.empty:
+                daily_sales = month_data.groupby("_date")[amt_col].sum().sort_index(ascending=False)
+                rows = []
+                for dt, amt in daily_sales.items():
+                    d_str = dt.strftime("%d-%b-%Y")
+                    # Bina Cr ke, comma laga kar number dikhana
+                    rows.append((f"📅 {d_str}", f"{amt:,.2f}"))
+                details.append((f"🗓 Daily Sales ({day:%b-%Y})", rows))
+
             return {
-                "value": _inr_cr(total_amt),  # <--- Yahan _inr_cr kar diya
+                "value": f"{total_amt:,.2f}",  # <-- Yahan se _inr_cr hata kar direct comma wala number kar diya
                 "desc": f"Last recorded sale on {day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
-                "color": BLUE
+                "color": BLUE,
+                "details": details
             }
 
         elif calc == "sales_daily_mtd":
@@ -2256,10 +2272,26 @@ def compute_kpi(df, spec, day):
             total_amt = _num(sub[amt_col]).sum()
             total_parties = _num(sub[party_col]).sum() if party_col else 0
 
+            # NAYA: Saare mahino ki sales nikalna View Details ke liye
+            df["_ym"] = df["_date"].apply(lambda x: x.strftime("%b-%Y") if pd.notna(x) else "")
+            all_months = df[df["_ym"] != ""].groupby("_ym")[amt_col].sum()
+            
+            # Month ko date format mein convert karke sort karna taaki sahi order mein aaye (latest pehle)
+            month_order = df[df["_ym"] != ""].groupby("_ym")["_date"].min().sort_values(ascending=False)
+            sorted_months = month_order.index.tolist()
+
+            details = []
+            rows = []
+            for m in sorted_months:
+                amt = all_months.get(m, 0)
+                rows.append((f"🗓 {m}", f"{amt:,.2f}"))
+            details.append(("📊 All Months Sales", rows))
+
             return {
-                "value": _inr_cr(total_amt),  # <--- Yahan _inr_cr kar diya
+                "value": f"{total_amt:,.2f}",  # <-- Yahan se bhi _inr_cr hata diya
                 "desc": f"Month-to-date | {total_parties:,.0f} Parties",
-                "color": BLUE
+                "color": BLUE,
+                "details": details
             }
 
         elif calc == "sales_category_mix":
