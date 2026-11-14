@@ -3027,7 +3027,7 @@ KPI_SOURCES = {
     ("production", "Rolls & Yield"):     {"sheet": "rolls_bc", "calc": "rolls_bc"},
     ("production", "Mattress & Yield"):  {"sheet": "prod_summary", "calc": "mattress_sum"},
     ("production", "Pillow & Yield"):    {"sheet": "prod_summary", "calc": "pillow_sum"},
-    ("production", "Mould"), {"sheet": "prod_summary", "calc": "mould_sum"},
+    ("production", "Mould"): {"sheet": "prod_summary", "calc": "mould_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
 
     # <<< FREIGHT DATA SOURCE >>>
