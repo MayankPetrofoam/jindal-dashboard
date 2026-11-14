@@ -937,15 +937,26 @@ def purchase_mtd(df, day, overrides=None, basis="received", all_time=False):
         return None
     flagged = _mixed_rate_items(df, c["item"], [c[k] for k in ("po_rate", "inv_rate") if k in c])
     used = set(rows[c["item"]].astype(str).str.strip().str.upper())
+    
+    # NAYA LOGIC: Bill Amount ka sum calculate karein (day-wise aur month-wise)
+    bill_amt_sum = 0
+    if "Bill Amount" in rows.columns:
+        bill_amt_sum = _num(rows["Bill Amount"]).sum()
+    elif "Bill Amount" in c:
+        bill_amt_sum = _num(rows[c["Bill Amount"]]).sum()
+
     table = pd.DataFrame({"PO": rows[c["po_no"]], "Item": rows[c["item"]], "Qty": qty,
                         "Rate": rate, "Value": qty * rate})
+    
     formula = (
         f"Sum of ({'Inv Qty x Invoice Rate for invoices with ' + c['receipt_date'] if basis == 'received' else 'PO Qty x PO Rate for PO lines with PO Date'}"
         f") between {start:%d-%m-%Y} and {day:%d-%m-%Y}; duplicate invoice rows ignored. "
         "Amounts are in the sheet's own rate currency (no conversion applied)."
     )
-    return {"value": float((qty * rate).sum()), "warn_items": sorted(flagged & used), "table": table,
-            "issues": issues, "formula": formula, "columns": c}
+    
+    # Return dictionary mein bill_amt_sum add kar dein
+    return {"value": float((qty * rate).sum()), "bill_amt": float(bill_amt_sum), "warn_items": sorted(flagged & used), 
+            "table": table, "issues": issues, "formula": formula, "columns": c}
 # ====================================================================
 # PENDING PO AGEING (0-15 / 15-30 / 30-60 / 60+ days)  -- NAYA BLOCK
 # ====================================================================
@@ -2740,14 +2751,30 @@ def compute_kpi(df, spec, day):
                 "color": None, "extra": total_txt}
 
     # ---------- PURCHASE: PURCHASE TILL DATE ----------
+    # ---------- PURCHASE: PURCHASE TILL DATE ----------
     if calc == "purchase_mtd":
         basis = spec.get("basis", "received")
         r = purchase_mtd(df, day, spec.get("columns"), basis)
         r_all = purchase_mtd(df, day, spec.get("columns"), basis, all_time=True)
+        
         extra = f"Total (all dates): {_inr(r_all['value'])}" if r_all else None
         if r is None:
             return {"value": "₹0", "desc": "No purchase this month", "color": None, "extra": extra}
-        out = {"value": _inr(r["value"]), "desc": None, "color": None, "extra": extra}
+        
+        # Yahan card ke liye metrics (Day aur Month ke Bill Amount) set karein
+        metrics = [
+            (f"{r['bill_amt']:,.0f}", f"Day Bill Amt ({day.strftime('%d-%m')})"),
+            (f"{r_all['bill_amt']:,.0f}", f"Month Bill Amt ({day.strftime('%b-%y')})")
+        ]
+
+        out = {
+            "value": _inr(r["value"]), 
+            "desc": None, 
+            "color": None, 
+            "extra": extra,
+            "metrics": metrics  # <-- Ye line add karein taaki tiles card mein dikhein
+        }
+        
         if r["warn_items"]:
             out["desc"] = "⚠ mixed-currency rates: " + ", ".join(r["warn_items"][:3])
             out["color"] = AMBER
