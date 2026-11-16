@@ -3396,8 +3396,7 @@ SHEETS = {
         "url": "YOUR_GOOGLE_SHEET_CSV_LINK_HERE",
         "worksheet": "Sheet1",
         "date_col": "DATE",
-    }
-}
+    },
 
     "foaming_chemicals": {
         "type": "excel",
