@@ -817,7 +817,10 @@ def _po_rows(df, c, issues):
 
 def po_pending(df, day, overrides=None, only_day=False):
     issues = []
-    c = _resolve_columns(df, overrides)
+    try:
+        c = _resolve_columns(df, overrides)
+    except Exception as e:
+        return {"open_pos": 0, "open_lines": 0, "qty_by_uom": {}, "table": pd.DataFrame(), "issues": [str(e)], "formula": "", "columns": {}, "recon": {"checked": 0, "mismatch": pd.DataFrame()}}
     
     # only_day hata diya, ab selected date tak ke saare PO uthayega
     w = df[df["_date"] <= day]
@@ -971,7 +974,10 @@ PO_AGE_BUCKETS = {
 def po_ageing(df, day, overrides=None):
     """Har PO line ka pending aur uski age (day - PO date). Pending > 0 wali lines hi wapas aati hain."""
     issues = []
-    c = _resolve_columns(df, overrides)
+    try:
+        c = _resolve_columns(df, overrides)
+    except Exception as e:
+        return None, [str(e)]
     w = df[df["_date"] <= day]
     if w.empty:
         return None
