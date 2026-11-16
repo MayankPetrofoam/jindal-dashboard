@@ -3965,7 +3965,6 @@ def _fetch_orders_cached(url, gids):
 
 def get_sheet(name):
     """-> (DataFrame or None, error text or None, fetched-at or None)."""
-    # Agar name ek list hai (jaise ["order_management_1", "order_management_2"])
     if isinstance(name, (list, tuple)):
         frames = []
         for n in name:
@@ -3982,18 +3981,18 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
-        # LB Stock (gviz) ke liye
         if cfg.get("type") == "gviz":
             base = cfg["url"].split("/pub")[0]
             csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
             data = _http_get(csv_url)
             if data.lstrip()[:1] == b"<":
                 raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
-            df = _frame_from_csv(data, header_hint="GRADE") 
+            df = _frame_from_csv(data, header_hint="GRADE")
             df["_date"] = datetime.datetime.now(IST).date()
             good[name] = (df, datetime.datetime.now(IST))
             errors.pop(name, None)
             return df, None, datetime.datetime.now(IST)
+
         if cfg.get("type") == "orders":
             df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
             good[name] = (df, fetched)
@@ -4002,10 +4001,11 @@ def get_sheet(name):
 
         if isinstance(cfg.get("worksheet"), (list, tuple)):
             df, fetched = _fetch_multi_cached(cfg["url"], tuple(cfg["worksheet"]), cfg["date_col"],
-                                            cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
+                                              cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+
         if cfg.get("type") == "chem_daily":
             df, fetched = _fetch_chem_daily_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
@@ -4013,10 +4013,8 @@ def get_sheet(name):
             return df, None, fetched
 
         if cfg.get("type") == "dyield":
-            # Check if this is the M-Shed file and use the custom column-based reader
             if name == "m_yield":
-                url = cfg["files"][0][1] # Extract the URL
-                df, fetched = _fetch_m_shed_custom(url)
+                df, fetched = _fetch_m_shed_custom(cfg["files"][0][1])
             else:
                 df, fetched = _fetch_dyield_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
@@ -4034,6 +4032,7 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+
         if cfg.get("type") == "yield":
             df, fetched = _fetch_yield_cached(cfg["url"], cfg.get("sheet_name", "DATA"))
             good[name] = (df, fetched)
@@ -4045,13 +4044,6 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-        if cfg.get("type") == "excel":
-            df, fetched = _fetch_excel_cached(
-                cfg["url"], cfg["sheet_name"], cfg["date_col"], cfg.get("dayfirst", True), cfg.get("static", False)
-            )
-            good[name] = (df, fetched)
-            errors.pop(name, None)
-            return df, None, fetched
 
         if cfg["url"] == "manual":
             now_ist = datetime.datetime.now(IST)
@@ -4060,9 +4052,32 @@ def get_sheet(name):
             errors.pop(name, None)
             return df, None, now_ist
 
-    except Exception as e:
-        errors[name] = str(e)
-        return None, str(e), None
+        if cfg.get("type") == "excel":
+            df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
+                                              cfg["date_col"], cfg.get("dayfirst", True),
+                                              cfg.get("static", False))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
+
+        # Baaki normal Google Sheets (Purchase PO, Maintenance, Freight, HR ...)
+        df, fetched = _fetch_cached(
+            cfg["url"], cfg.get("worksheet"), cfg["date_col"],
+            cfg.get("dayfirst", True), _service_account() is not None,
+            cfg.get("anchor"), tuple(cfg.get("ffill", ())),
+            tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
+        )
+        good[name] = (df, fetched)
+        errors.pop(name, None)
+        log.info("sheet '%s' loaded: %d rows", name, len(df))
+        return df, None, fetched
+    except Exception as exc:
+        msg = f"{type(exc).__name__}: {exc}"
+        log.error("sheet '%s' failed: %s", name, msg)
+        errors[name] = msg
+        if name in good:
+            return good[name][0], msg, good[name][1]
+        return None, msg, None
 
 
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
@@ -4654,13 +4669,11 @@ def render_explorer():
 
 
 def render_diagnostics():
-    for s in KPI_SOURCES.values():
-        sheet_val = s.get("sheet")
-        if sheet_val is None:
-            continue
-        for n in (sheet_val if isinstance(sheet_val, (list, tuple)) else [sheet_val]):
-            df, err, fetched = get_sheet(n)
-            st.markdown(f"**Sheet `{n}`**")
+    with st.expander("🛠 Diagnostics (sources, columns, KPI validation)"):
+        for name in sorted({n for s in KPI_SOURCES.values() if s.get("sheet")
+                            for n in (s["sheet"] if isinstance(s["sheet"], (list, tuple)) else [s["sheet"]])}):
+            df, err, fetched = get_sheet(name)
+            st.markdown(f"**Sheet `{name}`**")
             if df is None:
                 st.error(err)
                 continue
@@ -4669,7 +4682,7 @@ def render_diagnostics():
                 continue
             st.write(
                 f"{len(df)} rows · dates {df['_date'].min():{DATE_FMT}} to {df['_date'].max():{DATE_FMT}} "
-                f"· fetched {fetched:%d-%m-%Y %H:%M:%S} IST "
+                f"· fetched {fetched:%d-%m-%Y %H:%M:%S} IST · "
                 f"{df.attrs.get('bad_dates', 0)} rows skipped for unreadable date"
             )
             st.write("**Exact column headers found:**", [c for c in df.columns if not str(c).startswith("_")])
