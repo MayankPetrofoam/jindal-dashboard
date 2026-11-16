@@ -4078,14 +4078,14 @@ def render_kpi(dept_key, idx, title, desc):
                 b = df["BUNDLES"].astype(str).str.strip().str.upper()
                 _p = df[b.str.match(r"^\d{2}-K")]
                 if not _p.empty:
-                    dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             
             # MOULD: dates sirf wo jin din J shed bana
             if spec.get("calc") == "mould_sum":
                 b = df["BUNDLES"].astype(str).str.strip().str.upper()
                 _p = df[b.str.match(r"^\d{2}-J")]
                 if not _p.empty:
-                    dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             # BONDED: dates sirf wo jin din A shed bana
             if spec.get("calc") == "bonded_sum":
                 b = df["BUNDLES"].astype(str).str.strip().str.upper()
