@@ -1483,6 +1483,10 @@ def scrap_card(day):
         w = mon_item_weights[item]
         pct = (w / total_3_items_kg * 100) if total_3_items_kg > 0 else 0.0
         yield_rows.append((item.title(), f"{w:,.1f} Kg | Yield: {pct:.2f}%"))
+   d_item_w = {it: float(d_day.loc[d_day[item_col] == it, "kg"].sum()) for it in scrap_items}
+   d_total = sum(d_item_w.values())
+   day_yield_rows = [(it.title(), f"{w:,.1f} Kg | Yield: {(w/d_total*100 if d_total else 0):.2f}%")
+                  for it, w in d_item_w.items()]
 
     # --- Card Return ---
     return {
@@ -3507,6 +3511,7 @@ DEPARTMENTS = [
             ("Mould", "Mould production (J Shed)"),
             ("Bonded", "Bonded production (A Shed)"),
             ("Rollpack & Yield", "Rollpack production"),
+            ("SCRAP", "Scrap production (O Shed)"),
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
@@ -4084,6 +4089,12 @@ def render_kpi(dept_key, idx, title, desc):
                 _p = df[b.str.match(r"^\d{2}-A")]
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+         # SCRAP: dates sirf wo jin din O shed ka data hai
+          if spec.get("calc") == "scrap_sum":
+              b = df["BUNDLES"].astype(str).str.strip().str.upper()
+              _p = df[b.str.match(r"^\d{2}-O")]
+              if not _p.empty:
+                  dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
