@@ -3948,9 +3948,16 @@ def get_sheet(name):
             good[name] = (df, now_ist)
             errors.pop(name, None)
             return df, None, now_ist
+
+    except Exception as e:
+        errors[name] = str(e)
+        return None, str(e), None
+
+
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def get_serviceability_data(url, sheet_name):
     """Serviceability sheet (Month-wise rows, Shed-wise columns) ko padhta hai."""
+    # ... aage ka code ...
     src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
     
     # Header=None se padho taaki header row apne aap dhoondh sakein
