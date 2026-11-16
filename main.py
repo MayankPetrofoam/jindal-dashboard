@@ -1033,7 +1033,7 @@ def po_ageing_card(df, spec, day):
     details = []
     if not b.empty:
         details.append((f"📋 {label} · {n_pos} POs / {len(b)} lines", [
-            (f"PO {esc(r_.PO)}",
+            (f"PO {esc(r_.PO)} ({r_.po_date.strftime('%d-%m-%Y')})",
              f"{esc(r_.Supplier[:22])} · {esc(r_.Item[:24])} · {r_.pending:,.0f} {esc(r_.UoM)} · {r_.age}d")
             for r_ in b.itertuples()]))
         sw = b.groupby("Supplier")["PO"].nunique().sort_values(ascending=False)
