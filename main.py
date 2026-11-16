@@ -3725,7 +3725,7 @@ DEPARTMENTS = [
         "name": "INVENTORY",
         "kpis": [
             ("Dead Stock (Value & Qty)", "RM / WIP / FG"),
-            ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"),
+            ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
             ("Inventory Days & Turnover", "Current position"),
         ],
         "links": [
