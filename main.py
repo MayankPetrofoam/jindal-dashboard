@@ -3941,6 +3941,13 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+        if cfg.get("type") == "excel":
+            df, fetched = _fetch_excel_cached(
+                cfg["url"], cfg["sheet_name"], cfg["date_col"], cfg.get("dayfirst", True), cfg.get("static", False)
+            )
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
 
         if cfg["url"] == "manual":
             now_ist = datetime.datetime.now(IST)
