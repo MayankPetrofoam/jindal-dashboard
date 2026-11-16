@@ -1477,7 +1477,109 @@ def _fg_category(item, bundle):
         return "PU Foam Sheet"
     return "Other / Scrap"
 
+def finance_drs_crs_card(day):
+    """DRS & CRS Calculation: April se aaj tak, Month-wise breakdown ke saath"""
+    df, err, _ = get_sheet("finance_drs_crs") # <-- Yahan apni sheet ka naam daalein
+    if df is None:
+        return {"value": "0", "desc": f"Data error: {err}", "color": RED}
 
+    # Column names ko standard banayein
+    cols = {str(c).strip().upper(): c for c in df.columns}
+    
+    def get_col(*names):
+        for n in names:
+            if n.upper() in cols:
+                return cols[n.upper()]
+        return None
+
+    grp_col = get_col("GROUP")
+    drcr_col1 = get_col("DR/CR") # Pehla Dr/Cr (Open Amount wala)
+    drcr_col2 = get_col("DR/CR_2") # Doosra Dr/Cr (Balance Amount wala)
+    bal_col = get_col("BAL.AMT", "BALANCE AMOUNT", "BAL.AMT")
+    
+    if not all([grp_col, drcr_col1, bal_col]):
+        return {"value": "Error", "desc": "Required columns not found", "color": RED}
+
+    # Nayi columns banayein (Dr/Cr ka pata lagane ke liye)
+    df = df.copy()
+    df["_grp_clean"] = df[grp_col].astype(str).str.strip()
+    
+    # Agar doosra Dr/Cr column hai toh use karein, warna pehla
+    final_drcr_col = drcr_col2 if drcr_col2 else drcr_col1
+    df["_drcr"] = df[final_drcr_col].astype(str).str.strip()
+    
+    df["_bal"] = _num(df[bal_col]).fillna(0.0)
+    
+    # Date assume karein (kyunki sheet mein date nahi hai, hum aaj ki date maan lenge)
+    df["_date"] = datetime.datetime.now(IST).date()
+
+    # April se aaj tak ka data filter karein
+    year = day.year if day.month >= 4 else day.year - 1
+    start_date = datetime.date(year, 4, 1)
+    df = df[(df["_date"] >= start_date) & (df["_date"] <= day)]
+
+    if df.empty:
+        return {"value": "0", "desc": "No data for this period", "color": GREY}
+
+    # --- DRS Calculation ---
+    drs_groups = ["Sundry Debtors", "Adv.agst.purchases"]
+    drs_df = df[df["_grp_clean"].isin(drs_groups)]
+    
+    def calc_amt(frame, is_crs=False):
+        total = 0
+        for _, row in frame.iterrows():
+            val = row["_bal"]
+            drcr = row["_drcr"]
+            
+            if is_crs:
+                # CRS ke liye: Dr minus hoga, Cr add hoga
+                if drcr == "Dr":
+                    total -= abs(val)
+                else:
+                    total += abs(val)
+            else:
+                # DRS ke liye: Dr add hoga, Cr minus hoga
+                if drcr == "Dr":
+                    total += abs(val)
+                else:
+                    total -= abs(val)
+        return total
+
+    drs_total = calc_amt(drs_df, is_crs=False)
+
+    # --- CRS Calculation ---
+    crs_groups = ["Sundry Creditors", "Sundry Creditors For Expenses"]
+    crs_df = df[df["_grp_clean"].isin(crs_groups)]
+    crs_total = calc_amt(crs_df, is_crs=True)
+
+    # Month-wise Breakdown (April se abhi tak)
+    month_breakdown = []
+    curr = start_date
+    while curr <= day:
+        m_end = (curr.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+        if m_end > day:
+            m_end = day
+            
+        m_drs = calc_amt(drs_df[drs_df["_date"].between(curr, m_end)], is_crs=False)
+        m_crs = calc_amt(crs_df[crs_df["_date"].between(curr, m_end)], is_crs=True)
+        
+        if m_drs != 0 or m_crs != 0:
+            month_breakdown.append((curr.strftime("%b-%Y"), f"DRS: {m_drs/10000000:,.2f} | CRS: {m_crs/10000000:,.2f}"))
+        
+        curr = (curr.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+
+    return {
+        "value": f"{crs_total/10000000:,.2f}", # CRS ko upar dikhayenge
+        "desc": f"DRS: {drs_total/10000000:,.2f} | CRS: {crs_total/10000000:,.2f}",
+        "color": BLUE,
+        "sections": [
+            ("💰 Total DRS (Debtors)", [("Amount", f"{drs_total/10000000:,.2f}")]),
+            ("💸 Total CRS (Creditors)", [("Amount", f"{crs_total/10000000:,.2f}")]),
+        ],
+        "details": [
+            (f"🗓 Month-wise Breakdown ({year} April to {day:%b-%Y})", month_breakdown)
+        ]
+    }
 def credit_note_card(day):
     """Credit Note (CN): Selected month ka total CN amount."""
     # Isme hum 'CN' wali sheet ka data use karenge
@@ -2320,6 +2422,9 @@ def compute_kpi(df, spec, day):
         return credit_note_card(day)
     if calc == "debit_note":
         return debit_note_card(day)
+    # ---------- FINANCE: DRS & CRS ----------
+    if calc == "finance_drs_crs":
+        return finance_drs_crs_card(day)
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -3593,7 +3698,7 @@ KPI_SOURCES = {
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
-        "sheet": "finance_svp",
+        "sheet": "DRS & CRS",
         "calc": "finance_total_drs_crs",
     },
     ("finance", "Greater Than 90 / 180 Days"): {
