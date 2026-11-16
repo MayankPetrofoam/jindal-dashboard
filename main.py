@@ -1439,98 +1439,108 @@ def mould_card(day):
         "sections": [(f"🗓 Month {day:%b-%y}", rows(d_mon))],
         "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
     }
+FG_CATS = [
+    # (naam, dikhane wale fields)
+    ("A Grade",       ("bdl", "sheet")),
+    ("Bonded",        ("bdl", "sheet", "kg")),
+    ("PU Foam Sheet", ("bdl", "kg")),
+    ("PU 2nd Grade",  ("bdl", "kg")),
+    ("PU 3rd Grade",  ("bdl", "kg")),
+    ("DC Grade",      ("bdl", "kg")),
+    ("Mattress",      ("bdl", "pcs")),
+    ("Rollpack",      ("bdl", "pcs")),
+    ("Pillow",        ("bdl", "pcs")),
+    ("Other / Scrap", ("bdl", "kg")),
+]
+
+
+def _fg_category(item, bundle):
+    item = str(item).upper().strip()
+    bundle = str(bundle).upper().strip()
+    if "MATTRESS" in item:
+        return "Mattress"
+    if "ROLLPACK" in item or "ROLL PACK" in item:
+        return "Rollpack"
+    if "PILLOW" in item:
+        return "Pillow"
+    if "BONDED" in item or bundle.startswith("26-A"):
+        return "Bonded"
+    if "DC GRADE" in item:
+        return "DC Grade"
+    if item in ("A GRADE", "PU FOAM A GRADE"):
+        return "A Grade"
+    if "2ND GRADE" in item:
+        return "PU 2nd Grade"
+    if "3RD GRADE" in item:
+        return "PU 3rd Grade"
+    if item == "PU FOAM SHEET":
+        return "PU Foam Sheet"
+    return "Other / Scrap"
+
+
 def total_inventory_card(day):
-    """Total Inventory (FG): Din, Mahine aur Total production + Category wise details."""
+    """Total Inventory Bundles (FG): din + mahine ki total production, category wise details."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
-    # Category Mapping: Kaunsa item kaunsi category mein jayega
-    def get_category(row):
-        item = str(row["item"]).upper()
-        bundle = str(row["BUNDLES"]).upper()
-        
-        if item in ["PU FOAM 2ND GRADE", "PEELING 2ND GRADE", "A GRADE", "PU FOAM A GRADE", "PU FOAM DC GRADE"]:
-            return "2nd Grade / A Grade / DC"
-        if item in ["PU FOAM 3RD GRADE", "PEELING 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]:
-            return "3rd Grade / Scrap"
-        if "MATTRESS" in item:
-            return "Mattress"
-        if "PILLOW" in item:
-            return "Pillow"
-        if "ROLL PACK" in item or "ROLLPACK" in item:
-            return "Rollpack"
-        if "BONDED" in item or "BONDE" in item:
-            return "Bonded (A Shed)"
-            
-        # Agar kuch aur hai, toh shed letter se pehchano (26-A, 26-M, etc.)
-        if bundle.startswith("26-A"):
-            return "Bonded (A Shed)"
-        if bundle.startswith("26-O"):
-            return "3rd Grade / Scrap"
-        
-        return "PU Foam Sheet (1st Grade)"
-
-    # Nayi category column banayein
     y_df = y_df.copy()
-    y_df["category"] = y_df.apply(get_category, axis=1)
+    y_df = y_df[y_df["BUNDLES"].astype(str).str.strip() != ""]
+    y_df["cat"] = [_fg_category(i, b) for i, b in zip(y_df["item"], y_df["BUNDLES"])]
+
+    def agg(frame):
+        out = {}
+        for name, _f in FG_CATS:
+            f = frame[frame["cat"] == name]
+            out[name] = {"bdl": len(f), "sheet": float(f["sheet"].sum()), "pcs": float(f["sheet"].sum()),
+                         "kg": float(f["kg"].sum())}
+        total = {
+            "bdl": sum(v["bdl"] for v in out.values()),
+            "sheet": out["A Grade"]["sheet"] + out["Bonded"]["sheet"],
+            "pcs": sum(out[k]["pcs"] for k in ("Mattress", "Rollpack", "Pillow")),
+            "kg": sum(out[k]["kg"] for k in out if k not in ("A Grade", "Mattress", "Rollpack", "Pillow")),
+        }
+        return out, total
 
     m_start, m_end = _month_range(day)
+    d_cat, d_tot = agg(y_df[y_df["_date"] == day])
+    m_cat, m_tot = agg(y_df[(y_df["_date"] >= m_start) & (y_df["_date"] <= m_end)])
 
-    def agg_data(frame):
-        if frame.empty:
-            return {"bdl": 0, "sheets": 0.0, "kg": 0.0, "pcs": 0.0}
-        
-        # Bundles = Count of non-empty Bundle strings
-        bdl = int(frame["BUNDLES"].astype(str).str.strip().ne("").sum())
-        
-        # Sheets = Sum of SHEET column (aur agar sheet 0 hai toh Pcs consider karenge)
-        sheets = float(frame["sheet"].sum())
-        if sheets == 0:
-            sheets = float(_num(frame["SHEET"]).sum()) if "SHEET" in frame.columns else 0.0
-            
-        kg = float(frame["kg"].sum())
-        return {"bdl": bdl, "sheets": sheets, "kg": kg}
+    def line(name, fields, c):
+        label = {"bdl": "Bdls", "sheet": "Sheet", "pcs": "Pcs", "kg": "Kg"}
+        parts = []
+        for f in fields:
+            v = c[name][f]
+            parts.append(f"{v:,.0f} {label[f]}" if f != "kg" else f"{v:,.1f} Kg")
+        return " | ".join(parts)
 
-    # Din ka data
-    day_data = agg_data(y_df[y_df["_date"] == day])
-    # Mahine ka data
-    mon_data = agg_data(y_df[(y_df["_date"] >= m_start) & (y_df["_date"] <= m_end)])
-    
-    # View Details ke liye Category-wise data
-    cat_agg = y_df.groupby("category").agg(
-        bdl=("BUNDLES", lambda x: x.astype(str).str.strip().ne("").sum()),
-        sheets=("sheet", "sum"),
-        kg=("kg", "sum")
-    ).reset_index()
-
-    details = []
-    for _, row in cat_agg.iterrows():
-        if row['bdl'] > 0 or row['sheets'] > 0 or row['kg'] > 0:
-            details.append((
-                row['category'], 
-                f"{int(row['bdl']):,} Bdls | {row['sheets']:,.0f} Sheets | {row['kg']:,.1f} Kg"
-            ))
+    def rows(c, tot):
+        r = [(name, line(name, fields, c)) for name, fields in FG_CATS if c[name]["bdl"] > 0]
+        r.append(("TOTAL", f"{tot['bdl']:,} Bdls | {tot['sheet']:,.0f} Sheet | {tot['pcs']:,.0f} Pcs | {tot['kg']:,.1f} Kg"))
+        return r
 
     return {
-        "value": f"{day_data['bdl']:,} Bundles | {day_data['sheets']:,.0f} Sheets | {day_data['kg']:,.1f} Kg",
-        "desc": f"Total Production for {day:%d-%b-%Y}",
+        "value": f"{d_tot['bdl']:,} Bdls",
+        "desc": "Finished goods production (Prod. Summary)",
         "color": BLUE,
         "metrics": [
-            (f"{day_data['bdl']:,}", "Bundles"),
-            (f"{day_data['sheets']:,.0f}", "Sheets/Pcs"),
-            (f"{day_data['kg']:,.1f}", "Kgs")
+            (f"{d_tot['bdl']:,}", "Bundles"),
+            (f"{d_tot['sheet']:,.0f}", "Sheet"),
+            (f"{d_tot['pcs']:,.0f}", "Pcs"),
+            (f"{d_tot['kg']:,.1f}", "Kg"),
         ],
         "sections": [
             (f"🗓 Month {day:%b-%y} Total", [
-                ("Bundles", f"{mon_data['bdl']:,}"),
-                ("Sheets/Pcs", f"{mon_data['sheets']:,.0f}"),
-                ("Weight", f"{mon_data['kg']:,.1f} Kg")
+                ("Bundles", f"{m_tot['bdl']:,}"),
+                ("Sheet", f"{m_tot['sheet']:,.0f}"),
+                ("Pcs", f"{m_tot['pcs']:,.0f}"),
+                ("Weight", f"{m_tot['kg']:,.1f} Kg"),
             ])
         ],
         "details": [
-            (f"🏭 Category-wise Breakdown ({day:%d-%m-%y})", details)
-        ]
+            (f"📅 {day:%d-%m-%y} · Category wise", rows(d_cat, d_tot)),
+            (f"🗓 Month {day:%b-%y} · Category wise", rows(m_cat, m_tot)),
+        ],
     }
 def scrap_card(day):
     """Scrap (O Shed): Bundles count + KGs sum (Day & Month wise) aur 3 items ki yield."""
@@ -3715,7 +3725,7 @@ DEPARTMENTS = [
         "name": "INVENTORY",
         "kpis": [
             ("Dead Stock (Value & Qty)", "RM / WIP / FG"),
-            ("Total Inventory Value", "RM + WIP + FG"),
+            ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
             ("Inventory Days & Turnover", "Current position"),
         ],
         "links": [
