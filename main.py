@@ -1478,6 +1478,63 @@ def _fg_category(item, bundle):
     return "Other / Scrap"
 
 
+def credit_note_card(day):
+    """Credit Note (CN): Selected month ka total CN amount."""
+    # Isme hum 'CN' wali sheet ka data use karenge
+    df, err, _ = get_sheet("cn_sheet") # <-- Yahan apni sheet ka naam daalein
+    if df is None:
+        return {"value": "0", "desc": f"Data error: {err}", "color": RED}
+
+    # Maan lijiye aapki sheet mein date aur amount columns hain
+    sub = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
+    if sub.empty:
+        return {"value": "0", "desc": "No CN data for this month", "color": GREY}
+
+    # Amount column dhoondhein (jaise 'CN Amount')
+    amt_col = next((c for c in df.columns if "AMOUNT" in str(c).upper()), None)
+    if not amt_col:
+        return {"value": "Error", "desc": "Amount column not found", "color": RED}
+
+    total_amt = _num(sub[amt_col]).sum()
+
+    return {
+        "value": f"{total_amt:,.2f}", # <-- Yahan format change kar sakte hain (Cr mein chahiye toh)
+        "desc": f"Credit Note for {day:%b-%Y}",
+        "color": BLUE,
+        "details": [
+            (f"🗓 {day:%b-%Y} CN Data", [
+                ("Total CN Amount", f"{total_amt:,.2f}")
+            ])
+        ]
+    }
+
+def debit_note_card(day):
+    """Debit Note (DN): Selected month ka total DN amount."""
+    df, err, _ = get_sheet("dn_sheet") # <-- Yahan apni sheet ka naam daalein
+    if df is None:
+        return {"value": "0", "desc": f"Data error: {err}", "color": RED}
+
+    sub = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
+    if sub.empty:
+        return {"value": "0", "desc": "No DN data for this month", "color": GREY}
+
+    amt_col = next((c for c in df.columns if "AMOUNT" in str(c).upper()), None)
+    if not amt_col:
+        return {"value": "Error", "desc": "Amount column not found", "color": RED}
+
+    total_amt = _num(sub[amt_col]).sum()
+
+    return {
+        "value": f"{total_amt:,.2f}",
+        "desc": f"Debit Note for {day:%b-%Y}",
+        "color": BLUE,
+        "details": [
+            (f"🗓 {day:%b-%Y} DN Data", [
+                ("Total DN Amount", f"{total_amt:,.2f}")
+            ])
+        ]
+    }
+
 def total_inventory_card(day):
     """Total Inventory Bundles (FG): din + mahine ki total production, category wise details."""
     y_df, err, _ = get_sheet("prod_summary")
@@ -2258,6 +2315,11 @@ def compute_kpi(df, spec, day):
     # ---------- SERVICEABILITY (Nayi Sheet se) ----------
     if calc == "serviceability":
         return serviceability_card(day)
+    # ---------- FINANCE: CN & DN ----------
+    if calc == "credit_note":
+        return credit_note_card(day)
+    if calc == "debit_note":
+        return debit_note_card(day)
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -3529,6 +3591,14 @@ KPI_SOURCES = {
     ("finance", "Total Due (Drs & Crs)"): {
         "sheet": "finance_ageing",
         "calc": "finance_total_due",
+    },
+    ("finance", "CREDIT NOTE (CN)"): {
+        "sheet": "cn_sheet",      # Yahan apni CN wali sheet ka naam daalein
+        "calc": "credit_note",
+    },
+    ("finance", "DEBIT NOTE (DN)"): {
+        "sheet": "dn_sheet",      # Yahan apni DN wali sheet ka naam daalein
+        "calc": "debit_note",
     },
     # <<< SALES DATA SOURCE >>>
     ("sales", "Last Day Sale (Value & Bdls)"): {
