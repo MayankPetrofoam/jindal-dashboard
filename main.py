@@ -1044,7 +1044,6 @@ def po_ageing_card(df, spec, day):
         "value": f"{n_pos} POs",
         "desc": uom_txt,
         "color": RED if (lo >= 60 and n_pos) else BLUE,
-        "extra": extra,
         "details": details,
     }
 
