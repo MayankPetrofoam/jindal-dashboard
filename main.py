@@ -4022,11 +4022,11 @@ def get_serviceability_data(url, sheet_name):
     return rows, datetime.datetime.now(IST)
 if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-                                            cfg["date_col"], cfg.get("dayfirst", True),
-                                            cfg.get("static", False))
-4020        good[name] = (df, fetched)
-4021        errors.pop(name, None)
-4022        return df, None, fetched
+                                                cfg["date_col"], cfg.get("dayfirst", True),
+                                                cfg.get("static", False))
+    4020        good[name] = (df, fetched)
+    4021        errors.pop(name, None)
+    4022        return df, None, fetched
 
 4023
 4024    # Baaki normal sheets ke liye (Purchase, Maintenance)
