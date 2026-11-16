@@ -3472,7 +3472,7 @@ KPI_SOURCES = {
         "basis": "received",
     },
 
-    ("inventory", "Total Inventory Value"): {"sheet": "stock_data", "calc": "stock_value"},
+    ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
     ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "stock_data", "calc": "stock_dead", "dead_days": 90},
 
     # Production Department ke saare blocks ki live binding:
@@ -3725,7 +3725,7 @@ DEPARTMENTS = [
         "name": "INVENTORY",
         "kpis": [
             ("Dead Stock (Value & Qty)", "RM / WIP / FG"),
-            ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
+            ("Total Inventory Bundles (FG)", "FG production"),
             ("Inventory Days & Turnover", "Current position"),
         ],
         "links": [
