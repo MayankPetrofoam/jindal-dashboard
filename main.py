@@ -3090,8 +3090,7 @@ SHEETS = {
         "worksheet": "WEEKLY",                     # 👈 Yahan bhi comma zaroori hai
         "date_col": "MONTH",                       # 👈 Yahan bhi
     },
-}
-    "sales_report": {
+   "sales_report": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx",
         "sheet_name": "Sales Data",
