@@ -4073,32 +4073,32 @@ def render_kpi(dept_key, idx, title, desc):
                     _tt = _td[(_td["chem"] == "GRAND TOTAL") & (_td["kg"] > 0)]
                     dates = sorted(set(dates) | set(_tt["_date"].dropna().unique()), reverse=True)
 
-            # PILLOW: dates sirf wo jin din K shed pillow bana
-            if spec.get("calc") == "pillow_sum":
-                b = df["BUNDLES"].astype(str).str.strip().str.upper()
-                _p = df[b.str.match(r"^\d{2}-K")]
-                if not _p.empty:
+        # PILLOW: dates sirf wo jin din K shed pillow bana
+        if spec.get("calc") == "pillow_sum":
+            b = df["BUNDLES"].astype(str).str.strip().str.upper()
+            _p = df[b.str.match(r"^\d{2}-K")]
+            if not _p.empty:
             dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
-            
-            # MOULD: dates sirf wo jin din J shed bana
-            if spec.get("calc") == "mould_sum":
-                b = df["BUNDLES"].astype(str).str.strip().str.upper()
-                _p = df[b.str.match(r"^\d{2}-J")]
-                if not _p.empty:
+        
+        # MOULD: dates sirf wo jin din J shed bana
+        if spec.get("calc") == "mould_sum":
+            b = df["BUNDLES"].astype(str).str.strip().str.upper()
+            _p = df[b.str.match(r"^\d{2}-J")]
+            if not _p.empty:
             dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
-            # BONDED: dates sirf wo jin din A shed bana
-            if spec.get("calc") == "bonded_sum":
-                b = df["BUNDLES"].astype(str).str.strip().str.upper()
-                _p = df[b.str.match(r"^\d{2}-A")]
-                if not _p.empty:
+        # BONDED: dates sirf wo jin din A shed bana
+        if spec.get("calc") == "bonded_sum":
+            b = df["BUNDLES"].astype(str).str.strip().str.upper()
+            _p = df[b.str.match(r"^\d{2}-A")]
+            if not _p.empty:
             dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
-    # SCRAP: dates sirf wo jin din O shed ka data hai
-    if spec.get("calc") == "scrap_sum":    # 👈 Yahan 4 space zaroori hai (line 4090 jaisa)
-        b = df["BUNDLES"].astype(str).str.strip().str.upper()
-        _p = df[b.str.match(r"^\d{2}-O")]
-        if not _p.empty:
-            dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+# SCRAP: dates sirf wo jin din O shed ka data hai
+if spec.get("calc") == "scrap_sum":    # 👈 Yahan 4 space zaroori hai (line 4090 jaisa)
+    b = df["BUNDLES"].astype(str).str.strip().str.upper()
+    _p = df[b.str.match(r"^\d{2}-O")]
+    if not _p.empty:
+        dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
