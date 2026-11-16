@@ -3500,6 +3500,18 @@ DEPARTMENTS = [
             ("📈 Chemical Status Sheet (Google Sheets)", None),
             ("📋 LB Stock Ledger (Google Sheets)", None),
         ],
+    
+    },
+    {
+        "key": "online",
+        "icon": "🛍️",
+        "name": "ONLINE BUSINESS",
+        "kpis": [
+            ("Online Business Expenses", "Month wise"),
+        ],
+        "links": [
+            ("📋 Online Expense Sheet", None),
+        ],
     },
     {
         "key": "production",
@@ -3652,7 +3664,7 @@ DEPARTMENTS = [
 
 # Dashboard mein departments ka order (upar se neeche)
 DISPLAY_ORDER = ["foaming", "production", "order", "sales", "purchase",
-                "inventory", "finance", "maint", "hr", "other"]
+                "inventory", "finance", "maint", "hr", "other","online"]
 DEPARTMENTS.sort(key=lambda d: DISPLAY_ORDER.index(d["key"]))
 
 
@@ -4224,9 +4236,81 @@ def render_department_button(dept):
                     disabled=True,
                     use_container_width=True,
                 )
+# ====================================================================
+# ONLINE BUSINESS (sirf monthly, manual data)
+# Har mahine ka naya data neeche ek nayi (saal, mahina) entry bana kar daalo
+# ====================================================================
+ONLINE_EXPENSES = {
+    (2026, 10): {
+        "main": [
+            ("Amazon Seller", "Platform", 603273),
+            ("Blinkit Commerce", "Platform", 48704),
+            ("Blue Dart", "Logistics", 34685),
+            ("Easebuzz", "Platform Cost", 10063),
+            ("Evitamin", "Agency Charges", 160417),
+            ("Facebook", "Ad Cost", 79732),
+            ("Flipkart", "Platform Cost", 6644981),   # kagaz ka number check karein
+        ],
+        "other": [
+            ("Gokwik", "Platform", 7997),
+            ("Delivery / PR Exit", "Logistics", 332000),      # 3.32 lakh
+            ("Designer + Mukul", "Agency Charges", 65000),    # 0.65 lakh
+        ],
+    },
+    # Agle mahine ke liye aise hi add karo:
+    # (2026, 11): {"main": [("Amazon Seller", "Platform", 0)], "other": []},
+}
+
+
+def render_online_business(dept):
+    """Online Business: sirf month dropdown, total + category-wise + platform-wise."""
+    with st.container(border=True):
+        render_department_button(dept)
+        months = sorted(ONLINE_EXPENSES.keys(), reverse=True)
+        chosen = st.selectbox(
+            "Online Business month", months, key="online_month",
+            label_visibility="collapsed",
+            format_func=lambda m: datetime.date(m[0], m[1], 1).strftime("%b-%y"),
+        )
+        data = ONLINE_EXPENSES[chosen]
+        main, other = data.get("main", []), data.get("other", [])
+        main_total = sum(a for _, _, a in main)
+        other_total = sum(a for _, _, a in other)
+        grand = main_total + other_total
+
+        by_cat = {}
+        for _, cat, amt in main + other:
+            by_cat[cat] = by_cat.get(cat, 0) + amt
+        by_cat = dict(sorted(by_cat.items(), key=lambda x: x[1], reverse=True))
+
+        metrics = [
+            (_inr(grand), "Total Expense"),
+            (_inr(main_total), "Main Platforms"),
+            (_inr(other_total), "Others"),
+        ]
+        label = datetime.date(chosen[0], chosen[1], 1).strftime("%b-%Y")
+        st.markdown(
+            f'<div class="kpi-wrap"><div class="kpi-title">Online Business Expenses</div>'
+            f'<div class="kpi-date">📅 {label}</div>{_tiles_html(metrics)}'
+            f'<div class="kpi-desc" style="color:{BLUE};">Monthly expense: platform, logistics, ads & agency</div></div>',
+            unsafe_allow_html=True,
+        )
+        with st.expander("📋 View Full Details"):
+            sections = [
+                ("📂 Category wise", [(k, _inr(v)) for k, v in by_cat.items()]),
+                ("🏪 Platform wise", [(f"{n} ({c})", _inr(a)) for n, c, a in main]
+                                     + [("TOTAL (main)", _inr(main_total))]),
+                ("➕ Other expenses", [(f"{n} ({c})", _inr(a)) for n, c, a in other]
+                                      + [("TOTAL (others)", _inr(other_total))]),
+                ("🧮 Grand Total", [("Sab mila ke", _inr(grand))]),
+            ]
+            st.markdown(_sections_html(sections), unsafe_allow_html=True)
 
 
 def render_department(dept):
+    if dept["key"] == "online":
+        render_online_business(dept)
+        return
     with st.container(border=True):
         render_department_button(dept)
         kpis = dept["kpis"]
