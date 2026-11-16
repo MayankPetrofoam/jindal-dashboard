@@ -4022,16 +4022,18 @@ def get_serviceability_data(url, sheet_name):
     return rows, datetime.datetime.now(IST)
 if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-                                                    cfg["date_col"], cfg.get("dayfirst", True),
-                                                    cfg.get("static", False))
-        good[name] = (df, fetched)
-        errors.pop(name, None)
-        return df, None, fetched
-
+                    cfg["date_col"], cfg.get("dayfirst", True),
     # Baaki normal sheets ke liye (Purchase, Maintenance)
     df, fetched = _fetch_cached(
         cfg["url"], cfg.get("worksheet"), cfg["date_col"],
         cfg.get("dayfirst", True), _service_account() is not None,
+        cfg.get("anchor"), tuple(cfg.get("ffill", ())),
+        tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
+    )
+    good[name] = (df, fetched)
+    errors.pop(name, None)
+    log.info("sheet '%s' loaded: %d rows", name, len(df))
+    return df, None, fetched
         cfg.get("anchor"), tuple(cfg.get("ffill", ())),
         tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
     )
