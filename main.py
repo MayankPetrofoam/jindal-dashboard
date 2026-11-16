@@ -1483,10 +1483,12 @@ def scrap_card(day):
         w = mon_item_weights[item]
         pct = (w / total_3_items_kg * 100) if total_3_items_kg > 0 else 0.0
         yield_rows.append((item.title(), f"{w:,.1f} Kg | Yield: {pct:.2f}%"))
-   d_item_w = {it: float(d_day.loc[d_day[item_col] == it, "kg"].sum()) for it in scrap_items}
-   d_total = sum(d_item_w.values())
-   day_yield_rows = [(it.title(), f"{w:,.1f} Kg | Yield: {(w/d_total*100 if d_total else 0):.2f}%")
-                  for it, w in d_item_w.items()]
+
+    # 👇 Yahan se 4 space (indentation) zaroori hai
+    d_item_w = {it: float(d_day.loc[d_day[item_col] == it, "kg"].sum()) for it in scrap_items}
+    d_total = sum(d_item_w.values())
+    day_yield_rows = [(it.title(), f"{w:,.1f} Kg | Yield: {(w/d_total*100 if d_total else 0):.2f}%")
+                      for it, w in d_item_w.items()]
 
     # --- Card Return ---
     return {
@@ -1501,7 +1503,8 @@ def scrap_card(day):
         ],
         "details": [
             (f"🗓 Month-wise Breakdown ({day:%b-%y})", month_breakdown_rows),
-            (f"⚖ Scrap Items Yield (Month {day:%b-%y})", yield_rows)
+            (f"⚖ Scrap Items Yield (Month {day:%b-%y})", yield_rows),
+            (f"📅 Scrap Items Yield (Day {day:%d-%m-%y})", day_yield_rows)
         ]
     }
 
