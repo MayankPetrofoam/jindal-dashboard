@@ -4030,16 +4030,16 @@ if cfg.get("type") == "excel":
 
 
     # Baaki normal sheets ke liye (Purchase, Maintenance)
-    df, fetched = _fetch_cached(  # 👈 Yahan 4 space ya 8 space (try block ke hisaab se) lagao
-       cfg["url"], cfg.get("worksheet"), cfg["date_col"],
-        cfg.get("dayfirst", True), _service_account() is not None,
-        cfg.get("anchor"), tuple(cfg.get("ffill", ())),
-        tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
-    )
-        good[name] = (df, fetched)
-        errors.pop(name, None)
-        log.info("sheet '%s' loaded: %d rows", name, len(df))
-        return df, None, fetched
+df, fetched = _fetch_cached(  # 👈 Yahan 4 space ya 8 space (try block ke hisaab se) lagao
+   cfg["url"], cfg.get("worksheet"), cfg["date_col"],
+    cfg.get("dayfirst", True), _service_account() is not None,
+    cfg.get("anchor"), tuple(cfg.get("ffill", ())),
+    tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
+)
+    good[name] = (df, fetched)
+    errors.pop(name, None)
+    log.info("sheet '%s' loaded: %d rows", name, len(df))
+    return df, None, fetched
     except Exception as exc:
         msg = f"{type(exc).__name__}: {exc}"
         log.error("sheet '%s' failed: %s", name, msg)
