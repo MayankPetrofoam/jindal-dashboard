@@ -3201,8 +3201,9 @@ SHEETS = {
     },
 "serviceability": {
     "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9Mjmj-OWrclnLES-lT_g1_kIQ/pubhtml",
-    "worksheet": "MONTHLY",  # <--- Yahan WEEKLY ki jagah MONTHLY kar do
+    "worksheet": "1735095064",  # <--- Yahan WEEKLY ki jagah MONTHLY kar do
     "date_col": "MONTH",
+    "dayfirst": True,
 },
    "sales_report": {
         "type": "excel",
@@ -3514,7 +3515,7 @@ KPI_SOURCES = {
     ("order", "Orders 21+ Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_21_plus"},
     ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
-    ("order", "SERVICEABILITY %"): {"calc": "serviceability"},  
+    ("order", "Serviceability %"): {"sheet": "serviceability", "calc": "serviceability"}, 
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
