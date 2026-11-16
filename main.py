@@ -2446,7 +2446,7 @@ def compute_kpi(df, spec, day):
                 details.append((f"🗓 Daily Sales ({day:%b-%Y})", rows))
 
             return {
-                "value": f"{total_amt:,.2f}",  # <-- Yahan se _inr_cr hata kar direct comma wala number kar diya
+                "value": f"{total_amt / 10000000:,.2f}",  # <-- Yahan / 10000000 (Crores) kar diya
                 "desc": f"Last recorded sale on {day.strftime('%d-%b-%Y')} | {total_parties:,.0f} Parties",
                 "color": BLUE,
                 "details": details
@@ -2482,7 +2482,7 @@ def compute_kpi(df, spec, day):
             details.append(("📊 All Months Sales", rows))
 
             return {
-                "value": f"{total_amt:,.2f}",  # <-- Yahan se bhi _inr_cr hata diya
+                "value": f"{total_amt / 10000000:,.2f}",  # <-- Yahan bhi / 10000000 (Crores) kar diya
                 "desc": f"Month-to-date | {total_parties:,.0f} Parties",
                 "color": BLUE,
                 "details": details
