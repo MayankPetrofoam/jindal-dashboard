@@ -4021,11 +4021,6 @@ def get_serviceability_data(url, sheet_name):
         
     return rows, datetime.datetime.now(IST)
 
-        good[name] = (df, fetched)
-        errors.pop(name, None)
-        log.info("sheet '%s' loaded: %d rows", name, len(df))
-        return df, None, fetched
-
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def get_serviceability_data(url, sheet_name):
     """Serviceability sheet (Month-wise rows, Shed-wise columns) ko padhta hai."""
