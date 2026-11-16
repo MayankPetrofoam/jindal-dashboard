@@ -4045,13 +4045,6 @@ if cfg.get("type") == "excel":
         log.info("sheet '%s' loaded: %d rows", name, len(df))
         return df, None, fetched
 
-    except Exception as exc:
-        msg = f"{type(exc).__name__}: {exc}"
-        log.error("sheet '%s' failed: %s", name, msg)
-        errors[name] = msg
-        if name in good:
-            return good[name][0], msg, good[name][1]
-        return None, msg, None
 @st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
 def get_serviceability_data(url, sheet_name):
     """Serviceability sheet (Month-wise rows, Shed-wise columns) ko padhta hai."""
