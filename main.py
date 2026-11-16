@@ -3085,11 +3085,11 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
-    "serviceability": {
-        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9MJmj-lOwrclnLES-1T_g1_kIQ/pubhtml",  # 👈 Yahan comma zaroori hai
-        "worksheet": "WEEKLY",                     # 👈 Yahan bhi comma zaroori hai
-        "date_col": "MONTH",                       # 👈 Yahan bhi
-    },
+"serviceability": {
+    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9Mjmj-OWrclnLES-lT_g1_kIQ/pubhtml",
+    "worksheet": "MONTHLY",  # <--- Yahan WEEKLY ki jagah MONTHLY kar do
+    "date_col": "MONTH",
+},
    "sales_report": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx",
@@ -4071,44 +4071,69 @@ def get_serviceability_data(url, sheet_name):
     return rows, datetime.datetime.now(IST)
 
 def serviceability_card(day):
-    sheet_info = SHEETS.get("serviceability")
-    if not sheet_info:
-        return {"value": "0.0%", "desc": "Serviceability sheet config missing", "color": RED}
+    # 1. Data fetch karein get_sheet() se (jo aapke code mein pehle se hai)
+    df, err, _ = get_sheet("serviceability")
+    if df is None:
+        return {"value": "0.0%", "desc": f"Error: {err}", "color": RED}
 
-    try:
-        rows, _ = get_serviceability_data(sheet_info["url"], sheet_info["worksheet"])
-    except Exception as e:
-        return {"value": "0.0%", "desc": f"Error: {str(e)}", "color": RED}
-
+    # 2. Selected month ka naam nikalain (Jaise "NOVEMBER" ya "OCTOBER")
     target_month = day.strftime("%B").upper()
-    month_data = next((r for r in rows if target_month in r["month"].upper() or r["month"].upper() in target_month), None)
 
-    if not month_data:
+    # 3. Sheet mein "MONTH" wala column dhoondhein
+    month_col = next((c for c in df.columns if str(c).strip().upper() == "MONTH"), None)
+    if not month_col:
+        return {"value": "0.0%", "desc": "MONTH column not found", "color": RED}
+
+    # 4. Us month ki row filter karein
+    row_df = df[df[month_col].astype(str).str.strip().str.upper() == target_month]
+    
+    if row_df.empty:
         return {"value": "0.0%", "desc": f"No data for {target_month}", "color": GREY}
 
-    plan = month_data["total_plan"]
-    dispatch = month_data["total_dispatch"]
-    pct = (dispatch / plan * 100) if plan > 0 else 0.0
+    # 5. Numbers nikalne ka helper (taki % ya comma se error na aaye)
+    def get_val(col_name):
+        c = next((x for x in df.columns if str(x).strip().upper() == col_name.upper()), None)
+        if c:
+            val = _num(row_df[c]).iloc[0]
+            return float(val) if pd.notna(val) else 0.0
+        return 0.0
 
+    # 6. Values extract karein
+    total_plan = get_val("TOTAL PLAN")
+    total_dispatch = get_val("TOTAL DISPATCH")
+    
+    # Aapki sheet mein direct "SERVICEABILITY %" column hai, wahan se uthayenge
+    pct = get_val("SERVICEABILITY %")
+    
+    # Agar wo column khali ho, toh backup ke liye calculate kar lein
+    if pct == 0 and total_plan > 0:
+        pct = (total_dispatch / total_plan) * 100
+
+    # 7. Shed-wise data nikalein
     shed_details = []
-    for shed_name, val in month_data["sheds"].items():
+    # Aapki sheet mein 'B+C', 'D', 'E', 'H' wagera columns hain. Hum unhe automatically utha lenge.
+    shed_cols = ["B+C", "D", "E", "H", "F", "2NDX", "3RD", "PILLOW", "OTHER", "BLOCK", "BONDE D", "LOADING", "PPC", "LOCAL"]
+    
+    for shed_name in shed_cols:
+        val = get_val(shed_name)
         if val > 0:
-            shed_pct = (val / plan * 100) if plan > 0 else 0.0
+            shed_pct = (val / total_plan * 100) if total_plan > 0 else 0.0
             shed_details.append((shed_name, f"{val:,.0f} ({shed_pct:.1f}%)"))
 
+    # 8. Return dictionary (Jo aapka dashboard padhta hai)
     return {
         "value": f"{pct:.1f}%",
-        "desc": f"Total Plan: {plan:,.0f} | Dispatch: {dispatch:,.0f}",
-        "color": BLUE,
+        "desc": f"Serviceability for {target_month} (Plan: {total_plan:,.0f} | Dispatch: {total_dispatch:,.0f})",
+        "color": BLUE if pct > 80 else RED,
         "metrics": [
             (f"{pct:.1f}%", "Serviceability", "yield"),
-            (f"{plan:,.0f}", "Total Plan"),
-            (f"{dispatch:,.0f}", "Dispatch"),
+            (f"{total_plan:,.0f}", "Total Plan"),
+            (f"{total_dispatch:,.0f}", "Dispatch"),
         ],
         "sections": [
             (f"🗓 {target_month.title()} Data", [
-                ("Total Plan", f"{plan:,.0f}"),
-                ("Total Dispatch", f"{dispatch:,.0f}"),
+                ("Total Plan", f"{total_plan:,.0f}"),
+                ("Total Dispatch", f"{total_dispatch:,.0f}"),
                 ("Serviceability", f"{pct:.1f}%")
             ])
         ],
