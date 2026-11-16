@@ -4091,13 +4091,14 @@ def render_kpi(dept_key, idx, title, desc):
                 b = df["BUNDLES"].astype(str).str.strip().str.upper()
                 _p = df[b.str.match(r"^\d{2}-A")]
                 if not _p.empty:
-                    dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
-         # SCRAP: dates sirf wo jin din O shed ka data hai
-          if spec.get("calc") == "scrap_sum":
-              b = df["BUNDLES"].astype(str).str.strip().str.upper()
-              _p = df[b.str.match(r"^\d{2}-O")]
-              if not _p.empty:
-                  dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+
+    # SCRAP: dates sirf wo jin din O shed ka data hai
+    if spec.get("calc") == "scrap_sum":    # 👈 Yahan 4 space zaroori hai (line 4090 jaisa)
+        b = df["BUNDLES"].astype(str).str.strip().str.upper()
+        _p = df[b.str.match(r"^\d{2}-O")]
+        if not _p.empty:
+            dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
