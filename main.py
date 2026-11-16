@@ -3385,6 +3385,19 @@ SHEETS = {
         "date_col": "Breakdown Date",
         "dayfirst": True
     },
+SHEETS = {
+    # ... baaki sheets ...
+    "cn_sheet": {
+        "url": "YOUR_GOOGLE_SHEET_CSV_LINK_HERE",
+        "worksheet": "Sheet1",
+        "date_col": "DATE", # Ya jo bhi column ho
+    },
+    "dn_sheet": {
+        "url": "YOUR_GOOGLE_SHEET_CSV_LINK_HERE",
+        "worksheet": "Sheet1",
+        "date_col": "DATE",
+    }
+}
 
     "foaming_chemicals": {
         "type": "excel",
