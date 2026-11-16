@@ -4024,22 +4024,22 @@ if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
                                                     cfg["date_col"], cfg.get("dayfirst", True),
                                                     cfg.get("static", False))
-4027        good[name] = (df, fetched)
-4028        errors.pop(name, None)
-4029        return df, None, fetched
-4030
-4031
-4032    # Baaki normal sheets ke liye (Purchase, Maintenance)
-4033        df, fetched = _fetch_cached(   # 👈 Is line ke aage 8 space (2 Tab) hone chahiye
-4034            cfg["url"], cfg.get("worksheet"), cfg["date_col"],
-4035            cfg.get("dayfirst", True), _service_account() is not None,
-4036            cfg.get("anchor"), tuple(cfg.get("ffill", ())),
-4037            tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
-4038        )
-4039        good[name] = (df, fetched)         # 👈 Aur ye bhi 8 space par
-4040        errors.pop(name, None)
-4041        log.info("sheet '%s' loaded: %d rows", name, len(df))
-4042        return df, None, fetched
+        good[name] = (df, fetched)
+        errors.pop(name, None)
+        return df, None, fetched
+
+    # Baaki normal sheets ke liye (Purchase, Maintenance)
+    df, fetched = _fetch_cached(
+        cfg["url"], cfg.get("worksheet"), cfg["date_col"],
+        cfg.get("dayfirst", True), _service_account() is not None,
+        cfg.get("anchor"), tuple(cfg.get("ffill", ())),
+        tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
+    )
+    good[name] = (df, fetched)
+    errors.pop(name, None)
+    log.info("sheet '%s' loaded: %d rows", name, len(df))
+    return df, None, fetched
+
     except Exception as exc:
         msg = f"{type(exc).__name__}: {exc}"
         log.error("sheet '%s' failed: %s", name, msg)
