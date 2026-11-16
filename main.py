@@ -1439,6 +1439,99 @@ def mould_card(day):
         "sections": [(f"🗓 Month {day:%b-%y}", rows(d_mon))],
         "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
     }
+def total_inventory_card(day):
+    """Total Inventory (FG): Din, Mahine aur Total production + Category wise details."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    # Category Mapping: Kaunsa item kaunsi category mein jayega
+    def get_category(row):
+        item = str(row["item"]).upper()
+        bundle = str(row["BUNDLES"]).upper()
+        
+        if item in ["PU FOAM 2ND GRADE", "PEELING 2ND GRADE", "A GRADE", "PU FOAM A GRADE", "PU FOAM DC GRADE"]:
+            return "2nd Grade / A Grade / DC"
+        if item in ["PU FOAM 3RD GRADE", "PEELING 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]:
+            return "3rd Grade / Scrap"
+        if "MATTRESS" in item:
+            return "Mattress"
+        if "PILLOW" in item:
+            return "Pillow"
+        if "ROLL PACK" in item or "ROLLPACK" in item:
+            return "Rollpack"
+        if "BONDED" in item or "BONDE" in item:
+            return "Bonded (A Shed)"
+            
+        # Agar kuch aur hai, toh shed letter se pehchano (26-A, 26-M, etc.)
+        if bundle.startswith("26-A"):
+            return "Bonded (A Shed)"
+        if bundle.startswith("26-O"):
+            return "3rd Grade / Scrap"
+        
+        return "PU Foam Sheet (1st Grade)"
+
+    # Nayi category column banayein
+    y_df = y_df.copy()
+    y_df["category"] = y_df.apply(get_category, axis=1)
+
+    m_start, m_end = _month_range(day)
+
+    def agg_data(frame):
+        if frame.empty:
+            return {"bdl": 0, "sheets": 0.0, "kg": 0.0, "pcs": 0.0}
+        
+        # Bundles = Count of non-empty Bundle strings
+        bdl = int(frame["BUNDLES"].astype(str).str.strip().ne("").sum())
+        
+        # Sheets = Sum of SHEET column (aur agar sheet 0 hai toh Pcs consider karenge)
+        sheets = float(frame["sheet"].sum())
+        if sheets == 0:
+            sheets = float(_num(frame["SHEET"]).sum()) if "SHEET" in frame.columns else 0.0
+            
+        kg = float(frame["kg"].sum())
+        return {"bdl": bdl, "sheets": sheets, "kg": kg}
+
+    # Din ka data
+    day_data = agg_data(y_df[y_df["_date"] == day])
+    # Mahine ka data
+    mon_data = agg_data(y_df[(y_df["_date"] >= m_start) & (y_df["_date"] <= m_end)])
+    
+    # View Details ke liye Category-wise data
+    cat_agg = y_df.groupby("category").agg(
+        bdl=("BUNDLES", lambda x: x.astype(str).str.strip().ne("").sum()),
+        sheets=("sheet", "sum"),
+        kg=("kg", "sum")
+    ).reset_index()
+
+    details = []
+    for _, row in cat_agg.iterrows():
+        if row['bdl'] > 0 or row['sheets'] > 0 or row['kg'] > 0:
+            details.append((
+                row['category'], 
+                f"{int(row['bdl']):,} Bdls | {row['sheets']:,.0f} Sheets | {row['kg']:,.1f} Kg"
+            ))
+
+    return {
+        "value": f"{day_data['bdl']:,} Bundles | {day_data['sheets']:,.0f} Sheets | {day_data['kg']:,.1f} Kg",
+        "desc": f"Total Production for {day:%d-%b-%Y}",
+        "color": BLUE,
+        "metrics": [
+            (f"{day_data['bdl']:,}", "Bundles"),
+            (f"{day_data['sheets']:,.0f}", "Sheets/Pcs"),
+            (f"{day_data['kg']:,.1f}", "Kgs")
+        ],
+        "sections": [
+            (f"🗓 Month {day:%b-%y} Total", [
+                ("Bundles", f"{mon_data['bdl']:,}"),
+                ("Sheets/Pcs", f"{mon_data['sheets']:,.0f}"),
+                ("Weight", f"{mon_data['kg']:,.1f} Kg")
+            ])
+        ],
+        "details": [
+            (f"🏭 Category-wise Breakdown ({day:%d-%m-%y})", details)
+        ]
+    }
 def scrap_card(day):
     """Scrap (O Shed): Bundles count + KGs sum (Day & Month wise) aur 3 items ki yield."""
     y_df, err, _ = get_sheet("prod_summary")
@@ -2149,6 +2242,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: SCRAP (O Shed) ----------
     if calc == "scrap_sum":
         return scrap_card(day)
+    # ---------- PRODUCTION: TOTAL INVENTORY BUNDLES (FG) ----------
+    if calc == "total_inv":
+        return total_inventory_card(day)
     # ---------- SERVICEABILITY (Nayi Sheet se) ----------
     if calc == "serviceability":
         return serviceability_card(day)
