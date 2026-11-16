@@ -3621,8 +3621,8 @@ SHEETS = {
     "finance_svp": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/SVP%20(1).xlsx",
-        "sheet_name": "svp",
+        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/blob/main/DRS%20%26%20CRS.xlsx",
+        "sheet_name": "DRS & CRS",
         "date_col": "PARTY NAME",
     },
     "manual": {
