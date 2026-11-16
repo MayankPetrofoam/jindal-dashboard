@@ -4201,8 +4201,10 @@ def get_serviceability_data(url, sheet_name):
     return rows, datetime.datetime.now(IST)
 
 def serviceability_card(day):
-    # 1. Data fetch karein get_sheet() se (jo aapke code mein pehle se hai)
+    import datetime
+    day = datetime.date(day.year, day.month, 1)  # <--- Bas ye line add karein
     df, err, _ = get_sheet("serviceability")
+    # ... aage ka code waise hi rahega ...
     if df is None:
         return {"value": "0.0%", "desc": f"Error: {err}", "color": RED}
 
