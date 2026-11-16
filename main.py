@@ -699,7 +699,7 @@ PO_COLUMNS = {
     "received_qty": ["Inv Qty", "Received Qty", "Received Quantity", "GRN Qty", "Receipt Qty", "Rcvd Qty"],
     "inv_rate": ["Invoice Rate", "Inv Rate"],
     "receipt_no": ["Invoice #", "Invoice No", "Invoice No.", "Invoice Number", "GRN No", "GRN #", "Challan No"],
-    "receipt_date": ["Recd Date", "Received Date", "Receipt Date", "GRN Date"],
+    "receipt_date": ["Recd Date", "Invoice Date", "Received Date", "Receipt Date", "GRN Date"],
     "status": ["Status"],
     "sheet_balance": ["Balance Qty", "Pending Qty", "Balance Quantity", "Pending Quantity"],
 }
@@ -1017,6 +1017,8 @@ def po_ageing_card(df, spec, day):
     if r is None:
         return {"value": "0 POs", "desc": "No PO on or before this date", "color": GREY}
     g, issues = r
+    if g is None or g.empty:
+        return {"value": "0 POs", "desc": f"Error: {issues[0] if issues else 'No data'}", "color": RED}
     label, lo, hi = PO_AGE_BUCKETS[spec["calc"]]
 
     def pick_bucket(lo_, hi_):
