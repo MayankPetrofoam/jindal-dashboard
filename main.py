@@ -1432,6 +1432,72 @@ def mould_card(day):
         "sections": [(f"🗓 Month {day:%b-%y}", rows(d_mon))],
         "details": [(f"📆 Total ({first:%d-%m-%y} to {last:%d-%m-%y})", rows(d_all))],
     }
+def scrap_card(day):
+    """Scrap (O Shed): Bundles count + KGs sum (Day & Month wise) aur 3 items ki yield."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    
+    # O Shed ki rows (Bundles '26-O' se shuru hone wali)
+    b = y_df["BUNDLES"].astype(str).str.strip().str.upper()
+    o_rows = y_df[b.str.match(r"^\d{2}-O")]
+    
+    if o_rows.empty:
+        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-O scrap row nahi mili", "color": GREY}
+
+    m_start, m_end = _month_range(day)
+
+    # --- Day wise ---
+    d_day = o_rows[o_rows["_date"] == day]
+    day_bdls = int(d_day["BUNDLES"].astype(str).str.strip().ne("").sum())
+    day_kg = float(d_day["kg"].sum())
+
+    # --- Month wise ---
+    d_mon = o_rows[(o_rows["_date"] >= m_start) & (o_rows["_date"] <= m_end)]
+    mon_bdls = int(d_mon["BUNDLES"].astype(str).str.strip().ne("").sum())
+    mon_kg = float(d_mon["kg"].sum())
+
+    # --- Month-wise Breakdown (View Details ke liye) ---
+    month_breakdown_rows = []
+    if not d_mon.empty:
+        m_grouped = d_mon.groupby("_date").agg(
+            bdls=("BUNDLES", lambda x: x.astype(str).str.strip().ne("").sum()),
+            kg=("kg", "sum")
+        ).sort_index(ascending=False)
+        
+        for dt, row in m_grouped.iterrows():
+            dt_str = dt.strftime('%d-%b-%Y')
+            month_breakdown_rows.append((f"📅 {dt_str}", f"{row['bdls']} Bdls | {row['kg']:,.1f} Kg"))
+
+    # --- Yield Calculation (3 Items) ---
+    scrap_items = ["PU FOAM 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]
+    
+    # Formula: (Item ka total weight / 3 items ke total weight) * 100
+    mon_item_weights = {item: float(d_mon.loc[d_mon["item"] == item, "kg"].sum()) for item in scrap_items}
+    total_3_items_kg = sum(mon_item_weights.values())
+
+    yield_rows = []
+    for item in scrap_items:
+        w = mon_item_weights[item]
+        pct = (w / total_3_items_kg * 100) if total_3_items_kg > 0 else 0.0
+        yield_rows.append((item.title(), f"{w:,.1f} Kg | Yield: {pct:.2f}%"))
+
+    # --- Card Return ---
+    return {
+        "value": f"{day_kg:,.1f} Kg | {day_bdls:,} Bdls",
+        "desc": f"Scrap production (O Shed) · {day:%d-%b-%Y}",
+        "color": BLUE,
+        "metrics": [
+            (f"{day_kg:,.1f}", "Day Kg"),
+            (f"{day_bdls:,}", "Day Bdls"),
+            (f"{mon_kg:,.1f}", f"Month Kg ({day:%b})"),
+            (f"{mon_bdls:,}", f"Month Bdls ({day:%b})"),
+        ],
+        "details": [
+            (f"🗓 Month-wise Breakdown ({day:%b-%y})", month_breakdown_rows),
+            (f"⚖ Scrap Items Yield (Month {day:%b-%y})", yield_rows)
+        ]
+    }
 
 
 
@@ -2064,6 +2130,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: MATTRESS (H shed production + M-Shed yield) ----------
     if calc == "mattress_sum":
         return mattress_card(day)
+    # ---------- PRODUCTION: SCRAP (O Shed) ----------
+    if calc == "scrap_sum":
+        return scrap_card(day)
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -3285,6 +3354,12 @@ KPI_SOURCES = {
     ("production", "Mould"): {"sheet": "prod_summary", "calc": "mould_sum"},
     ("production", "Bonded"): {"sheet": "prod_summary", "calc": "bonded_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
+    "scrap": {
+        "title": "SCRAP",
+        "calc": "scrap_sum",
+        "sheet": "prod_summary",
+        "desc": "Scrap production (O Shed)"
+    },
 
     # <<< FREIGHT DATA SOURCE >>>
     ("other", "Freight Report"): {
