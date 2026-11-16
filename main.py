@@ -3085,9 +3085,6 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
-SHEETS = {
-    # ... purani sheets ...
-    
     "serviceability": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9MJmj-lOwrclnLES-1T_g1_kIQ/pubhtml",  # 👈 Yahan comma zaroori hai
         "worksheet": "WEEKLY",                     # 👈 Yahan bhi comma zaroori hai
