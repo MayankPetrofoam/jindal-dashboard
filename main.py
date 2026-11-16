@@ -1473,7 +1473,9 @@ def scrap_card(day):
     scrap_items = ["PU FOAM 3RD GRADE", "MEMORY FOAM SCRAP", "QUILTING SCRAP"]
     
     # Formula: (Item ka total weight / 3 items ke total weight) * 100
-    mon_item_weights = {item: float(d_mon.loc[d_mon["item"] == item, "kg"].sum()) for item in scrap_items}
+    # item column ka naam dhoondho (case-insensitive)
+    item_col = next((c for c in d_mon.columns if str(c).strip().upper() == "ITEM"), "item")
+    mon_item_weights = {item: float(d_mon.loc[d_mon[item_col] == item, "kg"].sum()) for item in scrap_items}
     total_3_items_kg = sum(mon_item_weights.values())
 
     yield_rows = []
@@ -3354,12 +3356,7 @@ KPI_SOURCES = {
     ("production", "Mould"): {"sheet": "prod_summary", "calc": "mould_sum"},
     ("production", "Bonded"): {"sheet": "prod_summary", "calc": "bonded_sum"},
     ("production", "Rollpack & Yield"):  {"sheet": "production_logs", "calc": "prod_log", "type": "rollpack"},
-    "scrap": {
-        "title": "SCRAP",
-        "calc": "scrap_sum",
-        "sheet": "prod_summary",
-        "desc": "Scrap production (O Shed)"
-    },
+    ("production", "SCRAP"):                   {"sheet": "prod_summary", "calc": "scrap_sum"},
 
     # <<< FREIGHT DATA SOURCE >>>
     ("other", "Freight Report"): {
