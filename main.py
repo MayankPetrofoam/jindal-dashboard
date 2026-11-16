@@ -4550,13 +4550,13 @@ def render_explorer():
 
 
 def render_diagnostics():
-        for s in KPI_SOURCES.values():
-            sheet_val = s.get("sheet")
-            if sheet_val is None:
-                continue
-            for n in (sheet_val if isinstance(sheet_val, (list, tuple)) else [sheet_val]):
-            df, err, fetched = get_sheet(name)
-            st.markdown(f"**Sheet `{name}`**")
+    for s in KPI_SOURCES.values():
+        sheet_val = s.get("sheet")
+        if sheet_val is None:
+            continue
+        for n in (sheet_val if isinstance(sheet_val, (list, tuple)) else [sheet_val]):
+            df, err, fetched = get_sheet(n)
+            st.markdown(f"**Sheet `{n}`**")
             if df is None:
                 st.error(err)
                 continue
@@ -4565,7 +4565,7 @@ def render_diagnostics():
                 continue
             st.write(
                 f"{len(df)} rows · dates {df['_date'].min():{DATE_FMT}} to {df['_date'].max():{DATE_FMT}} "
-                f"· fetched {fetched:%d-%m-%Y %H:%M:%S} IST · "
+                f"· fetched {fetched:%d-%m-%Y %H:%M:%S} IST "
                 f"{df.attrs.get('bad_dates', 0)} rows skipped for unreadable date"
             )
             st.write("**Exact column headers found:**", [c for c in df.columns if not str(c).startswith("_")])
