@@ -4550,9 +4550,11 @@ def render_explorer():
 
 
 def render_diagnostics():
-    with st.expander("🛠 Diagnostics (sources, columns, KPI validation)"):
-        for name in sorted({n for s in KPI_SOURCES.values()
-                           for n in (s["sheet"] if isinstance(s["sheet"], (list, tuple)) else [s["sheet"]])}):
+        for s in KPI_SOURCES.values():
+            sheet_val = s.get("sheet")
+            if sheet_val is None:
+                continue
+            for n in (sheet_val if isinstance(sheet_val, (list, tuple)) else [sheet_val]):
             df, err, fetched = get_sheet(name)
             st.markdown(f"**Sheet `{name}`**")
             if df is None:
