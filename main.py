@@ -3200,7 +3200,7 @@ SHEETS = {
         "dayfirst": True, 
     },
 "serviceability": {
-    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9Mjmj-OWrclnLES-lT_g1_kIQ/pubhtml",
+    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9MJmj-lOwrclnLES-1T_g1_kIQ/pub?output=csv",
     "worksheet": "1735095064",  # <--- Yahan WEEKLY ki jagah MONTHLY kar do
     "date_col": "MONTH",
     "dayfirst": True,
