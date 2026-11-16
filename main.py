@@ -4017,17 +4017,18 @@ if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
                                             cfg["date_col"], cfg.get("dayfirst", True),
                                             cfg.get("static", False))
-            good[name] = (df, fetched)
-            errors.pop(name, None)
-            return df, None, fetched
+4020        good[name] = (df, fetched)
+4021        errors.pop(name, None)
+4022        return df, None, fetched
 
-        # Baaki normal sheets ke liye (Purchase, Maintenance)
-        df, fetched = _fetch_cached(
-            cfg["url"], cfg.get("worksheet"), cfg["date_col"],
-            cfg.get("dayfirst", True), _service_account() is not None,
-            cfg.get("anchor"), tuple(cfg.get("ffill", ())),
-            tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
-        )
+4023
+4024    # Baaki normal sheets ke liye (Purchase, Maintenance)
+4025    df, fetched = _fetch_cached(  # 👈 Yahan 4 space ya 8 space (try block ke hisaab se) lagao
+4026        cfg["url"], cfg.get("worksheet"), cfg["date_col"],
+4027        cfg.get("dayfirst", True), _service_account() is not None,
+4028        cfg.get("anchor"), tuple(cfg.get("ffill", ())),
+4029        tuple(cfg.get("extra_date_cols", ())), tuple(cfg.get("ignore_cols", ())),
+4030    )
         good[name] = (df, fetched)
         errors.pop(name, None)
         log.info("sheet '%s' loaded: %d rows", name, len(df))
