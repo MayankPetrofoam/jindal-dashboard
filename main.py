@@ -2141,6 +2141,9 @@ def compute_kpi(df, spec, day):
     # ---------- PRODUCTION: SCRAP (O Shed) ----------
     if calc == "scrap_sum":
         return scrap_card(day)
+    # ---------- SERVICEABILITY (Nayi Sheet se) ----------
+    if calc == "serviceability":
+        return serviceability_card(day)
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -3082,6 +3085,16 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
+SHEETS = {
+    # ... purani sheets ...
+    
+    # 👇 Nayi Serviceability sheet yahan add karo
+    "serviceability": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR05fopdkPp8A2Tr5y_ZaiJURbMoCGULaZE68QP9MJmj-lOwrclnLES-1T_g1_kIQ/pubhtml",
+        "worksheet": "WEEKLY",  # Jo tab ka naam hai (screenshot mein "WEEKLY" dikh raha hai)
+        "date_col": "MONTH",    # Header hint (header row dhoondhne ke liye)
+    },
+}
     "sales_report": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx",
@@ -3392,7 +3405,7 @@ KPI_SOURCES = {
     ("order", "Orders 21+ Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_21_plus"},
     ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
-    ("order", "Serviceability %"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_serviceability"},
+    ("order", "SERVICEABILITY %"): {"calc": "serviceability"},  
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
@@ -3940,6 +3953,64 @@ def get_sheet(name):
             good[name] = (df, now_ist)
             errors.pop(name, None)
             return df, None, now_ist
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def get_serviceability_data(url, sheet_name):
+    """Serviceability sheet (Month-wise rows, Shed-wise columns) ko padhta hai."""
+    src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+    
+    # Header=None se padho taaki header row apne aap dhoondh sakein
+    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, engine="openpyxl")
+    
+    # Header row dhoondho jahan "MONTH" likha ho
+    hdr_idx = None
+    for i, row in raw.iterrows():
+        if any(str(c).strip().upper() == "MONTH" for c in row.tolist()):
+            hdr_idx = i
+            break
+            
+    if hdr_idx is None:
+        raise DataError("Serviceability sheet mein 'MONTH' wali header row nahi mili.")
+
+    raw.columns = [str(c).strip().upper() for c in raw.iloc[hdr_idx].tolist()]
+    df = raw.iloc[hdr_idx + 1:].copy() # Header ke neeche ka data
+    
+    # Columns clean karo
+    df = df.loc[:, ~df.columns.duplicated()] # Duplicate columns hatao
+    
+    # Jo sheds chahiye (screenshot ke hisaab se)
+    shed_cols = {
+        "B+C": "B+C", "D": "D", "E": "E", "H": "H", "F": "F", 
+        "2ND/X": "2ND/X", "3RD": "3RD", "PILLOW": "PILLOW", 
+        "OTHER": "OTHER", "BONDED": "BONDED", "LOADING": "LOADING", 
+        "APPC": "APPC", "LOCAL": "LOCAL"
+    }
+    
+    # Columns jo actually sheet mein hain unhe filter karo
+    available_sheds = {k: v for k, v in shed_cols.items() if k in df.columns}
+    
+    rows = []
+    for _, row in df.iterrows():
+        month_str = str(row.get("MONTH", "")).strip()
+        if not month_str or month_str.upper() == "NAN":
+            continue
+            
+        total_plan = _num(pd.Series([row.get("TOTAL PLAN", 0)])).iloc[0]
+        total_dispatch = _num(pd.Series([row.get("TOTAL DISPATCH", 0)])).iloc[0]
+        
+        # Shed-wise data extract karo
+        shed_data = {}
+        for k, col_name in available_sheds.items():
+            val = _num(pd.Series([row.get(col_name, 0)])).iloc[0]
+            shed_data[k] = val
+            
+        rows.append({
+            "month": month_str,
+            "total_plan": total_plan,
+            "total_dispatch": total_dispatch,
+            "sheds": shed_data,
+        })
+        
+    return rows, datetime.datetime.now(IST)
         if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
                                             cfg["date_col"], cfg.get("dayfirst", True),
