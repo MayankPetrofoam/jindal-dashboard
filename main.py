@@ -4013,7 +4013,7 @@ def get_serviceability_data(url, sheet_name):
         })
         
     return rows, datetime.datetime.now(IST)
-        if cfg.get("type") == "excel":
+if cfg.get("type") == "excel":
             df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
                                             cfg["date_col"], cfg.get("dayfirst", True),
                                             cfg.get("static", False))
