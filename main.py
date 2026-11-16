@@ -4040,6 +4040,102 @@ if cfg.get("type") == "excel":
         if name in good:
             return good[name][0], msg, good[name][1]
         return None, msg, None
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def get_serviceability_data(url, sheet_name):
+    """Serviceability sheet (Month-wise rows, Shed-wise columns) ko padhta hai."""
+    src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
+    raw = pd.read_excel(src, sheet_name=sheet_name, header=None, engine="openpyxl")
+    
+    hdr_idx = None
+    for i, row in raw.iterrows():
+        if any(str(c).strip().upper() == "MONTH" for c in row.tolist()):
+            hdr_idx = i
+            break
+            
+    if hdr_idx is None:
+        raise DataError("Serviceability sheet mein 'MONTH' wali header row nahi mili.")
+
+    raw.columns = [str(c).strip().upper() for c in raw.iloc[hdr_idx].tolist()]
+    df = raw.iloc[hdr_idx + 1:].copy()
+    df = df.loc[:, ~df.columns.duplicated()]
+    
+    shed_cols = {
+        "B+C": "B+C", "D": "D", "E": "E", "H": "H", "F": "F", 
+        "2ND/X": "2ND/X", "3RD": "3RD", "PILLOW": "PILLOW", 
+        "OTHER": "OTHER", "BONDED": "BONDED", "LOADING": "LOADING", 
+        "APPC": "APPC", "LOCAL": "LOCAL"
+    }
+    
+    available_sheds = {k: v for k, v in shed_cols.items() if k in df.columns}
+    rows = []
+    for _, row in df.iterrows():
+        month_str = str(row.get("MONTH", "")).strip()
+        if not month_str or month_str.upper() == "NAN":
+            continue
+            
+        total_plan = _num(pd.Series([row.get("TOTAL PLAN", 0)])).iloc[0]
+        total_dispatch = _num(pd.Series([row.get("TOTAL DISPATCH", 0)])).iloc[0]
+        
+        shed_data = {}
+        for k, col_name in available_sheds.items():
+            val = _num(pd.Series([row.get(col_name, 0)])).iloc[0]
+            shed_data[k] = val
+            
+        rows.append({
+            "month": month_str,
+            "total_plan": total_plan,
+            "total_dispatch": total_dispatch,
+            "sheds": shed_data,
+        })
+    return rows, datetime.datetime.now(IST)
+
+
+def serviceability_card(day):
+    sheet_info = SHEETS.get("serviceability")
+    if not sheet_info:
+        return {"value": "0.0%", "desc": "Serviceability sheet config missing", "color": RED}
+
+    try:
+        rows, _ = get_serviceability_data(sheet_info["url"], sheet_info["worksheet"])
+    except Exception as e:
+        return {"value": "0.0%", "desc": f"Error: {str(e)}", "color": RED}
+
+    target_month = day.strftime("%B").upper()
+    month_data = next((r for r in rows if target_month in r["month"].upper() or r["month"].upper() in target_month), None)
+
+    if not month_data:
+        return {"value": "0.0%", "desc": f"No data for {target_month}", "color": GREY}
+
+    plan = month_data["total_plan"]
+    dispatch = month_data["total_dispatch"]
+    pct = (dispatch / plan * 100) if plan > 0 else 0.0
+
+    shed_details = []
+    for shed_name, val in month_data["sheds"].items():
+        if val > 0:
+            shed_pct = (val / plan * 100) if plan > 0 else 0.0
+            shed_details.append((shed_name, f"{val:,.0f} ({shed_pct:.1f}%)"))
+
+    return {
+        "value": f"{pct:.1f}%",
+        "desc": f"Total Plan: {plan:,.0f} | Dispatch: {dispatch:,.0f}",
+        "color": BLUE,
+        "metrics": [
+            (f"{pct:.1f}%", "Serviceability", "yield"),
+            (f"{plan:,.0f}", "Total Plan"),
+            (f"{dispatch:,.0f}", "Dispatch"),
+        ],
+        "sections": [
+            (f"🗓 {target_month.title()} Data", [
+                ("Total Plan", f"{plan:,.0f}"),
+                ("Total Dispatch", f"{dispatch:,.0f}"),
+                ("Serviceability", f"{pct:.1f}%")
+            ])
+        ],
+        "details": [
+            (f"⚖ Shed-wise Data ({target_month.title()})", shed_details)
+        ]
+    }
 
 
 # ====================================================================
