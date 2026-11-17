@@ -2471,7 +2471,6 @@ def compute_kpi(df, spec, day):
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
-     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID (received.xls se) ----------
     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
     if calc == "total_received_paid":
         total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
@@ -2482,7 +2481,7 @@ def compute_kpi(df, spec, day):
         total_sum = _num(df[total_col]).sum()
         return {
             "value": _inr(total_sum),
-            "desc": f"Total Amount Received/Paid (All records)",
+            "desc": f"Total Amount Received/Paid (1 Apr 2026 to 17 Nov 2026) · {len(df)} parties",
             "color": BLUE,
         }
         
