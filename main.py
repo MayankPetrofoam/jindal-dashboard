@@ -1500,7 +1500,7 @@ def finance_drs_crs_card(day):
     })
     w = w[w["grp"] != ""]
 
-    DRS_GROUPS = ["Sundry Debtors", "Adv.agst.purchases"]
+    DRS_GROUPS = ["Sundry Debtors"]
     CRS_GROUPS = ["Sundry Creditors", "Sundry Creditors For Expenses"]
     low = lambda lst: [g.lower() for g in lst]
 
