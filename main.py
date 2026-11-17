@@ -2480,7 +2480,7 @@ def compute_kpi(df, spec, day):
             return {"value": "Error", "desc": f"Total column nahi mila. Columns: {list(df.columns)}", "color": RED}
         total_sum = _num(df[total_col]).sum()
         return {
-            "value": _inr(total_sum),
+            "value": f"{total_sum / 10000000:,.2f}",
             "desc": f"Total Amount Received/Paid (1 Apr 2026 to 17 Nov 2026) · {len(df)} parties",
             "color": BLUE,
         }
