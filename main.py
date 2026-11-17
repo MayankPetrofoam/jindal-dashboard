@@ -3593,6 +3593,11 @@ SHEETS = {
         "dayfirst": True,
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
+"received_data": {
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/received.xlsx",
+        "sheet_name": "received",
+    },
     "order_management_2": {
         "type": "orders",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
