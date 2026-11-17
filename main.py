@@ -3528,18 +3528,18 @@ SHEETS = {
         "date_col": "Breakdown Date",
         "dayfirst": True
     },
-    "cn_sheet": {
-        "type": "excel",
-        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/main/cn.xlsX", 
-        "sheet_name": "cn",
-        "date_col": "Credit Note Date",   
-    },
-    "dn_sheet": {
-        "type": "excel",
-        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/main/dn.xlsX",
-        "sheet_name": "dn",
-        "date_col": "DEBIT NOTE DATE",
-    },
+"cn_sheet": {
+    "type": "excel",
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cn.xls",
+    "sheet_name": "cn",
+    "date_col": "Credit Note Date",
+},
+"dn_sheet": {
+    "type": "excel",
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/dn.xls",
+    "sheet_name": "dn",
+    "date_col": "DEBIT NOTE DATE",
+},
 
     "foaming_chemicals": {
         "type": "excel",
