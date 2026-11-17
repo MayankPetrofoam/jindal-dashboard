@@ -4270,7 +4270,6 @@ def get_sheet(name):
         if not frames:
             return None, "No data from any sheet", None
         return pd.concat(frames, ignore_index=True, sort=False), None, fetched
-
     cfg = SHEETS.get(name)
     if not cfg or not cfg.get("url"):
         return None, f"sheet '{name}' has no link in SHEETS", None
@@ -4288,26 +4287,22 @@ def get_sheet(name):
             good[name] = (df, datetime.datetime.now(IST))
             errors.pop(name, None)
             return df, None, datetime.datetime.now(IST)
-
         if cfg.get("type") == "orders":
             df, fetched = _fetch_orders_cached(cfg["url"], tuple(cfg.get("worksheet", ())))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if isinstance(cfg.get("worksheet"), (list, tuple)):
             df, fetched = _fetch_multi_cached(cfg["url"], tuple(cfg["worksheet"]), cfg["date_col"],
-                                              cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
+                cfg.get("dayfirst", True), tuple(cfg.get("ignore_cols", ())))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "chem_daily":
             df, fetched = _fetch_chem_daily_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "dyield":
             if name == "m_yield":
                 df, fetched = _fetch_m_shed_custom(cfg["files"][0][1])
@@ -4316,46 +4311,39 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "bdls_de":
             df, fetched = _fetch_shed_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "rolls_bc":
             df, fetched = _fetch_rolls_cached(tuple(cfg["files"]))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "yield":
             df, fetched = _fetch_yield_cached(cfg["url"], cfg.get("sheet_name", "DATA"))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg.get("type") == "stock":
             df, fetched = _fetch_stock_cached(cfg["url"], cfg["sheet_name"])
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         if cfg["url"] == "manual":
             now_ist = datetime.datetime.now(IST)
             df = pd.DataFrame({"_date": [now_ist.date()]})
             good[name] = (df, now_ist)
             errors.pop(name, None)
             return df, None, now_ist
-
-      if cfg.get("type") == "excel":
-         df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-         cfg.get("date_col", ""), cfg.get("dayfirst", True),
-         cfg.get("static", False))
+        if cfg.get("type") == "excel":
+            df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
+                cfg.get("date_col", ""), cfg.get("dayfirst", True),
+                cfg.get("static", False))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
-
         # Baaki normal Google Sheets (Purchase PO, Maintenance, Freight, HR ...)
         df, fetched = _fetch_cached(
             cfg["url"], cfg.get("worksheet"), cfg["date_col"],
