@@ -2473,37 +2473,37 @@ def compute_kpi(df, spec, day):
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
-# ---------- FINANCE: TOTAL AMT RECEIVED / PAID (received.xls se) ----------
-if calc == "total_received_paid":
-    # 1. 'Total' column dhoondhna
-    total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
-    if not total_col:
-        total_col = next((c for c in df.columns if "TOTAL" in str(c).upper()), None)
-    
-    if not total_col:
-        return {"value": "Error", "desc": "Total column sheet mein nahi mila", "color": RED}
-    
-    # 2. Date column dhoondhna taaki Month-to-Date filter kar sakein
-    date_col = next((c for c in df.columns if "DATE" in str(c).upper()), None)
-    if date_col and "_date" not in df.columns:
-        df["_date"] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID (received.xls se) ----------
+    if calc == "total_received_paid":
+        # 1. 'Total' column dhoondhna
+        total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
+        if not total_col:
+            total_col = next((c for c in df.columns if "TOTAL" in str(c).upper()), None)
         
-    # 3. Selected Month ki 1st date se selected date tak ka data filter karna
-    if "_date" in df.columns:
-        m_start = day.replace(day=1)
-        sub = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
-    else:
-        sub = df # Agar date column nahi mila to poora sum kar do
+        if not total_col:
+            return {"value": "Error", "desc": "Total column sheet mein nahi mila", "color": RED}
         
-    # 4. Total ka Sum nikalna
-    total_sum = _num(sub[total_col]).sum()
-    
-    return {
-        "value": _inr(total_sum),
-        "desc": f"Total Received/Paid (Month-to-Date till {day:%d-%b-%Y})",
-        "color": BLUE,
-        "extra": f"Total Records: {len(sub)}"
-    }
+        # 2. Date column dhoondhna taaki Month-to-Date filter kar sakein
+        date_col = next((c for c in df.columns if "DATE" in str(c).upper()), None)
+        if date_col and "_date" not in df.columns:
+            df["_date"] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+            
+        # 3. Selected Month ki 1st date se selected date tak ka data filter karna
+        if "_date" in df.columns:
+            m_start = day.replace(day=1)
+            sub = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
+        else:
+            sub = df
+            
+        # 4. Total ka Sum nikalna
+        total_sum = _num(sub[total_col]).sum()
+        
+        return {
+            "value": _inr(total_sum),
+            "desc": f"Total Received/Paid (Month-to-Date till {day:%d-%b-%Y})",
+            "color": BLUE,
+            "extra": f"Total Records: {len(sub)}"
+        }
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
