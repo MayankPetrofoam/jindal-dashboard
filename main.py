@@ -2473,6 +2473,37 @@ def compute_kpi(df, spec, day):
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
+# ---------- FINANCE: TOTAL AMT RECEIVED / PAID (received.xls se) ----------
+if calc == "total_received_paid":
+    # 1. 'Total' column dhoondhna
+    total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
+    if not total_col:
+        total_col = next((c for c in df.columns if "TOTAL" in str(c).upper()), None)
+    
+    if not total_col:
+        return {"value": "Error", "desc": "Total column sheet mein nahi mila", "color": RED}
+    
+    # 2. Date column dhoondhna taaki Month-to-Date filter kar sakein
+    date_col = next((c for c in df.columns if "DATE" in str(c).upper()), None)
+    if date_col and "_date" not in df.columns:
+        df["_date"] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+        
+    # 3. Selected Month ki 1st date se selected date tak ka data filter karna
+    if "_date" in df.columns:
+        m_start = day.replace(day=1)
+        sub = df[(df["_date"] >= m_start) & (df["_date"] <= day)]
+    else:
+        sub = df # Agar date column nahi mila to poora sum kar do
+        
+    # 4. Total ka Sum nikalna
+    total_sum = _num(sub[total_col]).sum()
+    
+    return {
+        "value": _inr(total_sum),
+        "desc": f"Total Received/Paid (Month-to-Date till {day:%d-%b-%Y})",
+        "color": BLUE,
+        "extra": f"Total Records: {len(sub)}"
+    }
 
 # ---------- PRODUCTION: TOTAL, MATTRESS, PILLOW, ROLLPACK ----------
     if calc == "prod_log":
@@ -3594,10 +3625,12 @@ SHEETS = {
         "ignore_cols": ["REASON", "FIN", "RATE", "PRINT", "SALEMAN", "DATE", "ORDER DATE"],
     },
 "received_data": {
-        "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/received.xlsx",
-        "sheet_name": "received",
-    },
+    "type": "excel",
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/received.xlsx", # Dhyan rahe URL mein .xlsx ya .xls sahi ho
+    "sheet_name": "received",
+    "date_col": "Date",  # <--- Yahan apni Excel file ke Date column ka EXACT naam likhein (jaise 'Date', 'Voucher Date', 'DATE')
+    "dayfirst": True,
+},
     "order_management_2": {
         "type": "orders",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQPbaL4BPlem2VWDDRd9glmGZibz0p4A8tClU_J7Ct7MYURcHcKDcvh9AwIN4-n3LNm9Xixvg8SW0Ri/pubhtml",
@@ -3704,6 +3737,14 @@ KPI_SOURCES = {
         "calc": "purchase_mtd",
         "basis": "received",
     },
+("finance", "Total Amt Received / Paid"): {
+    "sheet": "received_data",
+    "calc": "total_received_paid",
+},
+("finance", "Receivable / Payable Days"): {
+    "sheet": "received_data",
+    "calc": "total_received_paid", # Abhi ke liye Total sum dikha rahe hain. Baad mein isko Days wale formula se replace kar sakte hain.
+},
 
     ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
     ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "stock_data", "calc": "stock_dead", "dead_days": 90},
