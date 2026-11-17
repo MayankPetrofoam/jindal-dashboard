@@ -3608,7 +3608,7 @@ SHEETS = {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DRS%20%26%20CRS.xlsx",
-        "sheet_name": "Sheet1",
+        "sheet_name": "TBLNCE",
         "date_col": "ACCOUNT NAME",
     },
     "manual": {
