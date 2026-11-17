@@ -3530,15 +3530,15 @@ SHEETS = {
     },
     "cn_sheet": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/.../cn.csv", 
+        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/blob/main/cn.xls", 
         "sheet_name": "cn",
-        "date_col": "Credit Note Date "   <-- Dhyan dein: isme space ho sakta hai
+        "date_col": "Credit Note Date",   <-- Dhyan dein: isme space ho sakta hai
     },
     "dn_sheet": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/.../dn.csv",
+        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/blob/main/dn.xls",
         "sheet_name": "dn",
-        "date_col": "DEBIT NOTE DATE"
+        "date_col": "DEBIT NOTE DATE",
     },
 
     "foaming_chemicals": {
