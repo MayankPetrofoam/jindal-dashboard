@@ -1574,9 +1574,9 @@ def credit_note_card(day):
 
     # 4. Grand Total (1 April se abhi tak)
     grand_total = df["amt"].sum()
-day_total = day_total / 10000000
-month_total = month_total / 10000000
-grand_total = grand_total / 10000000
+    day_total = day_total / 10000000
+    month_total = month_total / 10000000
+    grand_total = grand_total / 10000000
 
     return {
         "value": f"{day_total:,.2f}",
@@ -1629,9 +1629,9 @@ def debit_note_card(day):
 
     # 4. Grand Total (1 April se abhi tak)
     grand_total = df["amt"].sum()
-day_total = day_total / 10000000
-month_total = month_total / 10000000
-grand_total = grand_total / 10000000
+    day_total = day_total / 10000000
+    month_total = month_total / 10000000
+    grand_total = grand_total / 10000000
 
     return {
         "value": f"{day_total:,.2f}",
