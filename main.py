@@ -3477,14 +3477,10 @@ SHEETS = {
 
     # ... baaki sheets ...
     "cn_sheet": {
-        "url": "YOUR_GOOGLE_SHEET_CSV_LINK_HERE",
-        "worksheet": "Sheet1",
-        "date_col": "DATE", # Ya jo bhi column ho
+        "url": "manual",
     },
     "dn_sheet": {
-        "url": "YOUR_GOOGLE_SHEET_CSV_LINK_HERE",
-        "worksheet": "Sheet1",
-        "date_col": "DATE",
+        "url": "manual",
     },
 
     "foaming_chemicals": {
@@ -3915,6 +3911,8 @@ DEPARTMENTS = [
             ("Total Amt Received / Paid", "Month to date"),
             ("Greater Than 90 / 180 Days", "Ageing buckets"),
             ("Total Due (Drs & Crs)", "Overdue amounts"),
+            ("CREDIT NOTE (CN)", "Credit note, month wise"),
+            ("DEBIT NOTE (DN)", "Debit note, month wise"),
         ],
         "links": [
             ("📊 Finance Dashboard (Power BI)", None),
