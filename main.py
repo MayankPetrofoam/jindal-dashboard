@@ -3530,13 +3530,13 @@ SHEETS = {
     },
     "cn_sheet": {
         "type": "excel",
-        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/blob/main/cn.xls", 
+        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/main/cn.xlsX", 
         "sheet_name": "cn",
         "date_col": "Credit Note Date",   
     },
     "dn_sheet": {
         "type": "excel",
-        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/blob/main/dn.xls",
+        "url": "https://github.com/MayankPetrofoam/jindal-dashboard/main/dn.xlsX",
         "sheet_name": "dn",
         "date_col": "DEBIT NOTE DATE",
     },
