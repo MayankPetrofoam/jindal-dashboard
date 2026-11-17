@@ -2387,49 +2387,53 @@ def stock_balance_card(df, day, issued_col, label):
     balance = float(last["_b"])
     last_dt = last["_date"]
 
-    # 2. Aaj ki date (Today) ka In/Out nikalne ke liye strict date filtering
-    # Yahan hum string ko strip karke match karenge taaki purani date na jud jaye
-    day_data = df[df["_date"] == day].copy()
-    
-    # Opening (OPN.) wali row ko hatao
-    if c_typ is not None:
-        is_opn = day_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
-        day_data = day_data[~is_opn]
-        
+    # 2+3. Month ka window: month ki AAKHRI "OPN." row se shuru (purani/duplicate rows ignore)
+    month_data = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)].copy()
+    opening = None
+    if c_typ is not None and not month_data.empty:
+        typ = month_data[c_typ].astype(str).str.strip().str.upper()
+        opn = typ.str.startswith("OPN").tolist()
+        if any(opn):
+            start = len(opn) - 1 - opn[::-1].index(True)
+            opening = float(_num(pd.Series([month_data.iloc[start][c_rec]])).fillna(0).iloc[0])
+            month_data = month_data.iloc[start:]
+            typ = typ.iloc[start:]
+        month_data = month_data[~typ.str.startswith("OPN")]
+
+    day_data = month_data[month_data["_date"] == day]
     d_in = float(_num(day_data[c_rec]).fillna(0).sum()) if not day_data.empty else 0.0
     d_out = float(_num(day_data[c_iss]).fillna(0).sum()) if not day_data.empty else 0.0
-
-    # 3. Month Total (1st date se selected date tak)
-    m_start = day.replace(day=1)
-    month_data = df[(df["_date"] >= m_start) & (df["_date"] <= day)].copy()
-    
-    if c_typ is not None:
-        is_opn = month_data[c_typ].astype(str).str.strip().str.upper().str.startswith("OPN")
-        month_data = month_data[~is_opn]
-        
     t_in = float(_num(month_data[c_rec]).fillna(0).sum())
     t_out = float(_num(month_data[c_iss]).fillna(0).sum())
 
-    # 4. Card Description
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
         note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
 
+    sections = [
+        (f"🗓 Month Total ({day:%b-%y})", [
+            ("Recd (In)", f"{t_in:,.2f} Kg"),
+            ("Issued (Out)", f"{t_out:,.2f} Kg")
+        ]),
+        (f"📅 Today ({day:%d-%m-%y})", [
+            ("Recd (In)", f"+{d_in:,.0f} Kg"),
+            ("Issued (Out)", f"-{d_out:,.0f} Kg")
+        ])
+    ]
+    if opening is not None:
+        calc_bal = opening + t_in - t_out
+        if abs(calc_bal - balance) > 1:
+            sections.append(("⚠ Check: sheet balance match nahi", [
+                ("Sheet balance", f"{balance:,.0f} Kg"),
+                ("Opening + In - Out", f"{calc_bal:,.0f} Kg"),
+            ]))
+
     return {
         "value": f"{balance:,.2f} Kg",
-        "desc": f"{note}",
+        "desc": note,
         "color": RED if balance < 0 else BLUE,
-        "sections": [
-            (f"🗓 Month Total ({day:%b-%y})", [
-                ("Recd (In)", f"{t_in:,.2f} Kg"), 
-                ("Issued (Out)", f"{t_out:,.2f} Kg")
-            ]),
-            (f"📅 Today ({day:%d-%m-%y})", [
-                ("Recd (In)", f"+{d_in:,.0f} Kg"),
-                ("Issued (Out)", f"-{d_out:,.0f} Kg")
-            ])
-        ],
+        "sections": sections,
     }
 
 
