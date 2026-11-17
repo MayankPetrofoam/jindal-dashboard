@@ -1517,15 +1517,18 @@ def finance_drs_crs_card(day):
         rows = []
         for g in groups:
             t, f = total([g], plus)
-            rows.append((g, f"{_inr_cr(t)}  ({len(f)} parties)"))
+            rows.append((g, f"{t:,.2f}  ({len(f)} parties)"))   # "Cr" hata diya
         return rows
 
-    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    # "Cr" ke bina plain number format
     return {
-        "value": f"DRS {cr(drs)} | CRS {cr(crs)}",
+        "value": f"DRS {drs:,.2f} | CRS {crs:,.2f}",
         "desc": "Closing balance (1 April se ab tak ka data)",
         "color": BLUE,
-        "metrics": [(cr(drs), "DRS (Debtors)"), (cr(crs), "CRS (Creditors)")],
+        "metrics": [
+            (f"{drs:,.2f}", "DRS (Debtors)"),
+            (f"{crs:,.2f}", "CRS (Creditors)")
+        ],
         "details": [
             ("💰 DRS group-wise", group_rows(DRS_GROUPS, "DR")),
             ("💸 CRS group-wise", group_rows(CRS_GROUPS, "CR")),
