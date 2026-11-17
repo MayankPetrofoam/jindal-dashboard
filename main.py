@@ -3448,8 +3448,9 @@ SHEETS = {
         "dayfirst": True, 
     },
 "serviceability": {
-        "type": "csv",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/WEEKLY.xlsx%20-%20MONTHLY.csv",
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/WEEKLY.xlsx",
+        "sheet_name": "MONTHLY",
         "date_col": "MONTH",
         "dayfirst": True,
     },
