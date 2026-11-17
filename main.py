@@ -3626,9 +3626,9 @@ SHEETS = {
     },
 "received_data": {
     "type": "excel",
-    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/received.xlsx", # Dhyan rahe URL mein .xlsx ya .xls sahi ho
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/received.xls",  # ← .xlsx se .xls karo
     "sheet_name": "received",
-    "date_col": "Date",  # <--- Yahan apni Excel file ke Date column ka EXACT naam likhein (jaise 'Date', 'Voucher Date', 'DATE')
+    "date_col": "Date",  # ⚠️ PROBLEM: Aapki file mein "Date" column HAI HI NAHI!
     "dayfirst": True,
 },
     "order_management_2": {
