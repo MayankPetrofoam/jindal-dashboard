@@ -3608,9 +3608,9 @@ SHEETS = {
         "date_col": "Date",
         "dayfirst": True,
     },
-    "pop_data": {
+  "pop_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xls",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/pop.xlsx",
         "sheet_name": "pop",
         "date_col": "Date",
         "dayfirst": True,
