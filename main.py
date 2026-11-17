@@ -1589,21 +1589,36 @@ def debit_note_card(day):
     }
 
 def total_inventory_card(day):
-    """Total Inventory Bundles (FG): din + mahine ki total production, category wise details."""
+    """Total Inventory Bundles (FG): din + mahine ki total production, category wise + SHED WISE details."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
     y_df = y_df.copy()
     y_df = y_df[y_df["BUNDLES"].astype(str).str.strip() != ""]
+    
+    # --- Shed nikalne ke liye helper ---
+    def get_shed(bundle):
+        b = str(bundle).strip().upper()
+        # "26-A123" -> "A Shed" (agar 2 digit year ke baad - aur letter ho)
+        m = re.match(r"^\d{2}-([A-Z])", b)
+        if m:
+            return f"{m.group(1)} Shed"
+        return "Other"
+
     y_df["cat"] = [_fg_category(i, b) for i, b in zip(y_df["item"], y_df["BUNDLES"])]
+    y_df["shed"] = y_df["BUNDLES"].apply(get_shed)
 
     def agg(frame):
         out = {}
         for name, _f in FG_CATS:
             f = frame[frame["cat"] == name]
-            out[name] = {"bdl": len(f), "sheet": float(f["sheet"].sum()), "pcs": float(f["sheet"].sum()),
-                         "kg": float(f["kg"].sum())}
+            out[name] = {
+                "bdl": len(f), 
+                "sheet": float(f["sheet"].sum()), 
+                "pcs": float(f["sheet"].sum()),
+                "kg": float(f["kg"].sum())
+            }
         total = {
             "bdl": sum(v["bdl"] for v in out.values()),
             "sheet": out["A Grade"]["sheet"] + out["Bonded"]["sheet"],
@@ -1624,10 +1639,26 @@ def total_inventory_card(day):
             parts.append(f"{v:,.0f} {label[f]}" if f != "kg" else f"{v:,.1f} Kg")
         return " | ".join(parts)
 
-    def rows(c, tot):
-        r = [(name, line(name, fields, c)) for name, fields in FG_CATS if c[name]["bdl"] > 0]
-        r.append(("TOTAL", f"{tot['bdl']:,} Bdls | {tot['sheet']:,.0f} Sheet | {tot['pcs']:,.0f} Pcs | {tot['kg']:,.1f} Kg"))
-        return r
+    # Naya function: har category ke andar shed-wise lines nikalne ke liye
+    def get_shed_rows(frame, cat_name):
+        """Us category ke andar shed-wise breakup rows banata hai."""
+        cat_frame = frame[frame["cat"] == cat_name]
+        if cat_frame.empty:
+            return []
+        
+        shed_counts = cat_frame.groupby("shed").size().sort_index()
+        return [(f"  ↳ {shed}", f"{count} Bdls") for shed, count in shed_counts.items()]
+
+    def rows(c, tot, frame_for_sheds):
+        result = []
+        for name, fields in FG_CATS:
+            if c[name]["bdl"] > 0:
+                # 1. Main category ki line
+                result.append((name, line(name, fields, c)))
+                # 2. Uske neeche shed-wise lines (jab View Details khula ho)
+                result.extend(get_shed_rows(frame_for_sheds, name))
+        result.append(("TOTAL", f"{tot['bdl']:,} Bdls | {tot['sheet']:,.0f} Sheet | {tot['pcs']:,.0f} Pcs | {tot['kg']:,.1f} Kg"))
+        return result
 
     return {
         "value": f"{d_tot['bdl']:,} Bdls",
@@ -1648,8 +1679,10 @@ def total_inventory_card(day):
             ])
         ],
         "details": [
-            (f"📅 {day:%d-%m-%y} · Category wise", rows(d_cat, d_tot)),
-            (f"🗓 Month {day:%b-%y} · Category wise", rows(m_cat, m_tot)),
+            # Day wale section mein day ka data pass kiya
+            (f"📅 {day:%d-%m-%y} · Category & Shed wise", rows(d_cat, d_tot, y_df[y_df["_date"] == day])),
+            # Month wale section mein month ka data pass kiya
+            (f"🗓 Month {day:%b-%y} · Category & Shed wise", rows(m_cat, m_tot, y_df[(y_df["_date"] >= m_start) & (y_df["_date"] <= m_end)])),
         ],
     }
 def scrap_card(day):
