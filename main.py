@@ -1102,19 +1102,18 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
         src = io.BytesIO(data)
     else:
         src = url
-        
-    # File extension check karke engine decide karein (.xls ke liye xlrd, .xlsx ke liye openpyxl)
     file_ext = str(url).split('?')[0].split('.')[-1].lower()
     eng = "xlrd" if file_ext == "xls" else "openpyxl"
-    
     raw = pd.read_excel(src, sheet_name=sheet_name, header=None, dtype=object, engine=eng)
-    df = _frame_from_rows(raw.fillna("").values.tolist(), header_hint=date_col)
-    
+    # Agar date_col khali hai, toh header_hint mat do
+    df = _frame_from_rows(raw.fillna("").values.tolist(), header_hint=date_col if date_col else None)
     if static:
         df["_date"] = datetime.datetime.now(IST).date()
         return df, datetime.datetime.now(IST)
-
-
+    # Agar date_col nahi diya, toh aaj ki date de do
+    if not date_col:
+        df["_date"] = datetime.datetime.now(IST).date()
+        return df, datetime.datetime.now(IST)
     def _to_date(v):
         if isinstance(v, (datetime.datetime, pd.Timestamp)):
             return v.date()
@@ -1122,7 +1121,6 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
             return v
         d = _parse_dates(pd.Series([str(v)]), dayfirst).iloc[0]
         return d.date() if pd.notna(d) else None
-
     df["_date"] = df[date_col].apply(_to_date)
     df = df.dropna(subset=["_date"]).copy()
     if df.empty:
@@ -2474,14 +2472,19 @@ def compute_kpi(df, spec, day):
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
      # ---------- FINANCE: TOTAL AMT RECEIVED / PAID (received.xls se) ----------
+    # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
     if calc == "total_received_paid":
-        # 1. 'Total' column dhoondhna
         total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
         if not total_col:
             total_col = next((c for c in df.columns if "TOTAL" in str(c).upper()), None)
-        
         if not total_col:
-            return {"value": "Error", "desc": "Total column sheet mein nahi mila", "color": RED}
+            return {"value": "Error", "desc": f"Total column nahi mila. Columns: {list(df.columns)}", "color": RED}
+        total_sum = _num(df[total_col]).sum()
+        return {
+            "value": _inr(total_sum),
+            "desc": f"Total Amount Received/Paid (All records)",
+            "color": BLUE,
+        }
         
         # 2. Date column dhoondhna taaki Month-to-Date filter kar sakein
         date_col = next((c for c in df.columns if "DATE" in str(c).upper()), None)
@@ -4346,10 +4349,10 @@ def get_sheet(name):
             errors.pop(name, None)
             return df, None, now_ist
 
-        if cfg.get("type") == "excel":
-            df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-                                              cfg["date_col"], cfg.get("dayfirst", True),
-                                              cfg.get("static", False))
+if cfg.get("type") == "excel":
+    df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
+        cfg.get("date_col", ""), cfg.get("dayfirst", True),
+        cfg.get("static", False))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
