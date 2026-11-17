@@ -4348,10 +4348,10 @@ def get_sheet(name):
             errors.pop(name, None)
             return df, None, now_ist
 
-if cfg.get("type") == "excel":
-    df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
-        cfg.get("date_col", ""), cfg.get("dayfirst", True),
-        cfg.get("static", False))
+      if cfg.get("type") == "excel":
+         df, fetched = _fetch_excel_cached(cfg["url"], cfg["sheet_name"],
+         cfg.get("date_col", ""), cfg.get("dayfirst", True),
+         cfg.get("static", False))
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
