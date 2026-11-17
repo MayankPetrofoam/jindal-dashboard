@@ -1478,57 +1478,63 @@ def _fg_category(item, bundle):
     return "Other / Scrap"
 
 def finance_drs_crs_card(day):
-    """DRS & CRS: sheet ke BAL.AMT se, Dr/Cr ke hisaab se alag-alag total."""
+    """DRS & CRS: BAL.AMT ka seedha sum (bina Dr/Cr sign ke, Excel jaisa)."""
     df, err, _ = get_sheet("finance_drs_crs")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
     cols = [c for c in df.columns if not str(c).startswith("_")]
     norm = lambda s: re.sub(r"[^A-Z0-9]", "", str(s).upper())
+    
+    # Columns automatically dhoondhna
     grp_col = next((c for c in cols if norm(c) == "GROUP"), None)
     bal_col = next((c for c in cols if norm(c) == "BALAMT"), None)
+    
     if not grp_col or not bal_col:
         return {"value": "Error", "desc": f"GROUP / BAL.AMT column nahi mila. Columns: {cols}", "color": RED}
 
-    # BAL.AMT ke just pehle wala (bina naam ka) column = closing Dr/Cr
-    drcr_col = cols[cols.index(bal_col) - 1]
-
+    # Data ko clean karna
     w = pd.DataFrame({
         "grp": df[grp_col].astype(str).str.strip(),
-        "drcr": df[drcr_col].astype(str).str.strip().str.upper(),
         "bal": _num(df[bal_col]).fillna(0.0),
     })
     w = w[w["grp"] != ""]
 
-    DRS_GROUPS = ["Sundry Debtors"]
-    CRS_GROUPS = ["Sundry Creditors", "Sundry Creditors For Expenses"]
-    low = lambda lst: [g.lower() for g in lst]
+    # Aapke exact groups
+    DRS_GROUPS = ["sundry debtors"]
+    CRS_GROUPS = ["sundry creditors", "sundry creditors for expenses"]
 
-    def total(groups, plus):
-        """plus = jis side (Dr/Cr) ko add karna hai; doosri side minus."""
-        f = w[w["grp"].str.lower().isin(low(groups))]
-        sign = f["drcr"].map(lambda x: 1 if x == plus else -1)
-        return float((sign * f["bal"]).sum()), f
+    # 1. DRS Calculation: Sirf Sundry Debtors ka balance sum
+    drs = float(w[w["grp"].str.lower().isin(DRS_GROUPS)]["bal"].sum())
+    
+    # 2. CRS Calculation: Sundry Creditors + Sundry Creditors For Expenses ka sum
+    crs = float(w[w["grp"].str.lower().isin(CRS_GROUPS)]["bal"].sum())
 
-    drs, drs_f = total(DRS_GROUPS, "DR")   # DRS: Dr +, Cr -
-    crs, crs_f = total(CRS_GROUPS, "CR")   # CRS: Cr +, Dr -
+    # Convert to Crores (kyunki dashboard par Cr mein dikhana hai)
+    def to_cr(x):
+        return f"{x / 10000000:,.2f}"
 
-    def group_rows(groups, plus):
+    # Group-wise detail ke liye (View full details mein dikhega)
+    def group_rows(groups):
         rows = []
         for g in groups:
-            t, f = total([g], plus)
-            rows.append((g, f"{_inr_cr(t)}  ({len(f)} parties)"))
+            f = w[w["grp"].str.lower() == g]
+            total = float(f["bal"].sum())
+            rows.append((g.title(), f"{to_cr(total)} Cr  ({len(f)} parties)"))
         return rows
 
-    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    # Card Return
     return {
-        "value": f"DRS {cr(drs)} | CRS {cr(crs)}",
-        "desc": "Closing balance (1 April se ab tak ka data)",
+        "value": f"DRS {to_cr(drs)} Cr | CRS {to_cr(crs)} Cr",
+        "desc": "Closing balance (Data from 1 April till date)",
         "color": BLUE,
-        "metrics": [(cr(drs), "DRS (Debtors)"), (cr(crs), "CRS (Creditors)")],
+        "metrics": [
+            (f"{to_cr(drs)} Cr", "DRS (Debtors)"),
+            (f"{to_cr(crs)} Cr", "CRS (Creditors)")
+        ],
         "details": [
-            ("💰 DRS group-wise", group_rows(DRS_GROUPS, "DR")),
-            ("💸 CRS group-wise", group_rows(CRS_GROUPS, "CR")),
+            ("💰 DRS group-wise", group_rows(DRS_GROUPS)),
+            ("💸 CRS group-wise", group_rows(CRS_GROUPS)),
         ],
     }
 def credit_note_card(day):
