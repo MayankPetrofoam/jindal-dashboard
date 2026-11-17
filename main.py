@@ -1538,59 +1538,107 @@ def finance_drs_crs_card(day):
         ],
     }
 def credit_note_card(day):
-    """Credit Note (CN): Selected month ka total CN amount."""
-    # Isme hum 'CN' wali sheet ka data use karenge
-    df, err, _ = get_sheet("cn_sheet") # <-- Yahan apni sheet ka naam daalein
+    """Credit Note (CN): Day total, Month total, aur Month-wise breakdown."""
+    df, err, _ = get_sheet("cn_sheet") 
     if df is None:
-        return {"value": "0", "desc": f"Data error: {err}", "color": RED}
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
-    # Maan lijiye aapki sheet mein date aur amount columns hain
-    sub = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
-    if sub.empty:
-        return {"value": "0", "desc": "No CN data for this month", "color": GREY}
-
-    # Amount column dhoondhein (jaise 'CN Amount')
-    amt_col = next((c for c in df.columns if "AMOUNT" in str(c).upper()), None)
+    # Column names dhoondhna (TOTAL aur Date column)
+    amt_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
     if not amt_col:
-        return {"value": "Error", "desc": "Amount column not found", "color": RED}
+        return {"value": "Error", "desc": "TOTAL column not found", "color": RED}
 
-    total_amt = _num(sub[amt_col]).sum()
+    # Data clean karna
+    df["amt"] = _num(df[amt_col]).fillna(0.0)
+    df["month_year"] = df["_date"].apply(lambda x: x.strftime('%b-%Y') if pd.notna(x) else "")
+
+    # 1. Selected Day ka Total
+    day_data = df[df["_date"] == day]
+    day_total = day_data["amt"].sum()
+
+    # 2. Selected Month ka Total
+    m_start, m_end = _month_range(day)
+    month_data = df[(df["_date"] >= m_start) & (df["_date"] <= m_end)]
+    month_total = month_data["amt"].sum()
+
+    # 3. Month-wise Breakdown (April se Nov tak)
+    # Hum sirf un months ko dikhayenge jahan data hai
+    month_breakdown = df.groupby("month_year")["amt"].sum().reset_index()
+    month_breakdown["_date"] = pd.to_datetime(month_breakdown["month_year"], format='%b-%Y')
+    month_breakdown = month_breakdown.sort_values("_date", ascending=False)
+    
+    month_rows = []
+    for _, row in month_breakdown.iterrows():
+        if row["amt"] > 0:
+            month_rows.append((row["month_year"], f"{row['amt']:,.2f}"))
+
+    # 4. Grand Total (1 April se abhi tak)
+    grand_total = df["amt"].sum()
 
     return {
-        "value": f"{total_amt:,.2f}", # <-- Yahan format change kar sakte hain (Cr mein chahiye toh)
-        "desc": f"Credit Note for {day:%b-%Y}",
+        "value": f"{day_total:,.2f}",
+        "desc": f"CN for {day:%d-%b-%Y}",
         "color": BLUE,
+        "sections": [
+            (f"🗓 Month Total ({day:%b-%Y})", [("Total CN Amount", f"{month_total:,.2f}")])
+        ],
         "details": [
-            (f"🗓 {day:%b-%Y} CN Data", [
-                ("Total CN Amount", f"{total_amt:,.2f}")
-            ])
+            (f"📅 {day:%d-%b-%Y} Data", [("Total CN Amount", f"{day_total:,.2f}")]),
+            (f"🗓 Month {day:%b-%Y} Total", [("Total CN Amount", f"{month_total:,.2f}")]),
+            ("📊 Month-wise Breakdown", month_rows),
+            ("📆 Grand Total (Till Date)", [("Total CN Amount", f"{grand_total:,.2f}")])
         ]
     }
 
 def debit_note_card(day):
-    """Debit Note (DN): Selected month ka total DN amount."""
-    df, err, _ = get_sheet("dn_sheet") # <-- Yahan apni sheet ka naam daalein
+    """Debit Note (DN): Day total, Month total, aur Month-wise breakdown."""
+    df, err, _ = get_sheet("dn_sheet") 
     if df is None:
-        return {"value": "0", "desc": f"Data error: {err}", "color": RED}
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
-    sub = df[df["_date"].apply(lambda x: x.month == day.month and x.year == day.year if pd.notna(x) else False)]
-    if sub.empty:
-        return {"value": "0", "desc": "No DN data for this month", "color": GREY}
-
-    amt_col = next((c for c in df.columns if "AMOUNT" in str(c).upper()), None)
+    # Column names dhoondhna (TOTAL aur Date column)
+    amt_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
     if not amt_col:
-        return {"value": "Error", "desc": "Amount column not found", "color": RED}
+        return {"value": "Error", "desc": "TOTAL column not found", "color": RED}
 
-    total_amt = _num(sub[amt_col]).sum()
+    # Data clean karna
+    df["amt"] = _num(df[amt_col]).fillna(0.0)
+    df["month_year"] = df["_date"].apply(lambda x: x.strftime('%b-%Y') if pd.notna(x) else "")
+
+    # 1. Selected Day ka Total
+    day_data = df[df["_date"] == day]
+    day_total = day_data["amt"].sum()
+
+    # 2. Selected Month ka Total
+    m_start, m_end = _month_range(day)
+    month_data = df[(df["_date"] >= m_start) & (df["_date"] <= m_end)]
+    month_total = month_data["amt"].sum()
+
+    # 3. Month-wise Breakdown (April se Nov tak)
+    month_breakdown = df.groupby("month_year")["amt"].sum().reset_index()
+    month_breakdown["_date"] = pd.to_datetime(month_breakdown["month_year"], format='%b-%Y')
+    month_breakdown = month_breakdown.sort_values("_date", ascending=False)
+    
+    month_rows = []
+    for _, row in month_breakdown.iterrows():
+        if row["amt"] > 0:
+            month_rows.append((row["month_year"], f"{row['amt']:,.2f}"))
+
+    # 4. Grand Total (1 April se abhi tak)
+    grand_total = df["amt"].sum()
 
     return {
-        "value": f"{total_amt:,.2f}",
-        "desc": f"Debit Note for {day:%b-%Y}",
+        "value": f"{day_total:,.2f}",
+        "desc": f"DN for {day:%d-%b-%Y}",
         "color": BLUE,
+        "sections": [
+            (f"🗓 Month Total ({day:%b-%Y})", [("Total DN Amount", f"{month_total:,.2f}")])
+        ],
         "details": [
-            (f"🗓 {day:%b-%Y} DN Data", [
-                ("Total DN Amount", f"{total_amt:,.2f}")
-            ])
+            (f"📅 {day:%d-%b-%Y} Data", [("Total DN Amount", f"{day_total:,.2f}")]),
+            (f"🗓 Month {day:%b-%Y} Total", [("Total DN Amount", f"{month_total:,.2f}")]),
+            ("📊 Month-wise Breakdown", month_rows),
+            ("📆 Grand Total (Till Date)", [("Total DN Amount", f"{grand_total:,.2f}")])
         ]
     }
 
@@ -3480,13 +3528,17 @@ SHEETS = {
         "date_col": "Breakdown Date",
         "dayfirst": True
     },
-
-    # ... baaki sheets ...
     "cn_sheet": {
-        "url": "manual",
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/.../cn.csv", 
+        "sheet_name": "cn",
+        "date_col": "Credit Note Date "   <-- Dhyan dein: isme space ho sakta hai
     },
     "dn_sheet": {
-        "url": "manual",
+        "type": "excel",
+        "url": "https://raw.githubusercontent.com/.../dn.csv",
+        "sheet_name": "dn",
+        "date_col": "DEBIT NOTE DATE"
     },
 
     "foaming_chemicals": {
