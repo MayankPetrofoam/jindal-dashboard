@@ -1645,6 +1645,37 @@ def debit_note_card(day):
             ("📆 Grand Total (Till Date)", [("Total DN Amount", f"{grand_total:,.2f}")])
         ]
     }
+def _note_month_card(sheet, tag, day):
+    """CN / DN: sirf MONTH-WISE total (selected month ki 1st date se last data tak). Date-wise nahi."""
+    df, err, _ = get_sheet(sheet)
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    amt_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
+    if not amt_col:
+        return {"value": "Error", "desc": "TOTAL column not found", "color": RED}
+
+    w = df[df["_date"].notna()].copy()
+    w["amt"] = _num(w[amt_col]).fillna(0.0)
+
+    m_start, m_end = _month_range(day)
+    mon = w[(w["_date"] >= m_start) & (w["_date"] <= m_end)]
+    mon_total = float(mon["amt"].sum())
+    last = mon["_date"].max() if not mon.empty else None
+    rng = f"{m_start:%d-%b} to {last:%d-%b-%Y}" if last else f"{day:%b-%Y}"
+
+    by = w.assign(ym=w["_date"].apply(lambda x: (x.year, x.month))).groupby("ym")["amt"].sum().sort_index(ascending=False)
+    rows = [(datetime.date(y, m, 1).strftime("%b-%Y"), f"{v / 10000000:,.2f} Cr  ({_inr(v)})")
+            for (y, m), v in by.items() if v != 0]
+    grand = float(w["amt"].sum())
+    return {
+        "value": f"{mon_total / 10000000:,.2f}",
+        "desc": f"{tag} total {day:%b-%Y} ({rng}) · {_inr(mon_total)}",
+        "color": BLUE,
+        "details": [
+            (f"🗓 Month-wise {tag}", rows),
+            ("📆 Grand Total (Till Date)", [(f"Total {tag} Amount", f"{grand / 10000000:,.2f} Cr  ({_inr(grand)})")]),
+        ],
+    }
 
 def total_inventory_card(day):
     """Total Inventory Bundles (FG): din + mahine ki total production, category wise + SHED WISE details."""
@@ -2467,9 +2498,9 @@ def compute_kpi(df, spec, day):
         return serviceability_card_live(day)
     # ---------- FINANCE: CN & DN ----------
     if calc == "credit_note":
-        return credit_note_card(day)
+        return _note_month_card("cn_sheet", "CN", day)
     if calc == "debit_note":
-        return debit_note_card(day)
+        return _note_month_card("dn_sheet", "DN", day)
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
@@ -4924,7 +4955,7 @@ def render_kpi(dept_key, idx, title, desc):
 
             if hide_date:
                 chosen = month_dates[0]
-                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or spec.get("calc", "").startswith("sales_") else "As on date"
+                date_label = f"Full Month ({chosen.strftime('%b-%Y')})" if is_pillow or is_note or spec.get("calc", "").startswith("sales_") else "As on date"
             else:
                 # Set default local date to Global Date if it exists in this card's dates
                 default_d_idx = 0
