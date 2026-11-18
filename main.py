@@ -2522,6 +2522,8 @@ def compute_kpi(df, spec, day):
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
+    if calc == "finance_gt90_180":
+        return finance_gt90_card(day)
     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
     if calc == "total_received_paid":
         total_col = next((c for c in df.columns if str(c).strip().upper() == "TOTAL"), None)
@@ -3641,6 +3643,13 @@ SHEETS = {
         "date_col": "MONTH",
         "dayfirst": True
     },
+    "finance_ageing_new": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/ageing_90_180.xlsx",
+        "sheet_name": "Sheet1",      # <- apni tab ka exact naam
+        "date_col": "Party Name",
+    },
 
     "stock_data": {
         "type": "stock",
@@ -3848,9 +3857,9 @@ KPI_SOURCES = {
         "calc": "finance_drs_crs",
     },
     ("finance", "Greater Than 90 / 180 Days"): {
-        "sheet": "finance_ageing",
-        "calc": "finance_ageing_90_180",
-    },
+        "sheet": "finance_ageing_new",
+        "calc": "finance_gt90_180",
+    },,
     ("finance", "Total Due (Drs & Crs)"): {
         "sheet": "finance_ageing",
         "calc": "finance_total_due",
@@ -4758,6 +4767,79 @@ def serviceability_card_live(day):
             (_sq(a_day["left"]), "Trucks Left"),
         ],
         "sections": [(f"❌ {day:%d-%m-%y} · Material Not Available", _serv_mat_rows(a_day))],
+        "details": details,
+    }
+def finance_gt90_card(day=None):
+    """Greater Than 90 / 180 Days.
+    > 90 Days  = '91-120 Days' + '121-180 Days' (+ '>180 Days' agar usme amount ho)
+    > 180 Days = sirf '>180 Days' column.  View Details: party-wise."""
+    import html as _html
+    df, err, _ = get_sheet("finance_ageing_new")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+
+    def find(*keys, start=False):
+        for c in cols:
+            t = str(c).strip().upper().replace(" ", "")
+            if (t.startswith(keys) if start else any(k in t for k in keys)):
+                return c
+        return None
+
+    c_party, c_tot = find("PARTY"), find("TOTALAMOUNT")
+    c_91, c_121, c_180 = find("91-120"), find("121-180"), find(">180", "180+", start=True)
+    if not all([c_party, c_91, c_121, c_180]):
+        return {"value": "Config error", "color": RED, "desc":
+                f"Party / 91-120 / 121-180 / >180 column nahi mila. Columns: {cols}"}
+
+    w = pd.DataFrame({
+        "party": df[c_party].astype(str).str.strip(),
+        "b91": _num(df[c_91]).fillna(0.0),
+        "b121": _num(df[c_121]).fillna(0.0),
+        "b180": _num(df[c_180]).fillna(0.0),
+        "tot": _num(df[c_tot]).fillna(0.0) if c_tot else 0.0,
+    })
+    bcols = [c for c in cols if "DAYS" in str(c).upper()]
+    w["bsum"] = sum(_num(df[c]).fillna(0.0) for c in bcols) if bcols else 0.0
+    w = w[(w["party"] != "") & (~w["party"].str.lower().isin(["nan", "none", "total", "grand total"]))]
+
+    s91, s121, s180 = float(w["b91"].sum()), float(w["b121"].sum()), float(w["b180"].sum())
+    gt90, gt180 = s91 + s121 + s180, s180
+
+    g = w.groupby("party", as_index=False)[["b91", "b121", "b180"]].sum()
+    g["gt90"] = g["b91"] + g["b121"] + g["b180"]
+    g90 = g[g["gt90"] > 0.005].sort_values("gt90", ascending=False)
+    g180 = g[g["b180"] > 0.005].sort_values("b180", ascending=False)
+    esc = lambda x: _html.escape(str(x))
+
+    rows90 = [(esc(r.party),
+               f"{_inr(r.gt90)}  (91-120: {_inr(r.b91)} | 121-180: {_inr(r.b121)}"
+               + (f" | >180: {_inr(r.b180)}" if r.b180 > 0.005 else "") + ")")
+              for r in g90.itertuples()]
+    rows180 = [(esc(r.party), _inr(r.b180)) for r in g180.itertuples()]
+
+    details = [
+        ("🧮 Bucket-wise", [("91-120 Days", _inr(s91)), ("121-180 Days", _inr(s121)), (">180 Days", _inr(s180)),
+                            ("TOTAL > 90 Days", _inr(gt90))]),
+        (f"👥 Party-wise > 90 Days ({len(rows90)} parties)",
+         rows90 + [("TOTAL", _inr(gt90))] if rows90 else [("Koi party nahi", "✅")]),
+        (f"👥 Party-wise > 180 Days ({len(rows180)} parties)",
+         rows180 + [("TOTAL", _inr(gt180))] if rows180 else [("Koi party nahi", "✅ > 180 Days mein koi amount nahi")]),
+    ]
+    if c_tot:
+        bad = w[(w["tot"] - w["bsum"]).abs() > 1]
+        details.append(("🔎 Check", [
+            ("Sheet ka Total Amount (sab party)", _inr(float(w["tot"].sum()))),
+            ("Total Amount != buckets ka jod (rows)", f"{len(bad)}" + (" ⚠ sheet check karein" if len(bad) else " ✅"))]))
+
+    return {
+        "value": _inr(gt90),
+        "desc": f"{len(rows90)} parties > 90 Days | {len(rows180)} parties > 180 Days",
+        "color": RED if gt90 > 0 else BLUE,
+        "metrics": [(f"{gt90 / 10000000:,.2f} Cr", "> 90 Days"), (f"{gt180 / 10000000:,.2f} Cr", "> 180 Days")],
+        "sections": [("📌 Exact amount", [("> 90 Days (91-120 + 121-180 + >180)", _inr(gt90)),
+                                          ("> 180 Days", _inr(gt180))])],
         "details": details,
     }
 
