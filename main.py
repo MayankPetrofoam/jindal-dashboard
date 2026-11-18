@@ -3859,7 +3859,7 @@ KPI_SOURCES = {
     ("finance", "Greater Than 90 / 180 Days"): {
         "sheet": "finance_ageing_new",
         "calc": "finance_gt90_180",
-    },,
+    },
     ("finance", "Total Due (Drs & Crs)"): {
         "sheet": "finance_ageing",
         "calc": "finance_total_due",
