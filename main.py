@@ -1646,7 +1646,7 @@ def debit_note_card(day):
         ]
     }
 def _note_month_card(sheet, tag, day):
-    """CN / DN: sirf MONTH-WISE total (selected month ki 1st date se last data tak). Date-wise nahi."""
+    """CN / DN: sirf MONTH-WISE total (selected month ki 1st date se last data tak) + party-wise detail."""
     df, err, _ = get_sheet(sheet)
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
@@ -1667,14 +1667,32 @@ def _note_month_card(sheet, tag, day):
     rows = [(datetime.date(y, m, 1).strftime("%b-%Y"), f"{v / 10000000:,.2f} Cr  ({_inr(v)})")
             for (y, m), v in by.items() if v != 0]
     grand = float(w["amt"].sum())
+
+    # ---- party column apne aap dhoondho ----
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    exact = ("PARTY NAME", "PARTY", "PARTY'S NAME", "NAME OF PARTY", "CUSTOMER NAME", "PARTICULARS", "ACCOUNT NAME")
+    pcol = next((c for c in cols if str(c).strip().upper() in exact), None) or \
+        next((c for c in cols if c != amt_col and any(k in str(c).upper() for k in ("PARTY", "CUSTOMER", "PARTICULAR", "NAME"))), None)
+
+    details = [
+        (f"🗓 Month-wise {tag}", rows),
+        ("📆 Grand Total (Till Date)", [(f"Total {tag} Amount", f"{grand / 10000000:,.2f} Cr  ({_inr(grand)})")]),
+    ]
+    if pcol is not None:
+        pw = (mon.assign(party=mon[pcol].astype(str).str.strip())
+              .groupby("party")["amt"].agg(["sum", "count"]).sort_values("sum", ascending=False))
+        prow = [(p, f"{_inr(r['sum'])}  ({int(r['count'])} {tag})") for p, r in pw.iterrows()
+                if p and p.lower() not in ("nan", "none")]
+        details.insert(0, (f"👥 Party-wise {tag} · {day:%b-%Y} ({len(prow)} parties)",
+                           prow + [("TOTAL", _inr(mon_total))]))
+    else:
+        details.insert(0, ("👥 Party-wise", [("Party column nahi mila", "Sheet columns: " + ", ".join(map(str, cols)))]))
+
     return {
         "value": f"{mon_total / 10000000:,.2f}",
         "desc": f"{tag} total {day:%b-%Y} ({rng}) · {_inr(mon_total)}",
         "color": BLUE,
-        "details": [
-            (f"🗓 Month-wise {tag}", rows),
-            ("📆 Grand Total (Till Date)", [(f"Total {tag} Amount", f"{grand / 10000000:,.2f} Cr  ({_inr(grand)})")]),
-        ],
+        "details": details,
     }
 
 def total_inventory_card(day):
