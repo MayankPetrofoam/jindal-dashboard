@@ -2878,6 +2878,8 @@ def compute_kpi(df, spec, day):
                 "desc": f"Total Parties: {len(cb_vals)}", "color": BLUE}
 
     # ---------- FINANCE: TOTAL DUE ----------
+    if calc == "finance_total_due_month":
+        return finance_total_due_month_card(day)
     if calc == "finance_total_due":
         total_col = _pcol(df, "TOTAL")
         total_due = _num(total_col).sum()
@@ -3546,6 +3548,13 @@ SHEETS = {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRvqJtmKH0joq5-PXPaoxw1_x7mCTjCOK1RjnpU9ssGA4c5Xfp0sUhek56whkI2XNAxgXonXPqC75tF/pubhtml",
         "worksheet": "0",
     },
+    "finance_due_m": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Total%20Due%20Data.xls",
+        "sheet_name": "Sheet1",      # <- tab ka exact naam
+        "date_col": "Month",
+    },
    "sales_report": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/All_Years_Sale_Data.xlsx",
@@ -3909,8 +3918,8 @@ KPI_SOURCES = {
         "calc": "finance_gt90_180",
     },
     ("finance", "Total Due (Drs & Crs)"): {
-        "sheet": "finance_ageing",
-        "calc": "finance_total_due",
+        "sheet": "finance_due_m",
+        "calc": "finance_total_due_month",
     },
     ("finance", "CREDIT NOTE (CN)"): {
         "sheet": "cn_sheet",      # Yahan apni CN wali sheet ka naam daalein
@@ -4995,6 +5004,90 @@ def finance_drs_crs_bal_card(day):
             ]),
         ],
     }
+# ====================================================================
+# FINANCE: TOTAL DUE (month-wise)
+#   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
+#   Due % = Total Due Amt (us month ka) / Total O/S (us month ka) * 100
+# ====================================================================
+def _due_prepare(df):
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z/]", "", str(s).upper())
+    pick = lambda *k: next((c for c in cols if norm(c) in k), None)
+    c_p, c_m = pick("PARTYNAME", "PARTY", "ACCOUNTNAME"), pick("MONTH")
+    c_d, c_os = pick("DUEDYS", "DUEDAYS"), pick("TOTALO/S", "TOTALOS")
+    c_due, c_ov = pick("DUEAMT"), pick("OVERDUEAMT")
+    if not all([c_p, c_m, c_os, c_due, c_ov]):
+        raise DataError(f"PARTY NAME / Month / TOTAL O/S / DUE AMT / OVERDUE AMT column nahi mila. Columns: {cols}")
+    w = pd.DataFrame({
+        "party": df[c_p].astype(str).str.strip(),
+        "m": df[c_m].map(_bal_month_no),
+        "days": _num(df[c_d]).fillna(0.0) if c_d else 0.0,
+        "os": _num(df[c_os]).fillna(0.0),
+        "due": _num(df[c_due]).fillna(0.0),
+        "ov": _num(df[c_ov]).fillna(0.0),
+    })
+    w = w[w["m"].notna() & (w["party"] != "")].copy()
+    w["m"] = w["m"].astype(int)
+    return w
+
+
+def _due_month_dates(df):
+    today = datetime.datetime.now(IST).date()
+    return sorted({_bal_month_date(m, today) for m in _due_prepare(df)["m"].unique()}, reverse=True)
+
+
+def finance_total_due_month_card(day):
+    import html as _html
+    df, err, _ = get_sheet("finance_due_m")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    try:
+        w = _due_prepare(df)
+    except DataError as e:
+        return {"value": "Config error", "desc": str(e), "color": RED}
+    if day.month not in set(w["m"]):
+        return None
+    today = datetime.datetime.now(IST).date()
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    pct = lambda a, b: (a / b * 100) if b else 0.0
+
+    def tot(m):
+        s = w[w["m"] == m]
+        return float(s["os"].sum()), float(s["due"].sum()), float(s["ov"].sum()), len(s)
+
+    t_os, t_due, t_ov, n = tot(day.month)
+    due_pct = pct(t_due, t_os)
+
+    rows_all = []
+    for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
+        o, d, v, _n = tot(m)
+        rows_all.append((f"{_bal_month_date(m, today):%b-%y}",
+                         f"O/S {cr(o)} | Due {cr(d)} | Overdue {cr(v)} | Due % {pct(d, o):.2f}%"))
+
+    s = w[(w["m"] == day.month)].groupby("party", as_index=False).agg(
+        days=("days", "max"), os=("os", "sum"), due=("due", "sum"), ov=("ov", "sum"))
+    s = s[(s["due"] + s["ov"]) > 0.005].sort_values(["ov", "due"], ascending=False)
+    esc = lambda x: _html.escape(str(x))
+    prow = [(esc(r.party), f"Due Days: {int(r.days)} | O/S: {_inr(r.os)} | Due: {_inr(r.due)} | Overdue: {_inr(r.ov)}")
+            for r in s.itertuples()]
+
+    return {
+        "value": f"{due_pct:.2f}%",
+        "desc": f"Due Amount % · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
+        "color": BLUE,
+        "metrics": [(f"{due_pct:.2f}%", "Due %", "yield"), (cr(t_os), "Total O/S"),
+                    (cr(t_due), "Total Due Amt"), (cr(t_ov), "Total Overdue Amt")],
+        "sections": [(f"📌 Exact amount · {day:%b-%y}", [
+            ("Total O/S", _inr(t_os)), ("Total Due Amount", _inr(t_due)), ("Total Overdue Amount", _inr(t_ov)),
+            ("Due % (Due ÷ O/S × 100)", f"{due_pct:.2f}%")])],
+        "details": [
+            ("📊 All Months · Month-wise", rows_all),
+            (f"👥 Party-wise · {day:%b-%y} ({len(prow)} parties)",
+             prow + [("TOTAL (Due + Overdue wali parties)",
+                      f"O/S: {_inr(float(s['os'].sum()))} | Due: {_inr(float(s['due'].sum()))} | Overdue: {_inr(float(s['ov'].sum()))}")]
+             if prow else [("Koi party nahi", "✅")]),
+        ],
+    }
 
 
 # ====================================================================
@@ -5143,6 +5236,8 @@ def render_kpi(dept_key, idx, title, desc):
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
             if spec.get("calc") == "finance_drs_crs_month":
                 dates = _drs_crs_bal_month_dates(df)
+            if spec.get("calc") == "finance_total_due_month":
+                dates = _due_month_dates(df)
 
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
