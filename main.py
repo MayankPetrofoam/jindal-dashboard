@@ -1474,6 +1474,43 @@ def _fg_category(item, bundle):
     if item == "PU FOAM SHEET":
         return "PU Foam Sheet"
     return "Other / Scrap"
+def finance_gt90_card(day):
+    """Greater Than 90 / 180 Days Ageing: Is file mein Total Amount ka sum nikalta hai."""
+    # Yahan aapko apni us Excel file ki config key daalni hogi jo aapne SHEETS mein define ki hai.
+    # Agar aapne us file ka naam SHEETS mein "finance_gt90" rakha hai, toh yahan wahi likhein.
+    df, err, _ = get_sheet("finance_gt90") 
+    
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z0-9]", "", str(s).upper())
+    
+    # Columns automatically dhoondhna
+    # Total Amount column dhoondhein
+    amt_col = next((c for c in cols if norm(c) == "TOTALAMOUNT"), None)
+    
+    if not amt_col:
+        return {"value": "Error", "desc": f"TOTAL AMOUNT column nahi mila. Columns: {cols}", "color": RED}
+
+    # Data clean karna aur sum nikalna
+    total_amt = _num(df[amt_col]).fillna(0.0).sum()
+
+    # Convert to Crores (kyunki dashboard par Cr mein dikhana hai)
+    def to_cr(x):
+        return f"{x / 10000000:,.2f}"
+
+    return {
+        "value": f"{to_cr(total_amt)} Cr",
+        "desc": f"Total Amount for >90/180 Days (As on {day:%d-%b-%Y})",
+        "color": BLUE,
+        "metrics": [
+            (f"{to_cr(total_amt)} Cr", "Total Amount")
+        ],
+        "details": [
+            ("📊 Summary", [("Total Amount", f"{to_cr(total_amt)} Cr ({_inr(total_amt)})")])
+        ],
+    }
 
 def finance_drs_crs_card(day):
     """DRS & CRS: BAL.AMT ka seedha sum (bina Dr/Cr sign ke, Excel jaisa)."""
@@ -3654,6 +3691,13 @@ SHEETS = {
         "sheet_name": "90-180",      # <- tab ka exact naam (neeche dekho)
         "date_col": "Party Name",
     },
+"finance_gt90": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Greater%20Than%2090-%20180%20Days.xls", # URL yahan daalein
+    "sheet_name": "90-180", # Jo bhi tab ka naam ho (screenshot mein 90-180 dikh raha hai)
+    "date_col": "Party Name", # Static hai isliye koi bhi column daal dein
+},
 
     "stock_data": {
         "type": "stock",
