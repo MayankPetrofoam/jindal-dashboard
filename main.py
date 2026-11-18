@@ -2463,6 +2463,8 @@ def compute_kpi(df, spec, day):
     # ---------- SERVICEABILITY (Nayi Sheet se) ----------
     if calc == "serviceability":
         return serviceability_card(day)
+    if calc == "serviceability_live":
+        return serviceability_card_live(day)
     # ---------- FINANCE: CN & DN ----------
     if calc == "credit_note":
         return credit_note_card(day)
@@ -3447,12 +3449,10 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
-"serviceability": {
-        "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/WEEKLY%20(1).xlsx",
-        "sheet_name": "MONTHLY",
-        "date_col": "MONTH",
-        "dayfirst": True,
+    "serviceability_live": {
+        "type": "serviceability",
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRvqJtmKH0joq5-PXPaoxw1_x7mCTjCOK1RjnpU9ssGA4c5Xfp0sUhek56whkI2XNAxgXonXPqC75tF/pubhtml",
+        "worksheet": "0",
     },
    "sales_report": {
         "type": "excel",
@@ -3791,7 +3791,7 @@ KPI_SOURCES = {
     ("order", "Orders 21+ Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_21_plus"},
     ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
-    ("order", "Serviceability %"): {"sheet": "serviceability", "calc": "serviceability"}, 
+    ("order", "Serviceability %"): {"sheet": "serviceability_live", "calc": "serviceability_live"},
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
@@ -4327,6 +4327,11 @@ def get_sheet(name):
             good[name] = (df, fetched)
             errors.pop(name, None)
             return df, None, fetched
+        if cfg.get("type") == "serviceability":
+            df, fetched = _fetch_serviceability_cached(cfg["url"], str(cfg.get("worksheet", "0")))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
         if cfg.get("type") == "stock":
             df, fetched = _fetch_stock_cached(cfg["url"], cfg["sheet_name"])
             good[name] = (df, fetched)
@@ -4546,6 +4551,169 @@ def serviceability_card(day):
         "details": [
             (f"⚖ Shed-wise Data ({target_month.title()})", shed_details)
         ]
+    }
+# ====================================================================
+# SERVICEABILITY  (Google Sheet "SERVICEABILITY" -> Sheet1, daily trucks)
+#   Columns: A Date | B Planned | C Dispatch | D Left | E % |
+#            F..O  MATERIAL NOT AVAILABLE (B,C,D,E,H,2ND/X,F,3RD,K-J,Other) |
+#            P..S  Truck Not Available, LOCAL, Unable to Load, Other
+# ====================================================================
+SERV_MATERIAL = ["B", "C", "D", "E", "H", "2ND/X", "F", "3RD", "K-J", "Other"]
+SERV_OTHER = ["Truck Not Available", "Local", "Unable to Load", "Other"]
+SERV_MAT_START = 5      # column F
+SERV_OTHER_START = 15   # column P
+SERV_LABELS = {"B": "B Shed", "C": "C Shed", "D": "D Shed", "E": "E Shed", "H": "H Shed",
+               "F": "F Shed", "2ND/X": "2ND/X", "3RD": "3RD", "K-J": "K-J", "Other": "Other"}
+
+
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_serviceability_cached(url, gid):
+    """Google Sheet (Publish to web) ko seedha CSV ki tarah padhta hai. Har din ki ek row."""
+    base = url.split("/pub")[0]
+    data = _http_get(f"{base}/pub?output=csv&gid={gid}")
+    if data.lstrip()[:1] == b"<":
+        raise PermissionError("Google ne data nahi diya. Sheet ko 'Publish to web' karein "
+                              "(File > Share > Publish to web) aur gid check karein.")
+    rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
+
+    # layout check: shed header row mein F=B ... N=K-J hona chahiye
+    ok = any(len(r) > 13 and r[5].strip().upper() == "B" and r[13].strip().upper() == "K-J" for r in rows[:15])
+    if not ok:
+        raise DataError("Serviceability sheet ka layout badal gaya hai: shed header row (B, C, D, E, H, 2ND/X, "
+                        "F, 3RD, K-J) column F se N tak nahi mili.")
+
+    def n(v):
+        try:
+            return float(str(v).replace(",", "").strip())
+        except ValueError:
+            return 0.0
+
+    recs = []
+    for r in rows:
+        r = list(r) + [""] * (19 - len(r))
+        try:
+            d = datetime.datetime.strptime(r[0].strip(), "%d-%b-%y").date()
+        except ValueError:
+            continue                                  # header / TOTAL / blank rows
+        planned, dispatch = n(r[1]), n(r[2])
+        if planned <= 0 and dispatch <= 0:
+            continue                                  # chhutti / data bhara nahi
+        rec = {"_date": d, "planned": planned, "dispatch": dispatch}
+        for i, k in enumerate(SERV_MATERIAL):
+            rec["m_" + k] = n(r[SERV_MAT_START + i])
+        for i, k in enumerate(SERV_OTHER):
+            rec["o_" + k] = n(r[SERV_OTHER_START + i])
+        recs.append(rec)
+    if not recs:
+        raise DataError("Serviceability sheet mein koi valid date wali row nahi mili.")
+    df = pd.DataFrame(recs).drop_duplicates("_date", keep="last").sort_values("_date").reset_index(drop=True)
+    return df, datetime.datetime.now(IST)
+
+
+def _sq(v):
+    v = float(v)
+    return f"{v:,.0f}" if abs(v - round(v)) < 1e-9 else f"{v:,.1f}"
+
+
+def _serv_agg(frame):
+    p, dsp = float(frame["planned"].sum()), float(frame["dispatch"].sum())
+    return {
+        "planned": p, "dispatch": dsp, "left": p - dsp,
+        "pct": (dsp / p * 100) if p else 0.0,
+        "mat": {k: float(frame["m_" + k].sum()) for k in SERV_MATERIAL},
+        "oth": {k: float(frame["o_" + k].sum()) for k in SERV_OTHER},
+    }
+
+
+def _serv_trucks_rows(a):
+    return [("Total Trucks Planned", _sq(a["planned"])), ("Total Trucks Dispatch", _sq(a["dispatch"])),
+            ("Total Trucks Left", _sq(a["left"])), ("Serviceability %", f"{a['pct']:.1f}%")]
+
+
+def _serv_mat_rows(a):
+    rows = [(SERV_LABELS[k], f"{_sq(v)} trucks") for k, v in a["mat"].items() if v > 0]
+    tot = sum(a["mat"].values())
+    return rows + [("TOTAL (material nahi tha)", f"{_sq(tot)} trucks")] if rows else \
+        [("Material not available", "✅ Kisi shed se nahi ruki")]
+
+
+def _serv_oth_rows(a):
+    rows = [(k, f"{_sq(v)} trucks") for k, v in a["oth"].items() if v > 0]
+    tot = sum(a["oth"].values())
+    return rows + [("TOTAL (other reasons)", f"{_sq(tot)} trucks")] if rows else \
+        [("Other reasons", "✅ Koi nahi")]
+
+
+def serviceability_card_live(day):
+    """Selected date ki serviceability + ruki hui gaadiyon ke karan (shed-wise / other), month aur all-months."""
+    df, err, _ = get_sheet("serviceability_live")
+    if df is None:
+        return {"value": "0.0%", "desc": f"Error: {err}", "color": RED}
+
+    d_df = df[df["_date"] == day]
+    if d_df.empty:
+        return None
+    m_start, m_end = _month_range(day)
+    mon_df = df[(df["_date"] >= m_start) & (df["_date"] <= m_end)]
+    a_day, a_mon, a_all = _serv_agg(d_df), _serv_agg(mon_df), _serv_agg(df)
+    pct = a_day["pct"]
+
+    details = [
+        (f"📅 {day:%d-%b-%Y} · Trucks", _serv_trucks_rows(a_day)),
+        (f"❌ {day:%d-%b-%Y} · Material Not Available (shed-wise)", _serv_mat_rows(a_day)),
+        (f"🚛 {day:%d-%b-%Y} · Other Reasons", _serv_oth_rows(a_day)),
+    ]
+    reasons = sum(a_day["mat"].values()) + sum(a_day["oth"].values())
+    if abs(reasons - a_day["left"]) > 0.01:
+        details.append(("⚠ Check: karan ka total, Trucks Left se match nahi", [
+            ("Trucks Left", _sq(a_day["left"])), ("Sab karan jod ke", _sq(reasons))]))
+
+    details += [
+        (f"🗓 Month {day:%b-%y} · Trucks", _serv_trucks_rows(a_mon)),
+        (f"❌ Month {day:%b-%y} · Material Not Available (shed-wise)", _serv_mat_rows(a_mon)),
+        (f"🚛 Month {day:%b-%y} · Other Reasons", _serv_oth_rows(a_mon)),
+    ]
+
+    # all months (latest pehle)
+    months = sorted({(d.year, d.month) for d in df["_date"]}, reverse=True)
+    rows_m, rows_mat, rows_oth = [], [], []
+    for y, m in months:
+        s, e = _month_range(datetime.date(y, m, 1))
+        a = _serv_agg(df[(df["_date"] >= s) & (df["_date"] <= e)])
+        lbl = f"{s:%b-%y}"
+        rows_m.append((lbl, f"{_sq(a['planned'])} planned | {_sq(a['dispatch'])} dispatch | "
+                            f"{_sq(a['left'])} left | {a['pct']:.1f}%"))
+        mt = " · ".join(f"{SERV_LABELS[k]} {_sq(v)}" for k, v in a["mat"].items() if v > 0)
+        ot = " · ".join(f"{k} {_sq(v)}" for k, v in a["oth"].items() if v > 0)
+        rows_mat.append((lbl, mt or "—"))
+        rows_oth.append((lbl, ot or "—"))
+    rows_m.append(("TOTAL (April se ab tak)", f"{_sq(a_all['planned'])} planned | {_sq(a_all['dispatch'])} dispatch | "
+                                              f"{_sq(a_all['left'])} left | {a_all['pct']:.1f}%"))
+    details += [
+        ("📊 All Months · Serviceability", rows_m),
+        ("❌ All Months · Material Not Available", rows_mat),
+        ("🚛 All Months · Other Reasons", rows_oth),
+        (f"📆 Total ({df['_date'].min():%d-%m-%y} to {df['_date'].max():%d-%m-%y}) · Material Not Available",
+         _serv_mat_rows(a_all)),
+        ("📆 Total · Other Reasons", _serv_oth_rows(a_all)),
+    ]
+
+    return {
+        "value": f"{pct:.1f}%",
+        "desc": f"{_sq(a_day['dispatch'])} of {_sq(a_day['planned'])} trucks dispatched on {day:%d-%b-%Y}",
+        "color": BLUE if pct >= 80 else (AMBER if pct >= 60 else RED),
+        "metrics": [
+            (f"{pct:.1f}%", "Serviceability", "yield"),
+            (_sq(a_day["planned"]), "Trucks Planned"),
+            (_sq(a_day["dispatch"]), "Dispatched"),
+            (_sq(a_day["left"]), "Trucks Left"),
+        ],
+        "sections": [(f"🗓 Month {day:%b-%y}", [
+            ("Serviceability", f"{a_mon['pct']:.1f}%"),
+            ("Planned / Dispatch / Left",
+             f"{_sq(a_mon['planned'])} / {_sq(a_mon['dispatch'])} / {_sq(a_mon['left'])}"),
+        ])],
+        "details": details,
     }
 
 
