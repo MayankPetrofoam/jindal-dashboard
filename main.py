@@ -4949,9 +4949,10 @@ def render_kpi(dept_key, idx, title, desc):
             is_finance = str(spec.get("calc", "")).startswith("finance_")
             is_foaming = str(spec.get("calc", "")).startswith("sum_consumption")
             is_min_stock = (spec.get("calc") == "min_stock")
+            is_note = spec.get("calc") in ("credit_note", "debit_note")
 
             # Yahan is_min_stock add karna zaroori tha
-            hide_date = is_pillow or is_finance or is_foaming or is_min_stock or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
+            hide_date = is_pillow or is_finance or is_foaming or is_min_stock or is_note or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
 
             if hide_date:
                 chosen = month_dates[0]
