@@ -2562,8 +2562,6 @@ def compute_kpi(df, spec, day):
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
     if calc == "finance_drs_crs_month":
-        return finance_drs_crs_month_card(day)
-    if calc == "finance_drs_crs_month":
         return finance_drs_crs_bal_card(day)
     if calc == "finance_gt90_180":
         return finance_gt90_card(day)
