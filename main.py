@@ -1477,7 +1477,9 @@ def _fg_category(item, bundle):
 
 def finance_drs_crs_card(day):
     """DRS & CRS: BAL.AMT ka seedha sum (bina Dr/Cr sign ke, Excel jaisa)."""
-    df, err, _ = get_sheet("finance_drs_crs")
+    # Yahan "_m" add kar dein
+    df, err, _ = get_sheet("finance_drs_crs_m") 
+    
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
