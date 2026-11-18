@@ -3551,7 +3551,7 @@ SHEETS = {
     "finance_due_m": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Total%20Due%20Data.xls",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/total%20Due%20Data.xls",
         "sheet_name": "Sheet1",      # <- tab ka exact naam
         "date_col": "Month",
     },
