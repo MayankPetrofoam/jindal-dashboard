@@ -4634,7 +4634,7 @@ def _serv_mat_rows(a):
     rows = [(SERV_LABELS[k], f"{_sq(v)} trucks") for k, v in a["mat"].items() if v > 0]
     tot = sum(a["mat"].values())
     return rows + [("TOTAL (material nahi tha)", f"{_sq(tot)} trucks")] if rows else \
-        [("Material not available", "✅ Kisi shed se nahi ruki")]
+        [("Material not available", "Not Any Entry In Shed")]
 
 
 def _serv_oth_rows(a):
@@ -4708,11 +4708,7 @@ def serviceability_card_live(day):
             (_sq(a_day["dispatch"]), "Dispatched"),
             (_sq(a_day["left"]), "Trucks Left"),
         ],
-        "sections": [(f"🗓 Month {day:%b-%y}", [
-            ("Serviceability", f"{a_mon['pct']:.1f}%"),
-            ("Planned / Dispatch / Left",
-             f"{_sq(a_mon['planned'])} / {_sq(a_mon['dispatch'])} / {_sq(a_mon['left'])}"),
-        ])],
+        "sections": [(f"❌ {day:%d-%m-%y} · Material Not Available", _serv_mat_rows(a_day))],
         "details": details,
     }
 
