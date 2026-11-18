@@ -3646,8 +3646,8 @@ SHEETS = {
     "finance_ageing_new": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/ageing_90_180.xlsx",
-        "sheet_name": "Sheet1",      # <- apni tab ka exact naam
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Greater%20Than%2090-%20180%20Days.xls",
+        "sheet_name": "Greater than 90-180 Days",      # <- tab ka exact naam (neeche dekho)
         "date_col": "Party Name",
     },
 
