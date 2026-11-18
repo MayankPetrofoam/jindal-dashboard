@@ -2522,6 +2522,8 @@ def compute_kpi(df, spec, day):
     # ---------- FINANCE: DRS & CRS ----------
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
+    if calc == "finance_drs_crs_month":
+        return finance_drs_crs_month_card(day)
     if calc == "finance_gt90_180":
         return finance_gt90_card(day)
     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
@@ -3765,12 +3767,12 @@ SHEETS = {
         "sheet_name": "Ageing analysis",
         "date_col": "PARTY NAME",
     },
-    "finance_drs_crs": {
+    "finance_drs_crs_m": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DRS%20%26%20CRS.xlsx",
-        "sheet_name": "TBLNCE",
-        "date_col": "ACCOUNT NAME",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DRS%20%26%20CRS.xls",
+        "sheet_name": "Sheet1",      # <- .xls file ki tab ka exact naam
+        "date_col": "Party Name",
     },
     "manual": {
         "url": "manual",
@@ -3853,8 +3855,8 @@ KPI_SOURCES = {
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
-        "sheet": "finance_drs_crs",
-        "calc": "finance_drs_crs",
+        "sheet": "finance_drs_crs_m",
+        "calc": "finance_drs_crs_month",
     },
     ("finance", "Greater Than 90 / 180 Days"): {
         "sheet": "finance_ageing_new",
@@ -4769,78 +4771,89 @@ def serviceability_card_live(day):
         "sections": [(f"❌ {day:%d-%m-%y} · Material Not Available", _serv_mat_rows(a_day))],
         "details": details,
     }
-def finance_gt90_card(day=None):
-    """Greater Than 90 / 180 Days.
-    > 90 Days  = '91-120 Days' + '121-180 Days' (+ '>180 Days' agar usme amount ho)
-    > 180 Days = sirf '>180 Days' column.  View Details: party-wise."""
-    import html as _html
-    df, err, _ = get_sheet("finance_ageing_new")
+# ====================================================================
+# FINANCE: DRS & CRS MONTH-WISE  (file: "DRS & CRS.xls" -> Party Name | Group | November | October ... June)
+#   DRS = SUNDRY DEBITORS
+#   CRS = SUNDRY CREDITORS + SUNDRY CREDITORS FOR EXP
+# ====================================================================
+DRS_GROUPS = ("SUNDRY DEBITORS", "SUNDRY DEBTORS")
+CRS_GROUPS = ("SUNDRY CREDITORS", "SUNDRY CREDITORS FOR EXP", "SUNDRY CREDITORS FOR EXPENSES")
+
+
+def _drs_crs_month_cols(df):
+    """{month_number: column_name} - 'November', 'October ', 'July ' jaise columns se."""
+    out = {}
+    for c in df.columns:
+        if str(c).startswith("_"):
+            continue
+        try:
+            out[datetime.datetime.strptime(str(c).strip()[:3].title(), "%b").month] = c
+        except ValueError:
+            pass
+    return out
+
+
+def _drs_crs_month_dates(df):
+    """Month dropdown ke liye: sheet ke har month ki ek date (current month ke liye aaj ki date)."""
+    today = datetime.datetime.now(IST).date()
+    fy = today.year if today.month >= 4 else today.year - 1
+    out = []
+    for m in _drs_crs_month_cols(df):
+        y = fy if m >= 4 else fy + 1
+        out.append(today if (y, m) == (today.year, today.month) else datetime.date(y, m, 1))
+    return sorted(out, reverse=True)
+
+
+def finance_drs_crs_month_card(day):
+    """DRS & CRS - sirf month-wise (card = selected month, View Details = saare months)."""
+    df, err, _ = get_sheet("finance_drs_crs_m")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
-
     cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: str(s).strip().upper()
+    c_grp = next((c for c in cols if norm(c) == "GROUP"), None)
+    mcols = _drs_crs_month_cols(df)
+    if not c_grp or not mcols:
+        return {"value": "Config error", "color": RED,
+                "desc": f"Group / month columns nahi mile. Columns: {cols}"}
 
-    def find(*keys, start=False):
-        for c in cols:
-            t = str(c).strip().upper().replace(" ", "")
-            if (t.startswith(keys) if start else any(k in t for k in keys)):
-                return c
+    grp = df[c_grp].astype(str).str.strip().str.upper()
+    is_drs, is_crs = grp.isin(DRS_GROUPS), grp.isin(CRS_GROUPS)
+
+    def month_vals(col):
+        v = _num(df[col]).fillna(0.0)
+        return (float(v[is_drs].sum()), float(v[is_crs].sum()),
+                {g: float(v[grp == g].sum()) for g in (*DRS_GROUPS[:1], *CRS_GROUPS[:2])},
+                {g: int((grp == g).sum()) for g in (*DRS_GROUPS[:1], *CRS_GROUPS[:2])})
+
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    if day.month not in mcols:
         return None
+    drs, crs, by_g, cnt = month_vals(mcols[day.month])
+    today = datetime.datetime.now(IST).date()
+    till = f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""
 
-    c_party, c_tot = find("PARTY"), find("TOTALAMOUNT")
-    c_91, c_121, c_180 = find("91-120"), find("121-180"), find(">180", "180+", start=True)
-    if not all([c_party, c_91, c_121, c_180]):
-        return {"value": "Config error", "color": RED, "desc":
-                f"Party / 91-120 / 121-180 / >180 column nahi mila. Columns: {cols}"}
-
-    w = pd.DataFrame({
-        "party": df[c_party].astype(str).str.strip(),
-        "b91": _num(df[c_91]).fillna(0.0),
-        "b121": _num(df[c_121]).fillna(0.0),
-        "b180": _num(df[c_180]).fillna(0.0),
-        "tot": _num(df[c_tot]).fillna(0.0) if c_tot else 0.0,
-    })
-    bcols = [c for c in cols if "DAYS" in str(c).upper()]
-    w["bsum"] = sum(_num(df[c]).fillna(0.0) for c in bcols) if bcols else 0.0
-    w = w[(w["party"] != "") & (~w["party"].str.lower().isin(["nan", "none", "total", "grand total"]))]
-
-    s91, s121, s180 = float(w["b91"].sum()), float(w["b121"].sum()), float(w["b180"].sum())
-    gt90, gt180 = s91 + s121 + s180, s180
-
-    g = w.groupby("party", as_index=False)[["b91", "b121", "b180"]].sum()
-    g["gt90"] = g["b91"] + g["b121"] + g["b180"]
-    g90 = g[g["gt90"] > 0.005].sort_values("gt90", ascending=False)
-    g180 = g[g["b180"] > 0.005].sort_values("b180", ascending=False)
-    esc = lambda x: _html.escape(str(x))
-
-    rows90 = [(esc(r.party),
-               f"{_inr(r.gt90)}  (91-120: {_inr(r.b91)} | 121-180: {_inr(r.b121)}"
-               + (f" | >180: {_inr(r.b180)}" if r.b180 > 0.005 else "") + ")")
-              for r in g90.itertuples()]
-    rows180 = [(esc(r.party), _inr(r.b180)) for r in g180.itertuples()]
-
-    details = [
-        ("🧮 Bucket-wise", [("91-120 Days", _inr(s91)), ("121-180 Days", _inr(s121)), (">180 Days", _inr(s180)),
-                            ("TOTAL > 90 Days", _inr(gt90))]),
-        (f"👥 Party-wise > 90 Days ({len(rows90)} parties)",
-         rows90 + [("TOTAL", _inr(gt90))] if rows90 else [("Koi party nahi", "✅")]),
-        (f"👥 Party-wise > 180 Days ({len(rows180)} parties)",
-         rows180 + [("TOTAL", _inr(gt180))] if rows180 else [("Koi party nahi", "✅ > 180 Days mein koi amount nahi")]),
-    ]
-    if c_tot:
-        bad = w[(w["tot"] - w["bsum"]).abs() > 1]
-        details.append(("🔎 Check", [
-            ("Sheet ka Total Amount (sab party)", _inr(float(w["tot"].sum()))),
-            ("Total Amount != buckets ka jod (rows)", f"{len(bad)}" + (" ⚠ sheet check karein" if len(bad) else " ✅"))]))
+    rows_all = []
+    for m in sorted(mcols, key=lambda m: (m - 4) % 12, reverse=True):       # latest month upar (FY: Apr..Mar)
+        d_, c_, _g, _c = month_vals(mcols[m])
+        y = day.year if (m <= day.month or m < 4) else day.year - 1
+        rows_all.append((f"{datetime.date(y, m, 1):%b-%y}", f"DRS {cr(d_)}  |  CRS {cr(c_)}"))
 
     return {
-        "value": _inr(gt90),
-        "desc": f"{len(rows90)} parties > 90 Days | {len(rows180)} parties > 180 Days",
-        "color": RED if gt90 > 0 else BLUE,
-        "metrics": [(f"{gt90 / 10000000:,.2f} Cr", "> 90 Days"), (f"{gt180 / 10000000:,.2f} Cr", "> 180 Days")],
-        "sections": [("📌 Exact amount", [("> 90 Days (91-120 + 121-180 + >180)", _inr(gt90)),
-                                          ("> 180 Days", _inr(gt180))])],
-        "details": details,
+        "value": f"DRS {cr(drs)} | CRS {cr(crs)}",
+        "desc": f"Closing balance · {day:%b-%y}{till}",
+        "color": BLUE,
+        "metrics": [(cr(drs), "DRS (Debtors)"), (cr(crs), "CRS (Creditors)")],
+        "sections": [(f"📌 Exact amount · {day:%b-%y}", [("DRS", _inr(drs)), ("CRS", _inr(crs))])],
+        "details": [
+            ("📊 All Months · DRS & CRS", rows_all),
+            (f"💰 {day:%b-%y} · Group-wise", [
+                ("Sundry Debitors (DRS)", f"{_inr(by_g['SUNDRY DEBITORS'])}  ({cnt['SUNDRY DEBITORS']} parties)"),
+                ("Sundry Creditors", f"{_inr(by_g['SUNDRY CREDITORS'])}  ({cnt['SUNDRY CREDITORS']} parties)"),
+                ("Sundry Creditors For Exp", f"{_inr(by_g['SUNDRY CREDITORS FOR EXP'])}  ({cnt['SUNDRY CREDITORS FOR EXP']} parties)"),
+                ("CRS total (Creditors + For Exp)", _inr(crs)),
+            ]),
+        ],
     }
 
 
@@ -4987,6 +5000,9 @@ def render_kpi(dept_key, idx, title, desc):
                 _p = df[b.str.match(r"^\d{2}-O")]
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
+            # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
+            if spec.get("calc") == "finance_drs_crs_month":
+                dates = _drs_crs_month_dates(df)
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
