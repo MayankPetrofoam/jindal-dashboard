@@ -3771,7 +3771,7 @@ SHEETS = {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DRS%20%26%20CRS.xls",
-        "sheet_name": "DRS & CRS",      # <- .xls file ki tab ka exact naam
+        "sheet_name": "DRS & CRS",     # <- .xls file ki tab ka exact naam
         "date_col": "Party Name",
     },
     "manual": {
