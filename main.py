@@ -2563,6 +2563,8 @@ def compute_kpi(df, spec, day):
         return finance_drs_crs_card(day)
     if calc == "finance_drs_crs_month":
         return finance_drs_crs_bal_card(day)
+    if calc == "finance_gt90_month":
+        return finance_gt90_month_card(day)
     if calc == "finance_gt90_180":
         return finance_gt90_card(day)
     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
@@ -3698,7 +3700,7 @@ SHEETS = {
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Greater%20Than%2090-%20180%20Days.xls",
         "sheet_name": "90-180",      # <- tab ka exact naam (neeche dekho)
-        "date_col": "Party Name",
+        "date_col": "Month",
     },
 "finance_gt90": {
     "type": "excel",
@@ -3915,7 +3917,7 @@ KPI_SOURCES = {
     },
     ("finance", "Greater Than 90 / 180 Days"): {
         "sheet": "finance_ageing_new",
-        "calc": "finance_gt90_180",
+        "calc": "finance_gt90_month",
     },
     ("finance", "Total Due (Drs & Crs)"): {
         "sheet": "finance_due_m",
@@ -5088,6 +5090,82 @@ def finance_total_due_month_card(day):
              if prow else [("Koi party nahi", "✅")]),
         ],
     }
+# ====================================================================
+# FINANCE: GREATER THAN 90 / 180 DAYS (month-wise)
+#   File columns: Party Name | Month | Total Amount | 0-30 | 31-60 | 61-90 | 91-120 Days | 120-180 Days | >180 Days
+#   Sirf 2 column ka sum: "91-120 Days" aur "120-180 Days" (month-wise, party-wise)
+# ====================================================================
+def _gtm_prepare(df):
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z0-9-]", "", str(s).upper())
+    pick = lambda *k: next((c for c in cols if norm(c) in k), None)
+    c_p, c_m = pick("PARTYNAME", "PARTY", "ACCOUNTNAME"), pick("MONTH")
+    c_a, c_b = pick("91-120DAYS", "91-120"), pick("120-180DAYS", "121-180DAYS", "120-180", "121-180")
+    if not all([c_p, c_m, c_a, c_b]):
+        raise DataError(f"Party Name / Month / 91-120 Days / 120-180 Days column nahi mila. Columns: {cols}")
+    w = pd.DataFrame({
+        "party": df[c_p].astype(str).str.strip(),
+        "m": df[c_m].map(_bal_month_no),
+        "a": _num(df[c_a]).fillna(0.0),
+        "b": _num(df[c_b]).fillna(0.0),
+    })
+    w = w[w["m"].notna() & (w["party"] != "")].copy()
+    w["m"] = w["m"].astype(int)
+    return w
+
+
+def _gtm_month_dates(df):
+    today = datetime.datetime.now(IST).date()
+    return sorted({_bal_month_date(m, today) for m in _gtm_prepare(df)["m"].unique()}, reverse=True)
+
+
+def finance_gt90_month_card(day):
+    import html as _html
+    df, err, _ = get_sheet("finance_ageing_new")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    try:
+        w = _gtm_prepare(df)
+    except DataError as e:
+        return {"value": "Config error", "desc": str(e), "color": RED}
+    if day.month not in set(w["m"]):
+        return None
+    today = datetime.datetime.now(IST).date()
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    esc = lambda x: _html.escape(str(x))
+
+    def tot(m):
+        s = w[w["m"] == m]
+        return float(s["a"].sum()), float(s["b"].sum())
+
+    a, b = tot(day.month)
+    rows_all = []
+    for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
+        x, y = tot(m)
+        rows_all.append((f"{_bal_month_date(m, today):%b-%y}",
+                         f"91-120: {cr(x)} | 120-180: {cr(y)} | Total: {cr(x + y)}"))
+
+    g = w[w["m"] == day.month].groupby("party", as_index=False)[["a", "b"]].sum()
+    ga = g[g["a"] > 0.005].sort_values("a", ascending=False)
+    gb = g[g["b"] > 0.005].sort_values("b", ascending=False)
+    ra = [(esc(r.party), _inr(r.a)) for r in ga.itertuples()]
+    rb = [(esc(r.party), _inr(r.b)) for r in gb.itertuples()]
+
+    return {
+        "value": f"{cr(a + b)}",
+        "desc": f"Greater than 90 Days · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
+        "color": RED if (a + b) > 0 else BLUE,
+        "metrics": [(cr(a), "91-120 Days"), (cr(b), "120-180 Days")],
+        "sections": [(f"📌 Exact amount · {day:%b-%y}", [
+            ("91-120 Days", _inr(a)), ("120-180 Days", _inr(b)), ("Total (91-180 Days)", _inr(a + b))])],
+        "details": [
+            ("📊 All Months · Month-wise", rows_all),
+            (f"👥 Party-wise · 91-120 Days · {day:%b-%y} ({len(ra)} parties)",
+             ra + [("TOTAL", _inr(a))] if ra else [("Koi party nahi", "✅")]),
+            (f"👥 Party-wise · 120-180 Days · {day:%b-%y} ({len(rb)} parties)",
+             rb + [("TOTAL", _inr(b))] if rb else [("Koi party nahi", "✅")]),
+        ],
+    }
 
 
 # ====================================================================
@@ -5238,6 +5316,8 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = _drs_crs_bal_month_dates(df)
             if spec.get("calc") == "finance_total_due_month":
                 dates = _due_month_dates(df)
+            if spec.get("calc") == "finance_gt90_month":
+                dates = _gtm_month_dates(df)
 
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
