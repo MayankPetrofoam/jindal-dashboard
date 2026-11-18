@@ -3651,7 +3651,7 @@ SHEETS = {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Greater%20Than%2090-%20180%20Days.xls",
-        "sheet_name": "Sheet1",      # <- tab ka exact naam (neeche dekho)
+        "sheet_name": "90-180",      # <- tab ka exact naam (neeche dekho)
         "date_col": "Party Name",
     },
 
