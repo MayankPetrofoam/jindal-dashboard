@@ -5143,8 +5143,9 @@ def render_kpi(dept_key, idx, title, desc):
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
-             if spec.get("calc") == "finance_drs_crs_month":
+            if spec.get("calc") == "finance_drs_crs_month":
                 dates = _drs_crs_bal_month_dates(df)
+
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
