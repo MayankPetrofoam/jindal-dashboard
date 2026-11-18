@@ -2563,6 +2563,8 @@ def compute_kpi(df, spec, day):
         return finance_drs_crs_card(day)
     if calc == "finance_drs_crs_month":
         return finance_drs_crs_month_card(day)
+    if calc == "finance_drs_crs_month":
+        return finance_drs_crs_bal_card(day)
     if calc == "finance_gt90_180":
         return finance_gt90_card(day)
     # ---------- FINANCE: TOTAL AMT RECEIVED / PAID ----------
@@ -3811,7 +3813,7 @@ SHEETS = {
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Ageing%20(2).xlsx",
         "sheet_name": "Ageing analysis",
-        "date_col": "PARTY NAME",
+        "date_col": "Month",
     },
     "finance_drs_crs_m": {
         "type": "excel",
@@ -4901,6 +4903,100 @@ def finance_drs_crs_month_card(day):
             ]),
         ],
     }
+# ====================================================================
+# FINANCE: DRS & CRS MONTH-WISE  (naya format: ACCOUNT NAME | Month | GROUP | Dr/Cr | OPN.AMT | DEBIT AMT | CREDIT AMT | Dr/Cr | BAL.AMT)
+#   DRS = GROUP "Sundry Debtors"                       -> BAL.AMT ka sum (Dr = +, Cr = -)
+#   CRS = GROUP "Sundry Creditors" + "Sundry Creditors For Expenses" -> BAL.AMT ka sum (Cr = +, Dr = -)
+# ====================================================================
+def _bal_month_no(txt):
+    try:
+        return datetime.datetime.strptime(str(txt).strip()[:3].title(), "%b").month
+    except ValueError:
+        return None
+
+
+def _bal_month_date(m, today):
+    fy = today.year if today.month >= 4 else today.year - 1
+    y = fy if m >= 4 else fy + 1
+    return today if (y, m) == (today.year, today.month) else datetime.date(y, m, 1)
+
+
+def _bal_prepare(df):
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    c_mon = next((c for c in cols if norm(c) == "MONTH"), None)
+    c_grp = next((c for c in cols if norm(c) == "GROUP"), None)
+    c_bal = next((c for c in cols if norm(c) == "BALAMT"), None)
+    if not (c_mon and c_grp and c_bal):
+        raise DataError(f"Month / GROUP / BAL.AMT column nahi mila. Columns: {cols}")
+    c_dc = cols[cols.index(c_bal) - 1] if cols.index(c_bal) > 0 else None     # BAL.AMT se pehle wala Dr/Cr column
+    w = pd.DataFrame({
+        "m": df[c_mon].map(_bal_month_no),
+        "grp": df[c_grp].astype(str).str.strip().str.upper(),
+        "bal": _num(df[c_bal]).fillna(0.0),
+        "dc": df[c_dc].astype(str).str.strip().str.upper() if c_dc else "DR",
+    })
+    w = w[w["m"].notna()].copy()
+    w["m"] = w["m"].astype(int)
+    w["signed"] = w["bal"].where(w["dc"] != "CR", -w["bal"])                   # Dr = +, Cr = -
+    return w
+
+
+def _bal_drs_crs(w, m):
+    s = w[w["m"] == m]
+    d = s[s["grp"] == "SUNDRY DEBTORS"]
+    c1 = s[s["grp"] == "SUNDRY CREDITORS"]
+    c2 = s[s["grp"] == "SUNDRY CREDITORS FOR EXPENSES"]
+    return {"drs": float(d["signed"].sum()), "crs": float(-(c1["signed"].sum() + c2["signed"].sum())),
+            "c1": float(-c1["signed"].sum()), "c2": float(-c2["signed"].sum()),
+            "c2_cr": float(c2.loc[c2["dc"] == "CR", "bal"].sum()), "c2_dr": float(c2.loc[c2["dc"] != "CR", "bal"].sum()),
+            "n_d": len(d), "n_c1": len(c1), "n_c2": len(c2)}
+
+
+def _drs_crs_bal_month_dates(df):
+    """Month dropdown ke liye: sheet ke har month ki ek date."""
+    today = datetime.datetime.now(IST).date()
+    w = _bal_prepare(df)
+    return sorted({_bal_month_date(m, today) for m in w["m"].unique()}, reverse=True)
+
+
+def finance_drs_crs_bal_card(day):
+    df, err, _ = get_sheet("finance_drs_crs_m")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    try:
+        w = _bal_prepare(df)
+    except DataError as e:
+        return {"value": "Config error", "desc": str(e), "color": RED}
+    if day.month not in set(w["m"]):
+        return None
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    today = datetime.datetime.now(IST).date()
+    r = _bal_drs_crs(w, day.month)
+    till = f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""
+
+    rows_all = []
+    for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
+        a = _bal_drs_crs(w, m)
+        rows_all.append((f"{_bal_month_date(m, today):%b-%y}", f"DRS {cr(a['drs'])}  |  CRS {cr(a['crs'])}"))
+
+    return {
+        "value": f"DRS {cr(r['drs'])} | CRS {cr(r['crs'])}",
+        "desc": f"Balance Amount · {day:%b-%y}{till}",
+        "color": BLUE,
+        "metrics": [(cr(r["drs"]), "Total DRS (Debtors)"), (cr(r["crs"]), "Total CRS (Creditors)")],
+        "sections": [(f"📌 Exact amount · {day:%b-%y}", [("Total DRS", _inr(r["drs"])), ("Total CRS", _inr(r["crs"]))])],
+        "details": [
+            ("📊 All Months · Total DRS & Total CRS", rows_all),
+            (f"💰 {day:%b-%y} · Group-wise", [
+                ("Sundry Debtors (DRS)", f"{_inr(r['drs'])}  ({r['n_d']} entries)"),
+                ("Sundry Creditors", f"{_inr(r['c1'])}  ({r['n_c1']} entries)"),
+                ("Sundry Creditors For Expenses",
+                 f"{_inr(r['c2'])}  (Cr {_inr(r['c2_cr'])} - Dr {_inr(r['c2_dr'])})"),
+                ("CRS total", _inr(r["crs"])),
+            ]),
+        ],
+    }
 
 
 # ====================================================================
@@ -5047,8 +5143,8 @@ def render_kpi(dept_key, idx, title, desc):
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
-            if spec.get("calc") == "finance_drs_crs_month":
-                dates = _drs_crs_month_dates(df)
+             if spec.get("calc") == "finance_drs_crs_month":
+                dates = _drs_crs_bal_month_dates(df)
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
             # Hamesha aaj ki date par value dikhao, taaki purani session ki month/date se "No Data" na aaye.
