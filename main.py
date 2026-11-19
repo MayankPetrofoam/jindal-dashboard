@@ -5532,40 +5532,31 @@ def finance_gt90_month_card(day):
     w = df.copy()
     w.columns = [str(c).strip() for c in w.columns]
 
-    req_cols = ["91-120 Days", "120-180 Days", ">180 Days"]
+    party_col = next((c for c in w.columns if "party" in c.lower()), None)
+    req_cols = ["61-120 Days", ">120 Days", ">180 Days"]
     missing = [c for c in req_cols if c not in w.columns]
-    if "Party Name" not in w.columns or missing:
+    if not party_col or missing:
         return {
             "value": "Config error",
-            "desc": f"Missing columns {missing}. Found: {list(w.columns)}",
+            "desc": f"Missing {missing}. Found: {list(w.columns)}",
             "color": RED,
         }
 
-    # Numeric conversion
-    for c in req_cols + ["Total Amount"]:
-        if c in w.columns:
-            w[c] = pd.to_numeric(
-                w[c].astype(str).str.replace(",", "", regex=False).str.strip(),
-                errors="coerce",
-            ).fillna(0.0)
-        else:
-            w[c] = 0.0
+    for c in req_cols + ["0-15 Days"]:
+        w[c] = pd.to_numeric(
+            w[c].astype(str).str.replace(",", "", regex=False).str.strip(),
+            errors="coerce",
+        ).fillna(0.0) if c in w.columns else 0.0
 
-    # Clean party names & drop blank / Grand Total rows
-    w["party"] = w["Party Name"].astype(str).str.strip()
+    w["party"] = w[party_col].astype(str).str.strip()
     w = w[w["party"] != ""]
     w = w[~w["party"].str.lower().str.contains("total|grand", regex=True)]
 
-    # Month parsing (already _date hai toh usse, warna Month column se)
-    if "_date" in w.columns and w["_date"].notna().any():
-        w["m"] = pd.to_datetime(w["_date"]).dt.month
-    elif "Month" in w.columns:
-        w["m"] = _parse_dates(w["Month"], dayfirst=True).dt.month
+    # Month filter (agar sheet mein Month column hai toh filter karega, warna selected month maane)
+    if "Month" in w.columns:
+        w["m"] = _parse_dates(w["Month"], dayfirst=True).dt.month.fillna(day.month).astype(int)
     else:
         w["m"] = day.month
-
-    w = w.dropna(subset=["m"])
-    w["m"] = w["m"].astype(int)
 
     if day.month not in set(w["m"]):
         return None
@@ -5575,70 +5566,51 @@ def finance_gt90_month_card(day):
     esc = lambda x: _html.escape(str(x))
     pct = lambda part, whole: (part / whole * 100.0) if whole > 0 else 0.0
 
-    def tot(m):
-        s = w[w["m"] == m]
-        c1 = float(s["91-120 Days"].sum())
-        c2 = float(s["120-180 Days"].sum())
-        c3 = float(s[">180 Days"].sum())
-        drs = float(s["Total Amount"].sum())
-        return c1, c2, c3, drs
+    s = w[w["m"] == day.month]
+    c1 = float(s["61-120 Days"].sum())     # ₹1,99,73,260 (2.00 Cr)
+    c2 = float(s[">120 Days"].sum())       # ₹2,26,08,732 (2.26 Cr)
+    c3 = float(s[">180 Days"].sum())       # ₹5,20,83,734 (5.21 Cr)
+    total_drs = float(s["0-15 Days"].sum())  # ₹44,38,73,996 (44.39 Cr Total DRS)
+    tot_gt = c1 + c2 + c3                  # ₹9,46,65,725 (9.47 Cr)
 
-    c1, c2, c3, total_drs = tot(day.month)
-    tot_gt = c1 + c2 + c3
+    p1, p2, p3, p_tot = pct(c1, total_drs), pct(c2, total_drs), pct(c3, total_drs), pct(tot_gt, total_drs)
 
-    p1 = pct(c1, total_drs)
-    p2 = pct(c2, total_drs)
-    p3 = pct(c3, total_drs)
-    p_tot = pct(tot_gt, total_drs)
-
-    # All months summary
-    rows_all = []
-    for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
-        x1, x2, x3, xdrs = tot(m)
-        xtot = x1 + x2 + x3
-        rows_all.append((
-            f"{_bal_month_date(m, today):%b-%y}",
-            f"91-120: {cr(x1)} | 120-180: {cr(x2)} | >180: {cr(x3)} | Total: {cr(xtot)} ({pct(xtot, xdrs):.2f}% DRS)"
-        ))
-
-    # Party-wise grouping for selected month
-    g = w[w["m"] == day.month].groupby("party", as_index=False)[["91-120 Days", "120-180 Days", ">180 Days"]].sum()
-    g["tot_gt"] = g["91-120 Days"] + g["120-180 Days"] + g[">180 Days"]
+    # Party-wise list
+    g = s.groupby("party", as_index=False)[["61-120 Days", ">120 Days", ">180 Days"]].sum()
+    g["tot_gt"] = g["61-120 Days"] + g[">120 Days"] + g[">180 Days"]
 
     g_all = g[g["tot_gt"] > 0.005].sort_values("tot_gt", ascending=False)
-    g_c1  = g[g["91-120 Days"] > 0.005].sort_values("91-120 Days", ascending=False)
-    g_c2  = g[g["120-180 Days"] > 0.005].sort_values("120-180 Days", ascending=False)
+    g_c1  = g[g["61-120 Days"] > 0.005].sort_values("61-120 Days", ascending=False)
+    g_c2  = g[g[">120 Days"] > 0.005].sort_values(">120 Days", ascending=False)
     g_c3  = g[g[">180 Days"] > 0.005].sort_values(">180 Days", ascending=False)
 
     r_all = [(esc(r["party"]), f"{_inr(r['tot_gt'])} ({pct(r['tot_gt'], total_drs):.2f}% DRS)") for _, r in g_all.iterrows()]
-    r_c1  = [(esc(r["party"]), f"{_inr(r['91-120 Days'])} ({pct(r['91-120 Days'], total_drs):.2f}%)") for _, r in g_c1.iterrows()]
-    r_c2  = [(esc(r["party"]), f"{_inr(r['120-180 Days'])} ({pct(r['120-180 Days'], total_drs):.2f}%)") for _, r in g_c2.iterrows()]
+    r_c1  = [(esc(r["party"]), f"{_inr(r['61-120 Days'])} ({pct(r['61-120 Days'], total_drs):.2f}%)") for _, r in g_c1.iterrows()]
+    r_c2  = [(esc(r["party"]), f"{_inr(r['>120 Days'])} ({pct(r['>120 Days'], total_drs):.2f}%)") for _, r in g_c2.iterrows()]
     r_c3  = [(esc(r["party"]), f"{_inr(r['>180 Days'])} ({pct(r['>180 Days'], total_drs):.2f}%)") for _, r in g_c3.iterrows()]
 
     return {
         "value": f"{cr(tot_gt)} ({p_tot:.2f}%)",
-        "desc": f"Greater than 90 Days · {day:%b-%y} · {p_tot:.2f}% of Total DRS ({cr(total_drs)})"
-                + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
+        "desc": f"Greater than 60 Days · {day:%b-%y} · {p_tot:.2f}% of Total DRS ({cr(total_drs)})",
         "color": RED if tot_gt > 0 else BLUE,
         "metrics": [
             (f"{p_tot:.2f}%", "% of DRS"),
-            (cr(c1), "91-120 Days"),
-            (cr(c2), "120-180 Days"),
+            (cr(c1), "61-120 Days"),
+            (cr(c2), ">120 Days"),
             (cr(c3), ">180 Days"),
         ],
         "sections": [(f"📌 Exact amount & DRS % · {day:%b-%y}", [
-            (f"91-120 Days ({p1:.2f}%)", _inr(c1)),
-            (f"120-180 Days ({p2:.2f}%)", _inr(c2)),
+            (f"61-120 Days ({p1:.2f}%)", _inr(c1)),
+            (f">120 Days ({p2:.2f}%)", _inr(c2)),
             (f">180 Days ({p3:.2f}%)", _inr(c3)),
-            ("Total (>90 Days)", f"{_inr(tot_gt)} ({p_tot:.2f}% of DRS)"),
+            ("Total (>60 Days)", f"{_inr(tot_gt)} ({p_tot:.2f}% of DRS)"),
         ])],
         "details": [
-            ("📊 All Months · Month-wise", rows_all),
-            (f"👥 Party-wise · Combined (>90 Days) · {day:%b-%y} ({len(r_all)} parties)",
+            (f"👥 Party-wise · Combined (>60 Days) · {day:%b-%y} ({len(r_all)} parties)",
              r_all + [("TOTAL", f"{_inr(tot_gt)} ({p_tot:.2f}% DRS)")] if r_all else [("Koi party nahi", "✅")]),
-            (f"👥 Party-wise · 91-120 Days · {day:%b-%y} ({len(r_c1)} parties)",
+            (f"👥 Party-wise · 61-120 Days · {day:%b-%y} ({len(r_c1)} parties)",
              r_c1 + [("TOTAL", f"{_inr(c1)} ({p1:.2f}%)")] if r_c1 else [("Koi party nahi", "✅")]),
-            (f"👥 Party-wise · 120-180 Days · {day:%b-%y} ({len(r_c2)} parties)",
+            (f"👥 Party-wise · >120 Days · {day:%b-%y} ({len(r_c2)} parties)",
              r_c2 + [("TOTAL", f"{_inr(c2)} ({p2:.2f}%)")] if r_c2 else [("Koi party nahi", "✅")]),
             (f"👥 Party-wise · >180 Days · {day:%b-%y} ({len(r_c3)} parties)",
              r_c3 + [("TOTAL", f"{_inr(c3)} ({p3:.2f}%)")] if r_c3 else [("Koi party nahi", "✅")]),
