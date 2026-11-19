@@ -1,5 +1,6 @@
 import csv
 import datetime
+import calendar
 import io
 import logging
 import re
@@ -2666,6 +2667,8 @@ def compute_kpi(df, spec, day):
         return finance_drs_crs_card(day)
     if calc == "finance_drs_crs_month":
         return finance_drs_crs_bal_card(day)
+    if calc == "finance_recv_days":
+        return finance_recv_days_card(day)
     if calc == "finance_gt90_month":
         return finance_gt90_month_card(day)
     if calc == "finance_gt90_180":
@@ -3965,8 +3968,8 @@ KPI_SOURCES = {
     "calc": "total_received_paid",
 },
 ("finance", "Receivable / Payable Days"): {
-    "sheet": "received_data",
-    "calc": "total_received_paid", # Abhi ke liye Total sum dikha rahe hain. Baad mein isko Days wale formula se replace kar sakte hain.
+    "sheet": "finance_drs_crs_m",
+    "calc": "finance_recv_days",
 },
 
     ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
@@ -5110,6 +5113,83 @@ def finance_drs_crs_bal_card(day):
         ],
     }
 # ====================================================================
+# FINANCE: RECEIVABLE DAYS  = (pichle month ka DRS) / (pichle month ki Sale) x 30
+#   DRS  -> "DRS & CRS" sheet (finance_drs_crs_m), Sundry Debtors, pichle month ka BAL.AMT
+#   Sale -> "DAILY BASIS SALES" sheet (daily_sales_report), pichle month ka TOTAL SALE AMOUNT ka sum
+# ====================================================================
+def _recv_prev(y, m):
+    return (y - 1, 12) if m == 1 else (y, m - 1)
+
+
+def _recv_sale_by_month(sdf):
+    """{(year, month): (sale_sum, din_count)} daily sales sheet se."""
+    amt_col = next((c for c in sdf.columns if "TOTAL SALE" in str(c).upper()), None)
+    if amt_col is None:
+        raise DataError("TOTAL SALE AMOUNT column nahi mila")
+    t = pd.DataFrame({"d": sdf["_date"], "a": _num(sdf[amt_col]).fillna(0.0)})
+    t = t[t["d"].notna()]
+    t["ym"] = t["d"].map(lambda x: (x.year, x.month))
+    g = t.groupby("ym").agg(sale=("a", "sum"), days=("d", "nunique"))
+    return {k: (float(r["sale"]), int(r["days"])) for k, r in g.iterrows()}
+
+
+def _recv_days_month_dates(df):
+    """Month dropdown: sirf wo months jinke pichle month ka DRS + Sale dono sheet mein hain (aaj tak)."""
+    today = datetime.datetime.now(IST).date()
+    w = _bal_prepare(df)
+    sdf, err, _ = get_sheet("daily_sales_report")
+    if sdf is None:
+        return [today]
+    sales = _recv_sale_by_month(sdf)
+    drs_months = set(w["m"])
+    out = []
+    for (y, m) in sales:                      # sale wale har month ka NEXT month selectable hai
+        ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+        if m in drs_months and (ny, nm) <= (today.year, today.month):
+            out.append(today if (ny, nm) == (today.year, today.month) else datetime.date(ny, nm, 1))
+    return sorted(set(out), reverse=True) or [today]
+
+
+def finance_recv_days_card(day):
+    df, err, _ = get_sheet("finance_drs_crs_m")
+    sdf, err2, _ = get_sheet("daily_sales_report")
+    if df is None:
+        return {"value": "Error", "desc": f"DRS data error: {err}", "color": RED}
+    if sdf is None:
+        return {"value": "Error", "desc": f"Sales data error: {err2}", "color": RED}
+    try:
+        w = _bal_prepare(df)
+        sales = _recv_sale_by_month(sdf)
+    except DataError as e:
+        return {"value": "Config error", "desc": str(e), "color": RED}
+
+    py, pm = _recv_prev(day.year, day.month)
+    prev = datetime.date(py, pm, 1)
+    if pm not in set(w["m"]):
+        return {"value": "No Data", "desc": f"{prev:%b-%y} ka DRS sheet mein nahi hai", "color": GREY}
+    if (py, pm) not in sales or sales[(py, pm)][0] <= 0:
+        return {"value": "No Data", "desc": f"{prev:%b-%y} ki Sale sheet mein nahi hai", "color": GREY}
+
+    drs = _bal_drs_crs(w, pm)["drs"]
+    sale, ndays = sales[(py, pm)]
+    days = drs / sale * 30
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    full = calendar.monthrange(py, pm)[1]
+    warn = [] if ndays >= full else [("⚠️ Note", f"Sale sirf {ndays}/{full} din ki hai - result adhoora")]
+
+    return {
+        "value": f"{days:,.2f}",
+        "desc": f"Receivable Days · DRS {prev:%b-%y} ÷ Sale {prev:%b-%y} × 30",
+        "color": BLUE,
+        "metrics": [(cr(drs), f"DRS {prev:%b-%y}"), (cr(sale), f"Sale {prev:%b-%y}")],
+        "sections": [(f"📌 Calculation · {day:%b-%y}", [
+            (f"DRS ({prev:%b-%y})", _inr(drs)),
+            (f"Sale ({prev:%b-%y}, {ndays} din)", _inr(sale)),
+            ("Formula", f"{_inr(drs)} ÷ {_inr(sale)} × 30"),
+            ("Receivable Days", f"{days:,.2f}"),
+        ] + warn)],
+    }
+# ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
 #   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
 #   Due % = Total Due Amt (us month ka) / Total O/S (us month ka) * 100
@@ -5417,6 +5497,8 @@ def render_kpi(dept_key, idx, title, desc):
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
             if spec.get("calc") == "finance_drs_crs_month":
                 dates = _drs_crs_bal_month_dates(df)
+            if spec.get("calc") == "finance_recv_days":
+                dates = _recv_days_month_dates(df)
             if spec.get("calc") == "finance_total_due_month":
                 dates = _due_month_dates(df)
             if spec.get("calc") == "finance_gt90_month":
