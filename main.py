@@ -5311,49 +5311,49 @@ def maint_breakdown_card(df, day):
     c_i = _mcol(df, "ISSUE DESCRIPTION")
     c_r = _mcol(df, "ISSUE RESOLVED")
     if not (c_m and c_i and c_r):
-        return {"value": "Config error", "desc": f"Machine Name / Issue Description / Issue Resolved column nahi mila. Columns: {list(df.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Machine Name / Issue Description / Issue Resolved column not found. Columns: {list(df.columns)}", "color": RED}
 
     today = datetime.datetime.now(IST).date()
     w = df[df["_date"].notna()].copy()
     w["machine"] = w[c_m].astype(str).str.strip().replace({"nan": "", "None": ""})
     w = w[w["machine"] != ""]
     w["issue"] = w[c_i].astype(str).str.strip().replace({"nan": "", "None": ""})
-    w["pending"] = w[c_r].astype(str).str.strip().str.upper() != "TRUE"      # Issue Resolved TICK nahi = abhi kharab
+    w["pending"] = w[c_r].astype(str).str.strip().str.upper() != "TRUE"      # "Issue Resolved" not ticked = still broken
     w["ym"] = w["_date"].map(lambda x: (x.year, x.month))
     w["ago"] = w["_date"].map(lambda x: (today - x).days)
     w = w.sort_values("_date")
 
     def line(r):
-        return (f"⚙ {r['machine']}", f"❌ {r['issue'] or 'Reason nahi likha'} · {r['_date']:%d-%b} se ({r['ago']} din)")
+        return (f"⚙ {r['machine']}", f"❌ {r['issue'] or 'No reason mentioned'} · since {r['_date']:%d-%b} ({r['ago']} days)")
 
     sel = (day.year, day.month)
-    sel_p = w[(w["ym"] == sel) & w["pending"]]
+    allp = w[w["pending"]]                                   # ALL months, still not solved
+    sel_p = allp[allp["ym"] == sel]
     sel_all = w[w["ym"] == sel]
 
     # ---- Details ----
     details = []
     mrows = []
     for ym, f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True):
-        mrows.append((f"{datetime.date(ym[0], ym[1], 1):%b-%y}", f"{len(f)} breakdowns | {int(f['pending'].sum())} abhi kharab"))
-    mrows.append(("TOTAL", f"{len(w)} breakdowns | {int(w['pending'].sum())} abhi tak kharab"))
-    details.append(("📊 Month-wise · Breakdown | Abhi kharab", mrows))
+        mrows.append((f"{datetime.date(ym[0], ym[1], 1):%b-%y}", f"{len(f)} breakdowns | {int(f['pending'].sum())} not solved"))
+    mrows.append(("TOTAL", f"{len(w)} breakdowns | {len(allp)} not solved"))
+    details.append(("📊 Month-wise · Breakdowns | Not solved", mrows))
 
-    allp = w[w["pending"]]
     if not allp.empty:
         mach = []
         for name, f in allp.groupby("machine"):
             mach.append((len(f), name, f["_date"].min(), int(f["ago"].max())))
         mach.sort(key=lambda x: (-x[0], x[1]))
-        details.append((f"🔴 Abhi tak kharab · Machine-wise ({len(allp)} issues)",
-                        [(n, f"{c} issue · sabse purana {d:%d-%b-%y} ({a} din)") for c, n, d, a in mach]))
+        details.append((f"🔴 Not solved till date · Machine-wise ({len(allp)} issues)",
+                        [(n, f"{c} issues · oldest {d:%d-%b-%y} ({a} days)") for c, n, d, a in mach]))
         for ym, f in sorted(allp.groupby("ym"), key=lambda x: x[0], reverse=True):
-            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Kharab ({len(f)})", [line(r) for _, r in f.iterrows()]))
+            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Not solved ({len(f)})", [line(r) for _, r in f.iterrows()]))
 
     return {
-        "value": f"{len(sel_p)} Machines",
-        "desc": f"Kharab / repair pending · {day:%b-%y} (total {len(sel_all)} breakdowns)",
-        "color": RED if len(sel_p) else BLUE,
-        "sections": [(f"🔴 {day:%b-%y} · Kharab machines & reason", [line(r) for _, r in sel_p.iterrows()])] if len(sel_p) else [],
+        "value": f"{len(allp)} Machines",
+        "desc": f"Total not solved till date · {day:%b-%y}: {len(sel_p)} of {len(sel_all)} breakdowns",
+        "color": RED if len(allp) else BLUE,
+        "sections": [(f"🔴 {day:%b-%y} · Machines under breakdown & reason", [line(r) for _, r in sel_p.iterrows()])] if len(sel_p) else [],
         "details": details,
     }
 
