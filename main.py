@@ -1262,6 +1262,7 @@ def _fetch_yield_cached(url, sheet_name):
     sheet_col = pick("SHEET", "SHEET")
     mtr_col = pick("MTRS.", "MTRS", "MTR")
     gname_col = pick("GRADE", "GRADE")
+    cat_col = next((c for c in raw.columns if str(c).startswith("CAT")), None)
     
     if not all([date_col, item_col, kg_col, bdl_col]):
         raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS / BUNDLES). Mile hue: {list(raw.columns)}")
@@ -1284,6 +1285,7 @@ def _fetch_yield_cached(url, sheet_name):
         "BUNDLES": raw[bdl_col].astype(str).str.strip().replace({"nan": "", "None": ""}) if bdl_col else "",
         "mtr": _num(raw[mtr_col]).fillna(0.0) if mtr_col else 0.0,
         "gname": raw[gname_col].astype(str).str.strip().str.upper().replace({"NAN": "", "NONE": ""}) if gname_col else "",
+        "cat": raw[cat_col].astype(str).str.strip().str.upper().replace({"NAN": "", "NONE": ""}) if cat_col else "",
     })
     df["grade"] = 1
     df.loc[df["item"].isin(SECOND_GRADE_ITEMS), "grade"] = 2
@@ -1793,19 +1795,85 @@ def _cmix_txt(a, fields):
     return " | ".join(parts)
 
 
+# ====================================================================
+# CATEGORY MIX (Prod. Summary se, month-wise, item-group + grade-wise)
+# ====================================================================
+# (naam, item match function, dikhane wale fields, View Details mein kis column se split: "gname" = GRADE, "cat" = CATEGORY)
+# ORDER MATTER KARTA HAI: pehla match jeetta hai (Rollpack Mattress se pehle, kyunki FLO ... MATTRESS rollpack hai)
+CMIX_GROUPS = [
+    ("Rollpack",            lambda i: i.startswith("FLO ") or "ROLLPACK" in i or "ROLL PACK" in i,         ("bdl", "pcs", "kg"), "gname"),
+    ("Mattress",            lambda i: "MATTRESS" in i,                                                     ("bdl", "pcs", "kg"), "gname"),
+    ("Pillow",              lambda i: "PILLOW" in i,                                                       ("bdl", "pcs", "kg"), "gname"),
+    ("Peeling Roll",        lambda i: i in ("PEELING ROLL", "PEELING") or i.startswith("PEELING ROLL"),    ("bdl", "mtr", "kg"), "cat"),
+    ("Quilting Roll",       lambda i: "QUILTING ROLL" in i,                                                ("bdl", "mtr", "kg"), "gname"),
+    ("PU Foam Sheet",       lambda i: i == "PU FOAM SHEET" or "PROFILE SHEET" in i,                        ("bdl", "kg"),        "gname"),
+    ("A Grade + DC Grade",  lambda i: i in ("A GRADE", "PU FOAM A GRADE") or "DC GRADE" in i,              ("bdl", "kg"),        "gname"),
+    ("PU 2nd / 3rd / Scrap", lambda i: "2ND GRADE" in i or "3RD GRADE" in i or "SCRAP" in i,               ("bdl", "kg"),        "gname"),
+    ("Bonded",              lambda i: "BONDED" in i,                                                       ("bdl", "pcs", "kg"), "gname"),
+]
+CMIX_OTHER = ("Other (Sofa cum bed)", ("bdl", "pcs", "kg"), "gname")   # jo upar kisi group mein nahi aaya
+
+
+def _cmix_group(item):
+    for name, fn, _f, _s in CMIX_GROUPS:
+        if fn(item):
+            return name
+    return CMIX_OTHER[0]
+
+
+def _cmix_meta(name):
+    for n, _fn, f, s in CMIX_GROUPS:
+        if n == name:
+            return f, s
+    return CMIX_OTHER[1], CMIX_OTHER[2]
+
+
+def _cmix_agg(f):
+    return {
+        "bdl": int(f["BUNDLES"].astype(str).str.strip().ne("").sum()),
+        "pcs": float(f["sheet"].sum()),
+        "mtr": float(f["mtr"].sum()),
+        "kg": float(f["kg"].sum()),
+    }
+
+
+def _cmix_txt(a, fields):
+    parts = []
+    for f in fields:
+        if f == "bdl":
+            parts.append(f"{a['bdl']:,} {'Rolls' if 'mtr' in fields else 'Bdls'}")
+        elif f == "pcs":
+            parts.append(f"{a['pcs']:,.0f} Pcs")
+        elif f == "mtr":
+            parts.append(f"{a['mtr']:,.0f} Mtr")
+        else:
+            parts.append(f"{a['kg']:,.1f} Kg")
+    return " | ".join(parts)
+
+
+def _cmix_total(frame):
+    """Poore frame ka total: Bundles = saare items, Kg = saare items, Pcs = sirf wo groups jinme Pcs dikhte hain
+    (roll / sheet wale items ki 'SHEET' = 1 ko pcs mein nahi ginte)."""
+    grp = frame["item"].map(_cmix_group)
+    pcs_groups = {n for n, _fn, f, _s in CMIX_GROUPS if "pcs" in f} | {CMIX_OTHER[0]}
+    a = _cmix_agg(frame)
+    a["pcs"] = float(frame.loc[grp.isin(pcs_groups), "sheet"].sum())
+    return a
+
+
 def category_mix_card(day):
     """Category Mix: selected month ka production, item-group wise; View Details mein item + grade wise."""
     y_df, err, _ = get_sheet("prod_summary")
     if y_df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
-    m = y_df[y_df["ym"] == day.year * 100 + day.month].copy()
-    m = m[m["BUNDLES"].astype(str).str.strip() != ""]
-    if m.empty:
+    ym = day.year * 100 + day.month
+    m = y_df[y_df["ym"] == ym].copy()          # BUNDLES blank wali rows ka kg/pcs bhi count hota hai
+    if m.empty or not (m["BUNDLES"].astype(str).str.strip() != "").any():
         return None
 
     m["grp"] = m["item"].map(_cmix_group)
-    tot = _cmix_agg(m)
+    tot = _cmix_total(m)
 
     order = [g[0] for g in CMIX_GROUPS] + [CMIX_OTHER[0]]
     summary_rows, details = [], []
@@ -1814,14 +1882,28 @@ def category_mix_card(day):
         if g.empty:
             continue
         a = _cmix_agg(g)
-        fields = _cmix_fields(name)
+        fields, split = _cmix_meta(name)
         summary_rows.append((name, _cmix_txt(a, fields)))
 
+        g = g.assign(_sp=g[split].replace("", "No Grade") if split in g.columns else "No Grade")
         rows = []
-        for (item, gr), f in g.groupby(["item", "gname"]):
-            rows.append((f"{item.title()} · {gr or 'No Grade'}", _cmix_txt(_cmix_agg(f), fields)))
+        for (item, sp), f in g.groupby(["item", "_sp"]):
+            rows.append((f"{item.title()} · {sp}", _cmix_txt(_cmix_agg(f), fields)))
         rows.append(("TOTAL", _cmix_txt(a, fields)))
         details.append((f"📦 {name} · {_cmix_txt(a, fields)}", rows))
+
+    summary_rows.append(("TOTAL (sab items)", f"{tot['bdl']:,} Bdls | {tot['pcs']:,.0f} Pcs | {tot['kg']:,.1f} Kg"))
+
+    # --- Saal ka total (shuru se is month tak) + month-wise, taaki sheet ke total se match kiya ja sake ---
+    fy = y_df[y_df["ym"] <= ym]
+    fy_tot = _cmix_total(fy)
+    first = fy["_date"].min()
+    mon_rows = []
+    for k, f in sorted(fy.groupby("ym"), key=lambda x: x[0]):
+        t = _cmix_total(f)
+        mon_rows.append((f"{datetime.date(k // 100, k % 100, 1):%b-%y}", f"{t['bdl']:,} Bdls | {t['pcs']:,.0f} Pcs | {t['kg']:,.1f} Kg"))
+    mon_rows.append(("TOTAL", f"{fy_tot['bdl']:,} Bdls | {fy_tot['pcs']:,.0f} Pcs | {fy_tot['kg']:,.1f} Kg"))
+    details.append((f"📆 Total till {day:%b-%y} (from {first:%d-%m-%y}) · Month-wise", mon_rows))
 
     return {
         "value": f"{tot['bdl']:,} Bdls",
@@ -1832,7 +1914,14 @@ def category_mix_card(day):
             (f"{tot['pcs']:,.0f}", "Pcs"),
             (f"{tot['kg']:,.1f}", "Kg"),
         ],
-        "sections": [(f"🗓 Month {day:%b-%y} · Category wise", summary_rows)],
+        "sections": [
+            (f"🗓 Month {day:%b-%y} · Category wise", summary_rows),
+            (f"📆 Total {first:%b-%y} to {day:%b-%y}", [
+                ("Bundles", f"{fy_tot['bdl']:,}"),
+                ("Pcs", f"{fy_tot['pcs']:,.0f}"),
+                ("Kg", f"{fy_tot['kg']:,.1f}"),
+            ]),
+        ],
         "details": details,
     }
 
