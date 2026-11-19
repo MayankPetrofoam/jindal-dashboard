@@ -5340,7 +5340,7 @@ def maint_breakdown_card(df, day):
         details.append((f"🔴 Not solved till date · Machine-wise ({len(allp)} issues)",
                         [(n, f"{c} issues · oldest {d:%d-%b-%y} ({a} days)") for c, n, d, a in mach]))
         for ym, f in sorted(allp.groupby("ym"), key=lambda x: x[0], reverse=True):
-            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Not solved ({len(f)})", [line(r) for _, r in f.iterrows()])
+            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Not solved ({len(f)})", [line(r) for _, r in f.iterrows()]))
     return {
         "value": f"{len(sel_p)} Machines",
         "desc": f"{day:%b-%y} Not solved ({len(sel_p)} of {len(sel_all)} breakdowns) · Overall pending: {len(allp)}",
