@@ -5519,8 +5519,8 @@ def _gtm_prepare(df):
 
 
 def _gtm_month_dates(df):
-    today = datetime.datetime.now(IST).date()
-    return sorted({_bal_month_date(m, today) for m in _gtm_prepare(df)["m"].unique()}, reverse=True)
+    # Naye sheet mein Month column nahi hai, sheet = current month ka data
+    return [datetime.datetime.now(IST).date()]
 
 
 def finance_gt90_month_card(day):
