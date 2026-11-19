@@ -5284,15 +5284,8 @@ def finance_recv_days_card(day):
 
     return {
         "value": f"{days:,.2f}",
-        "desc": f"Receivable Days · DRS {prev:%b-%y} ÷ Sale {prev:%b-%y} × 30",
+        "desc": "",
         "color": BLUE,
-        "metrics": [(cr(drs), f"DRS {prev:%b-%y}"), (cr(sale), f"Sale {prev:%b-%y}")],
-        "sections": [(f"📌 Calculation · {day:%b-%y}", [
-            (f"DRS ({prev:%b-%y})", _inr(drs)),
-            (f"Sale ({prev:%b-%y}, {ndays} din)", _inr(sale)),
-            ("Formula", f"{_inr(drs)} ÷ {_inr(sale)} × 30"),
-            ("Receivable Days", f"{days:,.2f}"),
-        ] + warn)],
     }
 # ====================================================================
 # MAINTENANCE: CURRENT BREAKDOWN (month-wise, reason ke saath) + PREVENTIVE MAINTENANCE %
