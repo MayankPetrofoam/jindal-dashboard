@@ -5458,13 +5458,13 @@ def finance_total_due_month_card(day):
         return float(s["os"].sum()), float(s["due"].sum()), float(s["ov"].sum()), len(s)
 
     t_os, t_due, t_ov, n = tot(day.month)
-    due_pct = pct(t_due, t_os)
+    due_pct = pct(t_due + t_ov, t_os)
 
     rows_all = []
     for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
         o, d, v, _n = tot(m)
         rows_all.append((f"{_bal_month_date(m, today):%b-%y}",
-                         f"O/S {cr(o)} | Due {cr(d)} | Overdue {cr(v)} | Due % {pct(d, o):.2f}%"))
+                         f"O/S {cr(o)} | Due {cr(d)} | Overdue {cr(v)} | Due + Overdue % {pct(d + v, o):.2f}%"))
 
     s = w[(w["m"] == day.month)].groupby("party", as_index=False).agg(
         days=("days", "max"), os=("os", "sum"), due=("due", "sum"), ov=("ov", "sum"))
@@ -5475,13 +5475,13 @@ def finance_total_due_month_card(day):
 
     return {
         "value": f"{due_pct:.2f}%",
-        "desc": f"Due Amount % · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
+        "desc":  "desc": f"Due + Overdue % · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
         "color": BLUE,
-        "metrics": [(f"{due_pct:.2f}%", "Due %", "yield"), (cr(t_os), "Total O/S"),
+        "metrics": [(f"{due_pct:.2f}%", "Due + Overdue %", "yield"), (cr(t_os), "Total O/S"),
                     (cr(t_due), "Total Due Amt"), (cr(t_ov), "Total Overdue Amt")],
         "sections": [(f"📌 Exact amount · {day:%b-%y}", [
             ("Total O/S", _inr(t_os)), ("Total Due Amount", _inr(t_due)), ("Total Overdue Amount", _inr(t_ov)),
-            ("Due % (Due ÷ O/S × 100)", f"{due_pct:.2f}%")])],
+            ("Due + Overdue % ((Due + Overdue) ÷ O/S × 100)", f"{due_pct:.2f}%")])],
         "details": [
             ("📊 All Months · Month-wise", rows_all),
             (f"👥 Party-wise · {day:%b-%y} ({len(prow)} parties)",
