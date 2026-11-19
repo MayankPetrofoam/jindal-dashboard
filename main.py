@@ -5475,7 +5475,7 @@ def finance_total_due_month_card(day):
 
     return {
         "value": f"{due_pct:.2f}%",
-        "desc":  "desc": f"Due + Overdue % · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
+        "desc": f"Due + Overdue % · {day:%b-%y}" + (f" (till {today:%d-%b})" if (day.year, day.month) == (today.year, today.month) else ""),
         "color": BLUE,
         "metrics": [(f"{due_pct:.2f}%", "Due + Overdue %", "yield"), (cr(t_os), "Total O/S"),
                     (cr(t_due), "Total Due Amt"), (cr(t_ov), "Total Overdue Amt")],
