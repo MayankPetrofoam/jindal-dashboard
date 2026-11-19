@@ -5311,20 +5311,23 @@ def maint_breakdown_card(df, day):
     w["machine"] = w[c_m].astype(str).str.strip().replace({"nan": "", "None": ""})
     w = w[w["machine"] != ""]
     w["issue"] = w[c_i].astype(str).str.strip().replace({"nan": "", "None": ""})
-    w["pending"] = w[c_r].astype(str).str.strip().str.upper() != "TRUE"      # "Issue Resolved" not ticked = still broken
+    w["pending"] = w[c_r].astype(str).str.strip().str.upper() != "TRUE"
     w["ym"] = w["_date"].map(lambda x: (x.year, x.month))
     w["ago"] = w["_date"].map(lambda x: (today - x).days)
-    w = w.sort_values("_date")
+    w = w.sort_values("_date", ascending=False)
 
     def line(r):
-        return (f"⚙ {r['machine']}", f"❌ {r['issue'] or 'No reason mentioned'} · since {r['_date']:%d-%b} ({r['ago']} days)")
+        if r["pending"]:
+            return (f"⚙ {r['machine']}", f"❌ {r['issue'] or 'No reason mentioned'} · {r['_date']:%d-%b} ({r['ago']}d ago)")
+        return (f"⚙ {r['machine']}", f"✅ {r['issue'] or 'No reason mentioned'} · {r['_date']:%d-%b} (Solved)")
 
     sel = (day.year, day.month)
-    allp = w[w["pending"]]                                   # ALL months, still not solved
-    sel_p = allp[allp["ym"] == sel]
-    sel_all = w[w["ym"] == sel]
+    allp = w[w["pending"]]
+    sel_all = w[w["ym"] == sel]                  # Selected month ke SAARE breakdowns (e.g., 24)
+    sel_p = sel_all[sel_all["pending"]]          # Selected month ke NOT SOLVED (e.g., 8)
+    sel_solved = len(sel_all) - len(sel_p)       # Selected month ke SOLVED (e.g., 16)
 
-    # ---- Details ----
+    # ---- Details (View Full Details ke andar Month-wise summary + list) ----
     details = []
     mrows = []
     for ym, f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True):
@@ -5332,20 +5335,22 @@ def maint_breakdown_card(df, day):
     mrows.append(("TOTAL", f"{len(w)} breakdowns | {len(allp)} not solved"))
     details.append(("📊 Month-wise · Breakdowns | Not solved", mrows))
 
-    if not allp.empty:
+    if not sel_all.empty:
         mach = []
-        for name, f in allp.groupby("machine"):
-            mach.append((len(f), name, f["_date"].min(), int(f["ago"].max())))
-        mach.sort(key=lambda x: (-x[0], x[1]))
-        details.append((f"🔴 Not solved till date · Machine-wise ({len(allp)} issues)",
-                        [(n, f"{c} issues · oldest {d:%d-%b-%y} ({a} days)") for c, n, d, a in mach]))
-        for ym, f in sorted(allp.groupby("ym"), key=lambda x: x[0], reverse=True):
-            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Not solved ({len(f)})", [line(r) for _, r in f.iterrows()]))
+        for name, f in sel_all.groupby("machine"):
+            mach.append((len(f), int(f["pending"].sum()), name))
+        mach.sort(key=lambda x: (-x[0], -x[1], x[2]))
+        details.append((f"🏭 {day:%b-%y} · Machine-wise ({len(sel_all)} breakdowns)",
+                        [(n, f"{tot} total · {pen} pending") for tot, pen, n in mach]))
+
+    for ym, f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True):
+        details.append((f"📅 {datetime.date(ym[0], ym[1], 1):%b-%y} · All breakdowns ({len(f)})", [line(r) for _, r in f.iterrows()]))
+
     return {
-        "value": f"{len(sel_p)} Machines",
-        "desc": f"{day:%b-%y} Not solved ({len(sel_p)} of {len(sel_all)} breakdowns) · Overall pending: {len(allp)}",
+        "value": f"{len(sel_all)} Breakdowns",
+        "desc": f"{day:%b-%y} Total: {len(sel_all)} ({len(sel_p)} pending · {sel_solved} solved)",
         "color": RED if len(sel_p) else BLUE,
-        "sections": [(f"🔴 {day:%b-%y} · Machines under breakdown & reason ({len(sel_p)})", [line(r) for _, r in sel_p.iterrows()])] if len(sel_p) else [],
+        "sections": [(f"📅 {day:%b-%y} · Month Breakdowns ({len(sel_all)})", [line(r) for _, r in sel_all.iterrows()])] if len(sel_all) else [],
         "details": details,
     }
 
