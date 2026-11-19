@@ -2718,6 +2718,10 @@ def compute_kpi(df, spec, day):
     calc = spec.get("calc")
     if calc == "category_mix":
         return category_mix_card(day)
+    if calc == "maint_breakdown":
+        return maint_breakdown_card(df, day)
+    if calc == "maint_pm":
+        return maint_pm_card(df, day)
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
     if calc == "tonnage_daily":
         return tonnage_card(day)
@@ -4086,15 +4090,11 @@ KPI_SOURCES = {
     # <<< Maintenance  >>>
     ("maint", "Current Breakdown Machines"): {
         "sheet": "maintenance_logs",
-        "mode": "on_date",  # <-- Yahan "as_of" ki jagah "on_date" kar dein
-        "calc": "generic_count",
-        "col": "Issue Resolved",
-        "where": {"Issue Resolved": "FALSE"},
+        "calc": "maint_breakdown",
     },
     ("maint", "Preventive Maintenance %"): {
-        "sheet": "maintenance_logs",
-        "mode": "as_of",
-        "calc": "maintenance_pct",
+        "sheet": "pm_schedule",
+        "calc": "maint_pm",
     },
     # <<< ORDER MANAGEMENT DATA SOURCE >>>
     ("order", "Orders 0-7 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_0_7"},
@@ -4596,6 +4596,17 @@ def get_sheet(name):
             if data.lstrip()[:1] == b"<":
                 raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
             df = _frame_from_csv(data, header_hint="GRADE")
+            df["_date"] = datetime.datetime.now(IST).date()
+            good[name] = (df, datetime.datetime.now(IST))
+            errors.pop(name, None)
+            return df, None, datetime.datetime.now(IST)
+        if cfg.get("type") == "pm_sched":
+            u = cfg["url"]
+            csv_url = u if u.lower().split("?")[0].endswith(".csv") else f"{u.split('/pub')[0]}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
+            data = _http_get(csv_url)
+            if data.lstrip()[:1] == b"<":
+                raise PermissionError("Preventive sheet data nahi de rahi, check karein ki Publish to web on hai.")
+            df = pd.read_csv(io.BytesIO(data), header=None, dtype=str)
             df["_date"] = datetime.datetime.now(IST).date()
             good[name] = (df, datetime.datetime.now(IST))
             errors.pop(name, None)
@@ -5279,6 +5290,125 @@ def finance_recv_days_card(day):
         ] + warn)],
     }
 # ====================================================================
+# MAINTENANCE: CURRENT BREAKDOWN (month-wise, reason ke saath) + PREVENTIVE MAINTENANCE %
+# ====================================================================
+def _mcol(df, *keys):
+    """Column naam dhoondho (extra space / newline se farak nahi padta)."""
+    for c in df.columns:
+        n = re.sub(r"\s+", " ", str(c)).strip().upper()
+        if any(k in n for k in keys):
+            return c
+    return None
+
+
+def maint_breakdown_card(df, day):
+    c_m = _mcol(df, "MACHINE NAME")
+    c_i = _mcol(df, "ISSUE DESCRIPTION")
+    c_r = _mcol(df, "ISSUE RESOLVED")
+    if not (c_m and c_i and c_r):
+        return {"value": "Config error", "desc": f"Machine Name / Issue Description / Issue Resolved column nahi mila. Columns: {list(df.columns)}", "color": RED}
+
+    today = datetime.datetime.now(IST).date()
+    w = df[df["_date"].notna()].copy()
+    w["machine"] = w[c_m].astype(str).str.strip().replace({"nan": "", "None": ""})
+    w = w[w["machine"] != ""]
+    w["issue"] = w[c_i].astype(str).str.strip().replace({"nan": "", "None": ""})
+    w["pending"] = w[c_r].astype(str).str.strip().str.upper() != "TRUE"      # Issue Resolved TICK nahi = abhi kharab
+    w["ym"] = w["_date"].map(lambda x: (x.year, x.month))
+    w["ago"] = w["_date"].map(lambda x: (today - x).days)
+    w = w.sort_values("_date")
+
+    def line(r):
+        return (f"⚙ {r['machine']}", f"❌ {r['issue'] or 'Reason nahi likha'} · {r['_date']:%d-%b} se ({r['ago']} din)")
+
+    sel = (day.year, day.month)
+    sel_p = w[(w["ym"] == sel) & w["pending"]]
+    sel_all = w[w["ym"] == sel]
+
+    # ---- Details ----
+    details = []
+    mrows = []
+    for ym, f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True):
+        mrows.append((f"{datetime.date(ym[0], ym[1], 1):%b-%y}", f"{len(f)} breakdowns | {int(f['pending'].sum())} abhi kharab"))
+    mrows.append(("TOTAL", f"{len(w)} breakdowns | {int(w['pending'].sum())} abhi tak kharab"))
+    details.append(("📊 Month-wise · Breakdown | Abhi kharab", mrows))
+
+    allp = w[w["pending"]]
+    if not allp.empty:
+        mach = []
+        for name, f in allp.groupby("machine"):
+            mach.append((len(f), name, f["_date"].min(), int(f["ago"].max())))
+        mach.sort(key=lambda x: (-x[0], x[1]))
+        details.append((f"🔴 Abhi tak kharab · Machine-wise ({len(allp)} issues)",
+                        [(n, f"{c} issue · sabse purana {d:%d-%b-%y} ({a} din)") for c, n, d, a in mach]))
+        for ym, f in sorted(allp.groupby("ym"), key=lambda x: x[0], reverse=True):
+            details.append((f"🔴 {datetime.date(ym[0], ym[1], 1):%b-%y} · Kharab ({len(f)})", [line(r) for _, r in f.iterrows()]))
+
+    return {
+        "value": f"{len(sel_p)} Machines",
+        "desc": f"Kharab / repair pending · {day:%b-%y} (total {len(sel_all)} breakdowns)",
+        "color": RED if len(sel_p) else BLUE,
+        "sections": [(f"🔴 {day:%b-%y} · Kharab machines & reason", [line(r) for _, r in sel_p.iterrows()])] if len(sel_p) else [],
+        "details": details,
+    }
+
+
+_PM_MONTHS = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER",
+              "OCTOBER", "NOVEMBER", "DECEMBER"]
+
+
+def _pm_parse(df):
+    """Preventive sheet (raw, header nahi) -> rows: month(1-12), section, machine, done(bool).
+    Machine row = col A mein month ka naam + col B mein machine naam; day columns (1..30) mein TRUE = PM ho gaya."""
+    out, section = [], ""
+    for _, r in df.iterrows():
+        a = str(r.iloc[0]).strip().upper() if pd.notna(r.iloc[0]) else ""
+        b = str(r.iloc[1]).strip() if pd.notna(r.iloc[1]) else ""
+        if a in _PM_MONTHS:
+            if b:
+                days = [str(x).strip().upper() for x in r.iloc[2:32]]
+                out.append({"m": _PM_MONTHS.index(a) + 1, "section": section, "machine": b, "done": "TRUE" in days})
+        elif a and not b and (len(r) < 3 or pd.isna(r.iloc[2])):
+            section = a.title()                     # "CURING SECTION" jaise section heading
+    return pd.DataFrame(out, columns=["m", "section", "machine", "done"])
+
+
+def _pm_month_dates(df):
+    today = datetime.datetime.now(IST).date()
+    p = _pm_parse(df)
+    return sorted({_bal_month_date(int(m), today) for m in p["m"].unique()}, reverse=True)
+
+
+def maint_pm_card(df, day):
+    p = _pm_parse(df)
+    cur = p[p["m"] == day.month]
+    if cur.empty:
+        return {"value": "No Data", "desc": f"{day:%b-%y} ka preventive schedule sheet mein nahi hai", "color": GREY}
+    total, done = len(cur), int(cur["done"].sum())
+    pct = done / total * 100
+    pend = cur[~cur["done"]]
+
+    def mname(m):
+        return datetime.date(2000, int(m), 1).strftime("%b")
+
+    mrows = []
+    for m in sorted(p["m"].unique(), key=lambda m: (m < 4, m), reverse=True):    # saal April se shuru
+        f = p[p["m"] == m]
+        mrows.append((mname(m), f"{f['done'].mean() * 100:.1f}%  ({int(f['done'].sum())}/{len(f)} machines)"))
+
+    sec_done = [(s or "-", f"{int(f['done'].sum())}/{len(f)} machines ho gayi") for s, f in cur.groupby("section", sort=False)]
+    return {
+        "value": f"{pct:.1f} %",
+        "desc": f"{done} / {total} machines ka PM ho gaya · {day:%b-%y}",
+        "color": BLUE if pct >= 90 else (AMBER if pct >= 70 else RED),
+        "sections": [(f"⏳ PM baaki ({len(pend)} machines)", [(r["machine"].title(), r["section"]) for _, r in pend.iterrows()])] if len(pend) else [],
+        "details": [
+            ("📊 Month-wise PM %", mrows),
+            (f"🏭 {day:%b-%y} · Section-wise (PM done)", sec_done),
+            (f"✅ {day:%b-%y} · PM ho chuki machines ({done})", [(r["machine"].title(), r["section"]) for _, r in cur[cur["done"]].iterrows()]),
+        ],
+    }
+# ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
 #   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
 #   Due % = Total Due Amt (us month ka) / Total O/S (us month ka) * 100
@@ -5586,6 +5716,8 @@ def render_kpi(dept_key, idx, title, desc):
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
             if spec.get("calc") == "finance_drs_crs_month":
                 dates = _drs_crs_bal_month_dates(df)
+            if spec.get("calc") == "maint_pm":
+                dates = _pm_month_dates(df)
             if spec.get("calc") == "finance_recv_days":
                 dates = _recv_days_month_dates(df)
             if spec.get("calc") == "finance_total_due_month":
