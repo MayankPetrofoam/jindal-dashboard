@@ -1259,6 +1259,8 @@ def _fetch_yield_cached(url, sheet_name):
     # Yahan BUNDLES ko pehle dhoondhega, phir BUNDLE_NO
     bdl_col = pick("BUNDLES", "BUNDLE_NO", "BUNDLE", "BDL")
     sheet_col = pick("SHEET", "SHEET")
+    mtr_col = pick("MTRS.", "MTRS", "MTR")
+    gname_col = pick("GRADE", "GRADE")
     
     if not all([date_col, item_col, kg_col, bdl_col]):
         raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS / BUNDLES). Mile hue: {list(raw.columns)}")
@@ -1279,6 +1281,8 @@ def _fetch_yield_cached(url, sheet_name):
         "kg": _num(raw[kg_col].astype(str).str.replace(',', '', regex=False)).fillna(0.0),
         "sheet": _num(raw[sheet_col]).fillna(0.0) if sheet_col else 0.0,
         "BUNDLES": raw[bdl_col].astype(str).str.strip().replace({"nan": "", "None": ""}) if bdl_col else "",
+        "mtr": _num(raw[mtr_col]).fillna(0.0) if mtr_col else 0.0,
+        "gname": raw[gname_col].astype(str).str.strip().str.upper().replace({"NAN": "", "NONE": ""}) if gname_col else "",
     })
     df["grade"] = 1
     df.loc[df["item"].isin(SECOND_GRADE_ITEMS), "grade"] = 2
@@ -1731,6 +1735,103 @@ def _note_month_card(sheet, tag, day):
         "value": f"{mon_total / 10000000:,.2f}",
         "desc": f"{tag} total {day:%b-%Y} ({rng}) · {_inr(mon_total)}",
         "color": BLUE,
+        "details": details,
+    }
+# ====================================================================
+# CATEGORY MIX (Prod. Summary se, month-wise, item-group + grade-wise)
+# ====================================================================
+CMIX_GROUPS = [
+    # (naam, item match karne wala function, dikhane wale fields)
+    ("Rollpack",           lambda i: i.startswith("FLO ") or "ROLLPACK" in i or "ROLL PACK" in i, ("bdl", "pcs", "kg")),
+    ("Mattress",           lambda i: "MATTRESS" in i,                                              ("bdl", "pcs", "kg")),
+    ("Pillow",             lambda i: "PILLOW" in i,                                                ("bdl", "pcs", "kg")),
+    ("Peeling Roll",       lambda i: "PEELING ROLL" in i,                                          ("bdl", "mtr", "kg")),
+    ("Quilting Roll",      lambda i: "QUILTING ROLL" in i,                                         ("bdl", "mtr", "kg")),
+    ("PU Foam Sheet",      lambda i: i == "PU FOAM SHEET",                                         ("bdl", "kg")),
+    ("A Grade + DC Grade", lambda i: i in ("A GRADE", "PU FOAM A GRADE") or "DC GRADE" in i,       ("bdl", "kg")),
+    ("PU 2nd / 3rd Grade", lambda i: "2ND GRADE" in i or "3RD GRADE" in i,                         ("bdl", "kg")),
+    ("Bonded",             lambda i: "BONDED" in i,                                                ("bdl", "pcs", "kg")),
+]
+CMIX_OTHER = ("Other (Sofa cum bed etc.)", ("bdl", "pcs", "kg"))
+
+
+def _cmix_group(item):
+    for name, fn, _f in CMIX_GROUPS:
+        if fn(item):
+            return name
+    return CMIX_OTHER[0]
+
+
+def _cmix_fields(name):
+    for n, _fn, f in CMIX_GROUPS:
+        if n == name:
+            return f
+    return CMIX_OTHER[1]
+
+
+def _cmix_agg(f):
+    return {
+        "bdl": int(f["BUNDLES"].astype(str).str.strip().ne("").sum()),
+        "pcs": float(f["sheet"].sum()),
+        "mtr": float(f["mtr"].sum()),
+        "kg": float(f["kg"].sum()),
+    }
+
+
+def _cmix_txt(a, fields):
+    parts = []
+    for f in fields:
+        if f == "bdl":
+            parts.append(f"{a['bdl']:,} {'Rolls' if 'mtr' in fields else 'Bdls'}")
+        elif f == "pcs":
+            parts.append(f"{a['pcs']:,.0f} Pcs")
+        elif f == "mtr":
+            parts.append(f"{a['mtr']:,.0f} Mtr")
+        else:
+            parts.append(f"{a['kg']:,.1f} Kg")
+    return " | ".join(parts)
+
+
+def category_mix_card(day):
+    """Category Mix: selected month ka production, item-group wise; View Details mein item + grade wise."""
+    y_df, err, _ = get_sheet("prod_summary")
+    if y_df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    m = y_df[y_df["ym"] == day.year * 100 + day.month].copy()
+    m = m[m["BUNDLES"].astype(str).str.strip() != ""]
+    if m.empty:
+        return None
+
+    m["grp"] = m["item"].map(_cmix_group)
+    tot = _cmix_agg(m)
+
+    order = [g[0] for g in CMIX_GROUPS] + [CMIX_OTHER[0]]
+    summary_rows, details = [], []
+    for name in order:
+        g = m[m["grp"] == name]
+        if g.empty:
+            continue
+        a = _cmix_agg(g)
+        fields = _cmix_fields(name)
+        summary_rows.append((name, _cmix_txt(a, fields)))
+
+        rows = []
+        for (item, gr), f in g.groupby(["item", "gname"]):
+            rows.append((f"{item.title()} · {gr or 'No Grade'}", _cmix_txt(_cmix_agg(f), fields)))
+        rows.append(("TOTAL", _cmix_txt(a, fields)))
+        details.append((f"📦 {name} · {_cmix_txt(a, fields)}", rows))
+
+    return {
+        "value": f"{tot['bdl']:,} Bdls",
+        "desc": f"Production category mix · {day:%b-%Y}",
+        "color": BLUE,
+        "metrics": [
+            (f"{tot['bdl']:,}", "Bundles"),
+            (f"{tot['pcs']:,.0f}", "Pcs"),
+            (f"{tot['kg']:,.1f}", "Kg"),
+        ],
+        "sections": [(f"🗓 Month {day:%b-%y} · Category wise", summary_rows)],
         "details": details,
     }
 
@@ -2525,6 +2626,8 @@ def stock_balance_card(df, day, issued_col, label):
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "category_mix":
+        return category_mix_card(day)
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
     if calc == "tonnage_daily":
         return tonnage_card(day)
@@ -3942,8 +4045,8 @@ KPI_SOURCES = {
         "calc": "sales_daily_mtd",
     },
     ("sales", "Category Mix"): {
-        "sheet": "sales_report",
-        "calc": "sales_category_mix",
+        "sheet": "prod_summary",
+        "calc": "category_mix",
     },
     ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
