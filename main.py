@@ -5346,11 +5346,11 @@ def maint_breakdown_card(df, day):
     for ym, f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True):
         details.append((f"📅 {datetime.date(ym[0], ym[1], 1):%b-%y} · All breakdowns ({len(f)})", [line(r) for _, r in f.iterrows()]))
 
-    return {
-        "value": f"{len(sel_all)} Breakdowns",
-        "desc": f"{day:%b-%y} Total: {len(sel_all)} ({len(sel_p)} pending · {sel_solved} solved)",
+return {
+        "value": f"{len(sel_p)} Machines",
+        "desc": f"{day:%b-%y} Not solved ({len(sel_p)} of {len(sel_all)} breakdowns) · Overall pending: {len(allp)}",
         "color": RED if len(sel_p) else BLUE,
-        "sections": [(f"📅 {day:%b-%y} · Month Breakdowns ({len(sel_all)})", [line(r) for _, r in sel_all.iterrows()])] if len(sel_all) else [],
+        "sections": [(f"🔴 {day:%b-%y} · Machines under breakdown & reason ({len(sel_p)})", [line(r) for _, r in sel_p.iterrows()])] if len(sel_p) else [],
         "details": details,
     }
 
