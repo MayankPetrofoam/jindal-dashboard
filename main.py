@@ -4016,6 +4016,11 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+    "pm_schedule": {
+        "type": "pm_sched",
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRsEykyS9wX0Pa4Tho2x3cIAlePZbzHKN9d2dLFfmvClYwCbxvT8XSDQrL7udC6vhpb02ex3Li36zrk/pubhtml",
+        "worksheet": "0",     # sheet ke URL mein jo gid=XXXX hai wo number
+    },
     "finance_ageing": {
         "type": "excel",
         "static": True,
