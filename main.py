@@ -4028,7 +4028,7 @@ SHEETS = {
         "sheet_name": "Ageing analysis",
         "date_col": "Month",
     },
-    "finance_drs_crs_m": {
+    "finance_drs_crs_new": {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/DRS%20%26%20CRS.xls",
