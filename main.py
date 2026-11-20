@@ -1485,7 +1485,7 @@ def finance_gt90_card(day):
     """Greater Than 90 / 180 Days Ageing: Is file mein Total Amount ka sum nikalta hai."""
     # Yahan aapko apni us Excel file ki config key daalni hogi jo aapne SHEETS mein define ki hai.
     # Agar aapne us file ka naam SHEETS mein "finance_gt90" rakha hai, toh yahan wahi likhein.
-    df, err, _ = get_sheet("finance_ageing_new")
+    df, err, _ = get_sheet("finance_gt90")
     
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
@@ -4009,7 +4009,7 @@ SHEETS = {
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Greater%20Than%2090-%20180%20Days.xls",
         "sheet_name": "90-180",      # <- tab ka exact naam (neeche dekho)
-        "date_col": "Month",
+        "date_col": "Party Name",
     },
 "finance_gt90": {
     "type": "excel",
