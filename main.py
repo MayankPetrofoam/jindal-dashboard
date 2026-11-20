@@ -6248,7 +6248,7 @@ def render_kpi(dept_key, idx, title, desc):
 
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
             
-            if not month_dates and spec.get("calc") == "lb_stock":
+            if not month_dates and (spec.get("calc") in ("lb_stock", "dead_stock", "inv_dead_stock") or spec.get("sheet") == "dead_stock_store"):
                 month_dates = [datetime.datetime.now(IST).date()]
                 
             if not month_dates:
