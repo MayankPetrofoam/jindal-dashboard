@@ -5552,6 +5552,18 @@ def _gtm_prepare(df):
 def _gtm_month_dates(df):
     # Naye sheet mein Month column nahi hai, sheet = current month ka data
     return [datetime.datetime.now(IST).date()]
+def _drs_total_sd():
+    """DRS = DRS CRS file mein Group SD ka Closing Balance sum."""
+    d, e, _ = get_sheet("finance_drs_crs_new")
+    if d is None:
+        return 0.0
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    g = next((c for c in d.columns if norm(c) == "GROUP"), None)
+    b = next((c for c in d.columns if norm(c) == "CLOSINGBALANCE"), None)
+    if not g or not b:
+        return 0.0
+    m = d[g].astype(str).str.strip().str.upper() == "SD"
+    return float(_num(d[b])[m].sum())
 
 
 def finance_gt90_month_card(day):
@@ -5611,13 +5623,15 @@ def finance_gt90_month_card(day):
         s = w[w["m"] == m]
         return float(s[c1_col].sum()), float(s[c2_col].sum()), float(s[c3_col].sum()), float(s[drs_col].sum())
 
-    c1, c2, c3, total_drs = tot(day.month)
+    c1, c2, c3, _unused = tot(day.month)
+    total_drs = _drs_total_sd()
     tot_gt = c1 + c2 + c3
     p1, p2, p3, p_tot = pct(c1, total_drs), pct(c2, total_drs), pct(c3, total_drs), pct(tot_gt, total_drs)
 
     rows_all = []
     for m in sorted(set(w["m"]), key=lambda m: _bal_month_date(m, today), reverse=True):
         x1, x2, x3, xdrs = tot(m)
+        xdrs = total_drs
         xtot = x1 + x2 + x3
         rows_all.append((
             f"{_bal_month_date(m, today):%b-%y}",
