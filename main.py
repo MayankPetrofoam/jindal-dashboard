@@ -2852,6 +2852,8 @@ def compute_kpi(df, spec, day):
         return dead_stock_store_card(day)
     if calc == "total_received_paid":
         return finance_recv_paid_card(day)
+    if calc == "finance_recv_pay_days":
+        return finance_recv_pay_days_card(day)
     if calc == "category_mix":
         return category_mix_card(day)
     if calc == "maint_breakdown":
@@ -4259,6 +4261,10 @@ KPI_SOURCES = {
     ("other", "Freight Report"): {
         "sheet": "freight_data",
         "calc": "freight_mtd",
+    },
+    ("finance", "Receivable / Payable Days"): {
+        "sheet": "finance_drs_crs_new",
+        "calc": "finance_recv_pay_days",
     },
 
     # <<< Maintenance  >>>
@@ -5872,6 +5878,78 @@ def finance_recv_paid_card(day):
              [(esc(k), _inr(v)) for k, v in p_cat.items()] + [("TOTAL PAID", _inr(paid))]),
             (f"💸 Paid · Party-wise ({len(p_by)} parties)",
              [(esc(k), _inr(v)) for k, v in p_by.items()] + [("TOTAL PAID", _inr(paid))]),
+        ],
+    }
+RP_FY_START = datetime.date(2026, 4, 1)
+
+
+def _rp_avg_month(df, amt_col, day):
+    """1 April se `day` tak total, kitne din ka data hai, aur avg per month = total / days x 30."""
+    w = df[df["_date"].notna() & (df["_date"] >= RP_FY_START) & (df["_date"] <= day)]
+    if w.empty:
+        return None
+    total = float(_num(w[amt_col]).fillna(0.0).sum())
+    start, end = w["_date"].min(), w["_date"].max()
+    days = (end - start).days + 1
+    return {"total": total, "start": start, "end": end, "days": days, "avg": total / days * 30}
+
+
+def finance_recv_pay_days_card(day):
+    d, e, _ = get_sheet("finance_drs_crs_new")
+    sdf, e2, _ = get_sheet("daily_sales_report")
+    pdf, e3, _ = get_sheet("purchase_excel")
+    for nm, fr, er in (("DRS/CRS", d, e), ("Sales", sdf, e2), ("Purchase", pdf, e3)):
+        if fr is None:
+            return {"value": "Error", "desc": f"{nm} data error: {er}", "color": RED}
+
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    g = next((c for c in d.columns if norm(c) == "GROUP"), None)
+    b = next((c for c in d.columns if norm(c) == "CLOSINGBALANCE"), None)
+    s_col = next((c for c in sdf.columns if "TOTAL SALE" in str(c).upper()), None)
+    p_col = next((c for c in pdf.columns if norm(c) == "BILLAMOUNT"), None)
+    if not (g and b):
+        return {"value": "Config error", "desc": f"DRS/CRS file mein Group / Closing Balance nahi mila. Columns: {list(d.columns)}", "color": RED}
+    if not s_col:
+        return {"value": "Config error", "desc": "Sales sheet mein TOTAL SALE AMOUNT column nahi mila", "color": RED}
+    if not p_col:
+        return {"value": "Config error", "desc": "Purchase sheet mein Bill Amount column nahi mila", "color": RED}
+
+    grp = d[g].astype(str).str.strip().str.upper()
+    bal = _num(d[b]).fillna(0.0)
+    drs, crs = float(bal[grp == "SD"].sum()), float(bal[grp == "SC"].sum())
+
+    sa = _rp_avg_month(sdf, s_col, day)
+    pa = _rp_avg_month(pdf, p_col, day)
+    if not sa or sa["avg"] <= 0:
+        return {"value": "No Data", "desc": "Sale data nahi mila", "color": GREY}
+    if not pa or pa["avg"] <= 0:
+        return {"value": "No Data", "desc": "Purchase data nahi mila", "color": GREY}
+
+    rd = drs * 30 / sa["avg"]
+    pdays = crs * 30 / pa["avg"]
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+
+    warn = ""
+    if sa["start"] > RP_FY_START:
+        warn = f" · ⚠ Sale data {sa['start']:%d-%b} se hi hai (April se nahi)"
+
+    def block(title, net, a, label):
+        return (title, [
+            (f"Net {label} (closing balance)", _inr(net)),
+            (f"{label[:4]} period", f"{a['start']:%d-%m-%Y} to {a['end']:%d-%m-%Y} ({a['days']} din)"),
+            ("Total", _inr(a["total"])),
+            ("Avg per month (Total ÷ din × 30)", _inr(a["avg"])),
+        ])
+
+    return {
+        "value": f"Recv {rd:,.1f} d | Pay {pdays:,.1f} d",
+        "desc": f"Till {max(sa['end'], pa['end']):%d-%b-%Y}{warn}",
+        "color": BLUE if sa["start"] <= RP_FY_START else AMBER,
+        "metrics": [(f"{rd:,.1f}", "Receivable Days", "yield"), (f"{pdays:,.1f}", "Payable Days")],
+        "sections": [("📌 Net outstanding", [("Net DRS (Debtors)", cr(drs)), ("Net CRS (Creditors)", cr(crs))])],
+        "details": [
+            block("📥 Receivable Days = Net DRS × 30 ÷ Avg Sale per month", drs, sa, "DRS"),
+            block("📤 Payable Days = Net CRS × 30 ÷ Avg Purchase per month", crs, pa, "CRS"),
         ],
     }
 
