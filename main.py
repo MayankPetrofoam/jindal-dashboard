@@ -3837,11 +3837,13 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
-    "dead_stock_store": {
-        "type": "pm_sched",
-        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPNIfe4wJlXo4NDQ25eMmQgreu3CEioxI6sBfTCgsJQqPUGtBvYHQf24yCq-gTAGf4KN3qTNEXkxpy/pubhtml",
-        "worksheet": "0",     # <- "DEAD STOCK Monthly" tab ka gid (sheet address mein #gid=XXXX wala number)
-    },
+"inv_dead_stock": {
+    "type": "gsheet",
+    "static": True,
+    "url": "AAPKI_GOOGLE_SHEET_KA_URL",
+    "sheet_name": "Monthly",       # Google Sheet ke tab ka exact naam
+    "date_col": "MATERIAL",        # Kyunki sheet mein date column nahi hai, header 'MATERIAL' se pakdega
+},
     "serviceability_live": {
         "type": "serviceability",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRvqJtmKH0joq5-PXPaoxw1_x7mCTjCOK1RjnpU9ssGA4c5Xfp0sUhek56whkI2XNAxgXonXPqC75tF/pubhtml",
@@ -3968,7 +3970,7 @@ SHEETS = {
     "received_new": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xls",
         "sheet_name": "Sheet1",      # <- tab ka exact naam
     },
     "paid_data": {
@@ -5927,6 +5929,119 @@ def finance_gt90_month_card(day):
             (f"👥 Party-wise · {c3_col} · {day:%b-%y} ({len(r_c3)} parties)",
              r_c3 + [("TOTAL", f"{_inr(c3)} ({p3:.2f}%)")] if r_c3 else [("Koi party nahi", "✅")]),
         ],
+    }
+def inv_dead_stock_card(day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    fmt_n = lambda x: f"{int(x):,}" if float(x).is_integer() else f"{x:,.2f}"
+
+    df, err, _ = get_sheet("inv_dead_stock")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    w = df.copy()
+    # Column headers se newline (\n) aur extra space hatayein
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+
+    mat_col = next((c for c in w.columns if c.upper() == "MATERIAL"), None)
+    cat_col = next((c for c in w.columns if c.upper() == "CATEGORY"), None)
+    uom_col = next((c for c in w.columns if c.upper() == "UOM"), None)
+
+    if not mat_col or not uom_col:
+        return {"value": "Config error", "desc": f"Columns not found: {list(w.columns)}", "color": RED}
+
+    # Sabse aakhiri date column (jaise '18.10.26') automatically pick karein
+    ignore = {mat_col, cat_col, uom_col}
+    val_candidates = [c for c in w.columns if c not in ignore and "SR" not in c.upper()]
+    qty_col = val_candidates[-1] if val_candidates else None
+    if not qty_col:
+        return {"value": "Config error", "desc": "Stock balance column nahi mila", "color": RED}
+
+    records = []
+    sub_cat = None
+
+    for _, row in w.iterrows():
+        mat = str(row.get(mat_col, "")).strip()
+        cat = str(row.get(cat_col, "")).strip() if cat_col else ""
+        uom = str(row.get(uom_col, "")).strip().upper()
+        val_raw = str(row.get(qty_col, "")).strip()
+
+        if not mat or mat.lower() == "nan":
+            continue
+
+        # Niche wali sub-tables ('OLD MATTRESS COVER' / 'OLD INNNER COVER') ko handle karein
+        if mat.upper() in ("OLD MATTRESS COVER", "OLD INNNER COVER", "OLD INNER COVER"):
+            sub_cat = mat.title()
+            continue
+
+        if sub_cat:
+            bdl_val = pd.to_numeric(uom, errors="coerce")
+            pcs_val = pd.to_numeric(val_raw, errors="coerce")
+            if pd.notna(bdl_val) and bdl_val > 0:
+                records.append({"category": sub_cat, "material": mat, "uom": "BDL", "qty": float(bdl_val)})
+            if pd.notna(pcs_val) and pcs_val > 0:
+                records.append({"category": sub_cat, "material": mat, "uom": "PCS", "qty": float(pcs_val)})
+        else:
+            qty = pd.to_numeric(val_raw.replace(",", ""), errors="coerce")
+            if pd.notna(qty) and qty > 0 and uom and uom != "NAN":
+                cat_name = cat if (cat and cat.lower() != "nan") else "General / Other"
+                records.append({"category": cat_name, "material": mat, "uom": uom, "qty": float(qty)})
+
+    if not records:
+        return {"value": "0 Items", "desc": "Koi dead stock nahi", "color": BLUE}
+
+    res = pd.DataFrame(records)
+
+    # UOM ke full labels
+    uom_labels = {
+        "BDL": "Total Bundles",
+        "PCS": "Total Pcs",
+        "NO.": "Total No.",
+        "ROLL": "Total Roll",
+        "BOX": "Total Box",
+    }
+    uom_order = ["BDL", "PCS", "NO.", "ROLL", "BOX"]
+    uom_sums = res.groupby("uom")["qty"].sum().to_dict()
+    all_uoms = [u for u in uom_order if u in uom_sums] + [u for u in sorted(uom_sums) if u not in uom_order]
+
+    # Upar card par dikhane ke liye summary text aur tiles
+    summary_parts = [f"{uom_labels.get(u, u)}: {fmt_n(uom_sums[u])}" for u in all_uoms]
+    tiles = [(fmt_n(uom_sums[u]), uom_labels.get(u, u)) for u in all_uoms]
+
+    # Sections: UOM-wise Grand Total
+    sec_rows = [(f"{uom_labels.get(u, u)} ({u})", fmt_n(uom_sums[u])) for u in all_uoms]
+
+    # View Full Details:
+    # 1) Category-wise Total (har category mein kitne BDL, PCS, NO., ROLL, BOX hain)
+    cat_summary_rows = []
+    for cat_name, grp in res.groupby("category", sort=True):
+        c_uoms = grp.groupby("uom")["qty"].sum().to_dict()
+        parts = [f"{u}: {fmt_n(c_uoms[u])}" for u in all_uoms if u in c_uoms]
+        cat_summary_rows.append((esc(cat_name), " | ".join(parts)))
+
+    details_list = [
+        (f"📊 Category-wise Total Summary ({len(cat_summary_rows)} categories)", cat_summary_rows)
+    ]
+
+    # 2) Har Category ke niche uske saare Materials + unke UOM totals (jaise Corner ke niche saare Corner materials)
+    for cat_name, grp in res.groupby("category", sort=True):
+        c_uoms = grp.groupby("uom")["qty"].sum().to_dict()
+        cat_tot_str = " | ".join([f"{u}: {fmt_n(c_uoms[u])}" for u in all_uoms if u in c_uoms])
+
+        mat_rows = []
+        for _, r in grp.iterrows():
+            mat_rows.append((esc(r["material"]), f"{fmt_n(r['qty'])} {r['uom']}"))
+        mat_rows.append((f"TOTAL ({esc(cat_name)})", cat_tot_str))
+
+        details_list.append((f"📦 {cat_name} ({cat_tot_str})", mat_rows))
+
+    return {
+        "value": f"BDL: {fmt_n(uom_sums.get('BDL', 0))} | PCS: {fmt_n(uom_sums.get('PCS', 0))}",
+        "desc": f"As on {qty_col} · " + " · ".join(summary_parts),
+        "color": BLUE,
+        "metrics": tiles,
+        "sections": [(f"📌 Total Stock by UOM ({qty_col})", sec_rows)],
+        "details": details_list,
     }
 
 
