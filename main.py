@@ -2807,6 +2807,8 @@ def compute_kpi(df, spec, day):
     calc = spec.get("calc")
     if calc == "dead_stock_store":
         return dead_stock_store_card(day)
+    if calc == "total_received_paid":
+        return finance_recv_paid_card(day)
     if calc == "category_mix":
         return category_mix_card(day)
     if calc == "maint_breakdown":
@@ -3963,20 +3965,18 @@ SHEETS = {
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd.xlsx", "C-Shed Mtrs+Rolls+Prod"),
         ),
     },
-"finance_received_xls": {
-    "type": "excel",
-    "static": True,
-    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Recieved.xls",
-    "sheet_name": "Recieved ",   # Tab ke naam ke aakhir mein space hai
-    "date_col": "PARTY NAME",
-},
-"finance_paid_xls": {
-    "type": "excel",
-    "static": True,
-    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xls",
-    "sheet_name": "paid",
-    "date_col": "Party Name ",
-},
+    "received_new": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xlsx",
+        "sheet_name": "Sheet1",      # <- tab ka exact naam
+    },
+    "paid_data": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xls",
+        "sheet_name": "paid",
+    },
 
     "maintenance_logs": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrPocQhFp-3kIL0QhVYFzIrkD5Wd5QmoShNK3i08MZSx4Wu59y25d0uo687C71guf3vc5FdNcM56_H/pubhtml",
@@ -4175,10 +4175,10 @@ KPI_SOURCES = {
     "sheet": "received_data",
     "calc": "total_received_paid",
 },
-("finance", "Receivable / Payable Days"): {
-    "sheet": "finance_drs_crs_m",
-    "calc": "finance_recv_days",
-},
+    ("finance", "Total Amt Received / Paid"): {
+        "sheet": "received_new",         # <- pehle received_data tha
+        "calc": "total_received_paid",
+    },
 
     ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
     ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "dead_stock_store", "calc": "dead_stock_store"},
@@ -5751,6 +5751,68 @@ def _drs_total_sd():
         return 0.0
     m = d[g].astype(str).str.strip().str.upper() == "SD"
     return float(_num(d[b])[m].sum())
+RECEIVED_UNIT = 100000      # Received file ke amount LAKH mein hain. Agar file rupees mein ho to 1 kar do.
+
+
+def finance_recv_paid_card(day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    rdf, e1, _ = get_sheet("received_new")
+    pdf, e2, _ = get_sheet("paid_data")
+    if rdf is None:
+        return {"value": "Error", "desc": f"Received data error: {e1}", "color": RED}
+    if pdf is None:
+        return {"value": "Error", "desc": f"Paid data error: {e2}", "color": RED}
+
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    pick = lambda d, key: next((c for c in d.columns if not str(c).startswith("_") and norm(c) == key), None)
+    r_p, r_a = pick(rdf, "PARTYNAME"), pick(rdf, "RECEIVED")
+    p_c, p_p, p_a = pick(pdf, "PAYMENTCATEGORY"), pick(pdf, "PARTYNAME"), pick(pdf, "AMOUNT")
+    if not (r_p and r_a):
+        return {"value": "Config error", "desc": f"Received file mein PARTY NAME / RECEIVED nahi mila. Columns: {list(rdf.columns)}", "color": RED}
+    if not (p_c and p_p and p_a):
+        return {"value": "Config error", "desc": f"Paid file mein Payment Category / Party Name / Amount nahi mila. Columns: {list(pdf.columns)}", "color": RED}
+
+    # ---- RECEIVED: party-wise (8 blocks ek party ke jod diye jate hain) ----
+    r = pd.DataFrame({"party": rdf[r_p].astype(str).str.strip(),
+                      "amt": _num(rdf[r_a]).fillna(0.0) * RECEIVED_UNIT})
+    r = r[(r["party"] != "") & (r["party"].str.lower() != "nan")]
+    r_by = r.groupby("party")["amt"].sum().sort_values(ascending=False)
+    r_by = r_by[r_by > 0]
+    rec = float(r_by.sum())
+
+    # ---- PAID: category-wise aur party-wise ----
+    p = pd.DataFrame({"cat": pdf[p_c].astype(str).str.strip(),
+                      "party": pdf[p_p].astype(str).str.strip(),
+                      "amt": _num(pdf[p_a]).fillna(0.0)})
+    p = p[(p["party"] != "") & (p["party"].str.lower() != "nan")]
+    p["cat"] = p["cat"].replace({"": "Uncategorised", "nan": "Uncategorised"})
+    paid = float(p["amt"].sum())
+    p_cat = p.groupby("cat")["amt"].sum().sort_values(ascending=False)
+    p_by = p.groupby("party")["amt"].sum().sort_values(ascending=False)
+
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    net = rec - paid
+
+    return {
+        "value": f"Recd {cr(rec)} | Paid {cr(paid)}",
+        "desc": f"1 Apr 2026 to {day:%d-%b-%Y} (till date)",
+        "color": BLUE,
+        "metrics": [(cr(rec), "Total Received"), (cr(paid), "Total Paid")],
+        "sections": [("📌 Exact amount", [
+            ("Total Received", _inr(rec)),
+            ("Total Paid", _inr(paid)),
+            ("Net (Received - Paid)", _inr(net)),
+        ])],
+        "details": [
+            (f"💰 Received · Party-wise ({len(r_by)} parties)",
+             [(esc(k), _inr(v)) for k, v in r_by.items()] + [("TOTAL RECEIVED", _inr(rec))]),
+            (f"📂 Paid · Category-wise ({len(p_cat)} categories)",
+             [(esc(k), _inr(v)) for k, v in p_cat.items()] + [("TOTAL PAID", _inr(paid))]),
+            (f"💸 Paid · Party-wise ({len(p_by)} parties)",
+             [(esc(k), _inr(v)) for k, v in p_by.items()] + [("TOTAL PAID", _inr(paid))]),
+        ],
+    }
 
 
 def finance_gt90_month_card(day):
