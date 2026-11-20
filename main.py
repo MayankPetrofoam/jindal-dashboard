@@ -3837,12 +3837,12 @@ SHEETS = {
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
     },
-"inv_dead_stock": {
+"dead_stock_store": {
     "type": "gsheet",
     "static": True,
     "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPNIfe4wJlXo4NDQ25eMmQgreu3CEioxI6sBfTCgsJQqPUGtBvYHQf24yCq-gTAGf4KN3qTNEXkxpy/pubhtml",
-    "sheet_name": "Monthly",       # Google Sheet ke tab ka exact naam
-    "date_col": "MATERIAL",        # Kyunki sheet mein date column nahi hai, header 'MATERIAL' se pakdega
+    "sheet_name": "Monthly",
+    "date_col": "MATERIAL",
 },
     "serviceability_live": {
         "type": "serviceability",
@@ -5935,7 +5935,7 @@ def inv_dead_stock_card(day):
     esc = lambda x: _html.escape(str(x))
     fmt_n = lambda x: f"{int(x):,}" if float(x).is_integer() else f"{x:,.2f}"
 
-    df, err, _ = get_sheet("inv_dead_stock")
+df, err, _ = get_sheet("dead_stock_store")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
