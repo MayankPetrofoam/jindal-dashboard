@@ -6044,6 +6044,113 @@ def inv_dead_stock_card(day):
         "sections": [(f"📌 Total Stock by UOM ({qty_col})", sec_rows)],
         "details": details_list,
     }
+def prod_category_mix_card(day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    fmt_i = lambda x: f"{int(round(float(x))):,}"
+    fmt_k = lambda x: f"{float(x):,.1f}"
+    fmt_amt = lambda x: f"₹{float(x):,.2f}"
+
+    # Apni CATEGORY MIX wali sheet key yahan rakhein (jaise "category_mix" ya jo aapke SHEETS mein hai)
+    df, err, _ = get_sheet("category_mix")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+
+    w = df.copy()
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+
+    # Agar sheet mein date column hai toh selected month/date filter lagayein, warna poori sheet lein
+    if "_date" in w.columns and w["_date"].notna().any():
+        m_df = w[pd.to_datetime(w["_date"]).dt.to_period("M") == pd.Period(day, freq="M")]
+        if not m_df.empty:
+            w = m_df
+
+    def _find_col(names):
+        for n in names:
+            for c in w.columns:
+                if c.lower() == n.lower():
+                    return c
+        return None
+
+    item_col = _find_col(["ITEM", "Item", "Category", "Product"])
+    grade_col = _find_col(["Grade", "GRADE", "Quality", "Sub Category"])
+    bdl_col = _find_col(["Bundle", "Bundles", "BDL", "Rolls", "Roll"])
+    pcs_col = _find_col(["Pcs", "PCS", "Pieces", "Qty"])
+    kgs_col = _find_col(["Kgs", "Kg", "KG", "Weight"])
+    amt_col = _find_col(["Amt", "Amount", "Value", "Total Amt", "Net Amt"])
+
+    if not item_col:
+        return {"value": "Config error", "desc": f"ITEM column nahi mila: {list(w.columns)}", "color": RED}
+
+    for col in [bdl_col, pcs_col, kgs_col, amt_col]:
+        if col:
+            w[col] = pd.to_numeric(w[col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
+        else:
+            w[col] = 0.0
+
+    # Blank ITEM rows ko skip mat karo — unhe "UNSPECIFIED" category mein rakho taaki ek bhi row na chute
+    w["_item"] = w[item_col].fillna("").astype(str).str.strip()
+    w.loc[w["_item"].isin(["", "nan", "None", "NaN"]), "_item"] = "UNSPECIFIED"
+
+    w["_grade"] = w[grade_col].fillna("").astype(str).str.strip() if grade_col else "-"
+    w.loc[w["_grade"].isin(["", "nan", "None", "NaN"]), "_grade"] = "-"
+
+    # Sirf completely zero rows hatayein (jahan Bdl, Pcs, Kgs, Amt chaaron 0 hon)
+    w = w[(w[bdl_col] != 0) | (w[pcs_col] != 0) | (w[kgs_col] != 0) | (w[amt_col] != 0)].copy()
+
+    if w.empty:
+        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+
+    tot_bdl = w[bdl_col].sum()
+    tot_pcs = w[pcs_col].sum()
+    tot_kgs = w[kgs_col].sum()
+    tot_amt = w[amt_col].sum()
+
+    # Har ek ITEM category ka summary (ek bhi skip nahi hoga)
+    cat_rows = []
+    details_list = []
+
+    # Sheet mein jis order mein items aaye hain usi order mein (ya alphabetical) dikhayein
+    item_order = list(dict.fromkeys(w["_item"].tolist()))
+
+    for item_name in item_order:
+        grp = w[w["_item"] == item_name]
+        c_bdl = grp[bdl_col].sum()
+        c_pcs = grp[pcs_col].sum()
+        c_kgs = grp[kgs_col].sum()
+        c_amt = grp[amt_col].sum()
+
+        summary_line = f"{fmt_i(c_bdl)} Bdls | {fmt_i(c_pcs)} Pcs | {fmt_k(c_kgs)} Kg | {fmt_amt(c_amt)}"
+        cat_rows.append((esc(item_name), summary_line))
+
+        # View Full Details: Har ITEM ke niche uske saare Grades + Totals
+        grade_rows = []
+        for _, r in grp.iterrows():
+            g_str = f"{fmt_i(r[bdl_col])} Bdls | {fmt_i(r[pcs_col])} Pcs | {fmt_k(r[kgs_col])} Kg | {fmt_amt(r[amt_col])}"
+            grade_rows.append((esc(r["_grade"]), g_str))
+
+        grade_rows.append((f"TOTAL ({esc(item_name)})", summary_line))
+        details_list.append((f"📦 {item_name} ({summary_line})", grade_rows))
+
+    # Sabse niche Grand Total row
+    grand_line = f"{fmt_i(tot_bdl)} Bdls | {fmt_i(tot_pcs)} Pcs | {fmt_k(tot_kgs)} Kg | {fmt_amt(tot_amt)}"
+    cat_rows.append(("TOTAL (sab items)", grand_line))
+
+    return {
+        "value": fmt_amt(tot_amt),
+        "desc": f"Production category mix · {day:%b-%Y} ({len(item_order)} categories)",
+        "color": BLUE,
+        "metrics": [
+            (fmt_i(tot_bdl), "BUNDLES"),
+            (fmt_i(tot_pcs), "PCS"),
+            (fmt_k(tot_kgs), "KG"),
+            (fmt_amt(tot_amt), "TOTAL AMT"),
+        ],
+        "sections": [
+            (f"📅 {day:%b-%y} · Category wise ({len(item_order)} Categories)", cat_rows)
+        ],
+        "details": details_list,
+    }
 
 
 # ====================================================================
