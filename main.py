@@ -1485,7 +1485,7 @@ def finance_gt90_card(day):
     """Greater Than 90 / 180 Days Ageing: Is file mein Total Amount ka sum nikalta hai."""
     # Yahan aapko apni us Excel file ki config key daalni hogi jo aapne SHEETS mein define ki hai.
     # Agar aapne us file ka naam SHEETS mein "finance_gt90" rakha hai, toh yahan wahi likhein.
-    df, err, _ = get_sheet("finance_gt90") 
+    df, err, _ = get_sheet("finance_ageing_new")
     
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
