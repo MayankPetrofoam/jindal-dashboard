@@ -3840,7 +3840,7 @@ SHEETS = {
 "inv_dead_stock": {
     "type": "gsheet",
     "static": True,
-    "url": "AAPKI_GOOGLE_SHEET_KA_URL",
+    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPNIfe4wJlXo4NDQ25eMmQgreu3CEioxI6sBfTCgsJQqPUGtBvYHQf24yCq-gTAGf4KN3qTNEXkxpy/pubhtml",
     "sheet_name": "Monthly",       # Google Sheet ke tab ka exact naam
     "date_col": "MATERIAL",        # Kyunki sheet mein date column nahi hai, header 'MATERIAL' se pakdega
 },
