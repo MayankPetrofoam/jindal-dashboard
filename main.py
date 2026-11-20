@@ -1858,6 +1858,105 @@ def _cmix_total(frame):
     a = _cmix_agg(frame)
     a["pcs"] = float(frame.loc[grp.isin(pcs_groups), "sheet"].sum())
     return a
+# Pcs wali categories (Category Mix 1). Baaki sab Kgs wali (Category Mix 2).
+def _cm_group(item):
+    u = re.sub(r"\s+", " ", str(item)).strip().upper()
+    if u == "PILLOW":
+        return "Pillow"
+    if u.startswith("MATTRESS") and u != "MATTRESS COVER":
+        return "Mattress"
+    if u == "SOFA CUM BED":
+        return "Sofa Cum Bed"
+    if u == "BONDED SHEET":
+        return "Bonded Sheet"
+    return None
+
+
+def _cm_load():
+    df, err, _ = get_sheet("cate_1")
+    if df is None:
+        return None, err
+    w = df.copy()
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+    low = {c.lower(): c for c in w.columns}
+    pick = lambda *n: next((low[x.lower()] for x in n if x.lower() in low), None)
+    item, grade = pick("ITEM", "Category"), pick("Grade")
+    pcs, kgs, amt = pick("Pcs", "Pieces"), pick("Kgs", "Kg"), pick("Amt", "Amount", "Value")
+    if not (item and pcs and kgs and amt):
+        return None, f"Columns nahi mile: {list(w.columns)}"
+    for c in (pcs, kgs, amt):
+        w[c] = pd.to_numeric(w[c].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
+    w["_item"] = w[item].fillna("").astype(str).str.strip()
+    w.loc[w["_item"].isin(["", "nan", "None", "NaN", "#N/A"]), "_item"] = "UNSPECIFIED"
+    w["_grade"] = w[grade].fillna("").astype(str).str.strip() if grade else "-"
+    w.loc[w["_grade"].isin(["", "nan", "None", "NaN"]), "_grade"] = "-"
+    w["_grp"] = w["_item"].map(_cm_group)
+    w = w[(w[pcs] != 0) | (w[kgs] != 0) | (w[amt] != 0)].copy()
+    return (w, pcs, kgs, amt), None
+
+
+def _cm_amt(x):
+    v = float(x)
+    if abs(v) >= 1e7: return f"₹{v/1e7:,.2f} Cr"
+    if abs(v) >= 1e5: return f"₹{v/1e5:,.2f} L"
+    return f"₹{v:,.2f}"
+
+
+def category_mix_pcs_card(day):
+    r, err = _cm_load()
+    if r is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, pcs, kgs, amt = r
+    w = w[w["_grp"].notna()]
+    if w.empty:
+        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+    sections, details = [], []
+    for g in ["Pillow", "Mattress", "Sofa Cum Bed", "Bonded Sheet"]:
+        x = w[w["_grp"] == g]
+        if x.empty:
+            continue
+        sections.append((g.upper(), [("Pcs", f"{x[pcs].sum():,.0f}"), ("Amount", _cm_amt(x[amt].sum()))]))
+        rows = []
+        for _, rr in x.sort_values(amt, ascending=False).iterrows():
+            nm = rr["_grade"] if rr["_item"].upper() == g.upper() else f"{rr['_grade']} ({rr['_item'].title()})"
+            rows.append((nm, f"{rr[pcs]:,.0f} Pcs | {_cm_amt(rr[amt])}"))
+        rows.append(("TOTAL", f"{x[pcs].sum():,.0f} Pcs | {_cm_amt(x[amt].sum())}"))
+        details.append((f"📦 {g} · Grade-wise", rows))
+    return {
+        "value": _cm_amt(w[amt].sum()),
+        "desc": f"Pcs wali categories · Total {w[pcs].sum():,.0f} Pcs · {_cm_amt(w[amt].sum())}",
+        "color": BLUE,
+        "metrics": [(f"{w[pcs].sum():,.0f}", "Total Pcs"), (_cm_amt(w[amt].sum()), "Total Amt")],
+        "sections": sections,
+        "details": details,
+    }
+
+
+def category_mix_kgs_card(day):
+    r, err = _cm_load()
+    if r is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, pcs, kgs, amt = r
+    w = w[w["_grp"].isna()]
+    if w.empty:
+        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+    items = w.groupby("_item")[[kgs, amt]].sum().sort_values(amt, ascending=False)
+    summary = [(i, f"{v[kgs]:,.1f} Kg | {_cm_amt(v[amt])}") for i, v in items.iterrows()]
+    summary.append(("TOTAL", f"{w[kgs].sum():,.1f} Kg | {_cm_amt(w[amt].sum())}"))
+    details = []
+    for i in items.index:
+        x = w[w["_item"] == i].sort_values(amt, ascending=False)
+        rows = [(rr["_grade"], f"{rr[kgs]:,.1f} Kg | {_cm_amt(rr[amt])}") for _, rr in x.iterrows()]
+        rows.append(("TOTAL", f"{x[kgs].sum():,.1f} Kg | {_cm_amt(x[amt].sum())}"))
+        details.append((f"📦 {i} · Grade-wise", rows))
+    return {
+        "value": _cm_amt(w[amt].sum()),
+        "desc": f"Kgs wali categories ({len(items)}) · Total {w[kgs].sum():,.1f} Kg",
+        "color": BLUE,
+        "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")],
+        "sections": [(f"📦 All Categories ({len(items)}) · Kg & Amount", summary)],
+        "details": details,
+    }
 
 
 def category_mix_card(day):
@@ -2854,6 +2953,10 @@ def compute_kpi(df, spec, day):
         return finance_recv_paid_card(day)
     if calc == "finance_recv_pay_days":
         return finance_recv_pay_days_card(day)
+    if calc == "category_mix_pcs":
+        return category_mix_pcs_card(day)
+    if calc == "category_mix_kgs":
+        return category_mix_kgs_card(day)
     if calc == "category_mix":
         return category_mix_card(day)
     if calc == "maint_breakdown":
@@ -4318,10 +4421,8 @@ KPI_SOURCES = {
         "sheet": "daily_sales_report",
         "calc": "sales_daily_mtd",
     },
-    ("sales", "Category Mix"): {
-        "sheet": "prod_summary",
-        "calc": "category_mix",
-    },
+    ("sales", "Category Mix (Pcs)"): {"sheet": "prod_summary", "calc": "category_mix_pcs"},
+    ("sales", "Category Mix (Kgs)"): {"sheet": "prod_summary", "calc": "category_mix_kgs"},
     ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
     ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept"},
@@ -4460,7 +4561,8 @@ DEPARTMENTS = [
         "kpis": [
             ("Last Day Sale (Value & Bdls)", "Last day invoiced"),
             ("T/O in This Month", "Progressive turnover"),
-            ("Category Mix", "Online, Rebound & Others"),
+            ("Category Mix (Pcs)", "Pillow, Mattress, Sofa, Bonded"),
+            ("Category Mix (Kgs)", "Baaki sab items"),
         ],
         "links": [
             ("📊 Target vs Actual Board (Power BI)", "https://app.powerbi.com/groups/me/reports/3c685d60-be8f-4d50-b1e2-a7032210f01c/cbfcf8c6633612b7f521?experience=power-bi"),
