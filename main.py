@@ -3908,6 +3908,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+"cate_1": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xls",
+    "sheet_name": "cate (1)",
+    "date_col": "Grade",
+},
 "min_stock": {
     "type": "excel",
     "static": True,
@@ -6052,7 +6059,7 @@ def prod_category_mix_card(day):
     fmt_amt = lambda x: f"₹{float(x):,.2f}"
 
     # Apni CATEGORY MIX wali sheet key yahan rakhein (jaise "category_mix" ya jo aapke SHEETS mein hai)
-    df, err, _ = get_sheet("category_mix")
+    df, err, _ = get_sheet("cate_1")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
