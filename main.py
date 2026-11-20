@@ -5228,7 +5228,7 @@ def finance_rec_paid_card(day):
     esc = lambda x: _html.escape(str(x))
     cr = lambda x: f"{x / 10000000:,.2f} Cr"
 
-    # 1. RECEIVED (.xls - values Lakhs mein hain, 1 Apr se Nov till date)
+    # 1. RECEIVED (.xls - values Lakhs mein hain, Apr se Nov till date)
     df_rec, err_r, _ = get_sheet("finance_received_xls")
     rec_rows = []
     tot_rec_rs = 0.0
@@ -5251,7 +5251,7 @@ def finance_rec_paid_card(day):
             tot_rec_rs = tot_rec_lakhs * 100000.0
             rec_rows = [(esc(row["party"]), f"₹{row['val_lakhs']:,.2f} L ({cr(row['val_lakhs'] * 100000.0)})") for _, row in g_rec.iterrows()]
 
-    # 2. PAID (.xls - values Rupees mein hain, 1 Apr se Nov till date)
+    # 2. PAID (.xls - values Rupees mein hain, Apr se Nov till date)
     df_paid, err_p, _ = get_sheet("finance_paid_xls")
     paid_rows = []
     tot_paid_rs = 0.0
@@ -5274,8 +5274,9 @@ def finance_rec_paid_card(day):
             paid_rows = [(esc(row["party"]), _inr(row["val_rs"])) for _, row in g_paid.iterrows()]
 
     return {
+        # Upar card par sirf dono ka Total Amount dikhega
         "value": f"Rec: {cr(tot_rec_rs)} | Paid: {cr(tot_paid_rs)}",
-        "desc": f"Total Received: {cr(tot_rec_rs)} ({len(rec_rows)} parties) · Total Paid: {cr(tot_paid_rs)} ({len(paid_rows)} parties)",
+        "desc": f"Apr to Nov Till Date · {len(rec_rows)} Rec Parties · {len(paid_rows)} Paid Parties",
         "color": BLUE,
         "metrics": [
             (cr(tot_rec_rs), "Total Received"),
