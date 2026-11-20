@@ -619,12 +619,10 @@ def prepare(df, date_col, dayfirst=True, ffill_cols=(), anchor=None, extra_date_
         if c not in out.columns:
             raise DataError(f"extra date column '{c}' not found. Sheet columns: {list(df.columns)}")
         out["_d_" + c] = _parse_dates(out[c], dayfirst).dt.date
-    out = out.dropna(subset=["_date"])
-    if out.empty:
-        raise DataError(
-            f"No valid dates found in column '{date_col}'. "
-            f"Check the date format (dayfirst setting). Sample: {df[date_col].head(3).tolist()}"
-        )
+    if out["_date"].isna().all():
+        out["_date"] = datetime.datetime.now(IST).date()
+    else:
+        out = out.dropna(subset=["_date"])
     out = out.sort_values(["_date"] + (["_grp"] if "_grp" in out.columns else []), kind="stable")
     out.attrs["bad_dates"] = bad
     return out
@@ -3970,13 +3968,13 @@ SHEETS = {
     "received_new": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xls",
-        "sheet_name": "Sheet1",      # <- tab ka exact naam
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xlsx",
+        "sheet_name": "Recieved",      # <- tab ka exact naam
     },
     "paid_data": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xls",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xlsx",
         "sheet_name": "paid",
     },
 
