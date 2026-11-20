@@ -3950,7 +3950,7 @@ SHEETS = {
     "type": "excel",
     "static": True,
     "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xls",
-    "sheet_name": "cate (1)",
+    "sheet_name": 0,
     "date_col": "Grade",
 },
 "min_stock": {
