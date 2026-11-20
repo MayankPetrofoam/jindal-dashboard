@@ -2759,7 +2759,7 @@ def compute_kpi(df, spec, day):
     if calc == "finance_drs_crs":
         return finance_drs_crs_card(day)
     if calc == "finance_drs_crs_month":
-        return finance_drs_crs_bal_card(day)
+        return finance_drs_crs_sd_sc_card(day)      # <- pehle finance_drs_crs_bal_card(day) tha
     if calc == "finance_recv_days":
         return finance_recv_days_card(day)
     if calc == "finance_gt90_month":
@@ -4112,7 +4112,7 @@ KPI_SOURCES = {
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
-        "sheet": "finance_drs_crs_m",
+        "sheet": "finance_drs_crs_new",     # <- pehle finance_drs_crs_m tha
         "calc": "finance_drs_crs_month",
     },
     ("finance", "Greater Than 90 / 180 Days"): {
@@ -5178,6 +5178,37 @@ def _drs_crs_bal_month_dates(df):
     today = datetime.datetime.now(IST).date()
     w = _bal_prepare(df)
     return sorted({_bal_month_date(m, today) for m in w["m"].unique()}, reverse=True)
+def finance_drs_crs_sd_sc_card(day):
+    """DRS = Group SD ka Closing Balance sum, CRS = Group SC ka Closing Balance sum (1 April se aaj tak)."""
+    df, err, _ = get_sheet("finance_drs_crs_new")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    c_grp = next((c for c in cols if norm(c) == "GROUP"), None)
+    c_bal = next((c for c in cols if norm(c) == "CLOSINGBALANCE"), None)
+    if not c_grp or not c_bal:
+        return {"value": "Config error", "desc": f"Group / Closing Balance column nahi mila. Columns: {cols}", "color": RED}
+
+    w = pd.DataFrame({
+        "grp": df[c_grp].astype(str).str.strip().str.upper(),
+        "bal": _num(df[c_bal]).fillna(0.0),
+    })
+    sd, sc = w[w["grp"] == "SD"], w[w["grp"] == "SC"]
+    drs, crs = float(sd["bal"].sum()), float(sc["bal"].sum())
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+
+    return {
+        "value": f"DRS {cr(drs)} | CRS {cr(crs)}",
+        "desc": f"Closing Balance · 1 Apr 2026 to {day:%d-%b-%Y}",
+        "color": BLUE,
+        "metrics": [(cr(drs), "Total DRS (Debtors)"), (cr(crs), "Total CRS (Creditors)")],
+        "sections": [("📌 Exact amount", [("Total DRS", _inr(drs)), ("Total CRS", _inr(crs))])],
+        "details": [("💰 Group-wise", [
+            ("SD (Debtors)", f"{_inr(drs)}  ({len(sd)} parties)"),
+            ("SC (Creditors)", f"{_inr(crs)}  ({len(sc)} parties)"),
+        ])],
+    }
 
 
 def finance_drs_crs_bal_card(day):
@@ -5781,7 +5812,7 @@ def render_kpi(dept_key, idx, title, desc):
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
             if spec.get("calc") == "finance_drs_crs_month":
-                dates = _drs_crs_bal_month_dates(df)
+                dates = [datetime.datetime.now(IST).date()]     # <- pehle _drs_crs_bal_month_dates(df) tha
             if spec.get("calc") == "maint_pm":
                 dates = _pm_month_dates(df)
             if spec.get("calc") == "finance_recv_days":
