@@ -1900,6 +1900,14 @@ def _cm_amt(x):
     if abs(v) >= 1e7: return f"₹{v/1e7:,.2f} Cr"
     if abs(v) >= 1e5: return f"₹{v/1e5:,.2f} L"
     return f"₹{v:,.2f}"
+def _cm_tile(name, a, b):
+    """Ek category ka box: upar naam, neeche ek hi line mein (a) aur (b)."""
+    import html as _h
+    num = f'<span style="font-size:13px;font-weight:800;">{_h.escape(str(name))}</span>'
+    lbl = (f'<span style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;'
+           f'text-transform:none;letter-spacing:0;font-size:12px;font-weight:700;color:#0F172A;">'
+           f'<span>{a}</span><span>{b}</span></span>')
+    return (num, lbl)
 
 
 def category_mix_pcs_card(day):
@@ -1915,7 +1923,7 @@ def category_mix_pcs_card(day):
         x = w[w["_grp"] == g]
         if x.empty:
             continue
-        sections.append((g.upper(), [("Pcs", f"{x[pcs].sum():,.0f}"), ("Amount", _cm_amt(x[amt].sum()))]))
+        sections.append(_cm_tile(g.upper(), f"{x[pcs].sum():,.0f} Pcs", _cm_amt(x[amt].sum())))
         rows = []
         for _, rr in x.sort_values(amt, ascending=False).iterrows():
             nm = rr["_grade"] if rr["_item"].upper() == g.upper() else f"{rr['_grade']} ({rr['_item'].title()})"
@@ -1924,10 +1932,9 @@ def category_mix_pcs_card(day):
         details.append((f"📦 {g} · Grade-wise", rows))
     return {
         "value": _cm_amt(w[amt].sum()),
-        "desc": f"Pcs wali categories · Total {w[pcs].sum():,.0f} Pcs · {_cm_amt(w[amt].sum())}",
+        "desc": "Pillow · Mattress · Sofa Cum Bed · Bonded Sheet",
         "color": BLUE,
-        "metrics": [(f"{w[pcs].sum():,.0f}", "Total Pcs"), (_cm_amt(w[amt].sum()), "Total Amt")],
-        "sections": sections,
+        "metrics": [(f"{w[pcs].sum():,.0f}", "Total Pcs"), (_cm_amt(w[amt].sum()), "Total Amt")] + sections,
         "details": details,
     }
 
@@ -1941,8 +1948,7 @@ def category_mix_kgs_card(day):
     if w.empty:
         return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
     items = w.groupby("_item")[[kgs, amt]].sum().sort_values(amt, ascending=False)
-    summary = [(i, f"{v[kgs]:,.1f} Kg | {_cm_amt(v[amt])}") for i, v in items.iterrows()]
-    summary.append(("TOTAL", f"{w[kgs].sum():,.1f} Kg | {_cm_amt(w[amt].sum())}"))
+    tiles = [_cm_tile(i, f"{v[kgs]:,.1f} Kg", _cm_amt(v[amt])) for i, v in items.iterrows()]
     details = []
     for i in items.index:
         x = w[w["_item"] == i].sort_values(amt, ascending=False)
@@ -1951,10 +1957,9 @@ def category_mix_kgs_card(day):
         details.append((f"📦 {i} · Grade-wise", rows))
     return {
         "value": _cm_amt(w[amt].sum()),
-        "desc": f"Kgs wali categories ({len(items)}) · Total {w[kgs].sum():,.1f} Kg",
+        "desc": f"Kgs wali categories ({len(items)})",
         "color": BLUE,
-        "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")],
-        "sections": [(f"📦 All Categories ({len(items)}) · Kg & Amount", summary)],
+        "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")] + tiles,
         "details": details,
     }
 
