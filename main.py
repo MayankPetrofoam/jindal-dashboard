@@ -3867,6 +3867,20 @@ SHEETS = {
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd.xlsx", "C-Shed Mtrs+Rolls+Prod"),
         ),
     },
+"finance_received_nov": {   # Ya jo key naam aapke card mein use ho rahi hai
+    "type": "gsheet",       # Kyunki ye Google Sheet hai
+    "static": True,
+    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vT8y5sWnrOilHaurUzDVThXydPNmTHiOSBCCWcT68LjnmPsdOkTdJrMZKoxdg8DfYv6trvIc_UH-wMh/pubhtml",
+    "sheet_name": "NOVEMBER", # Tab ka exact naam
+    "date_col": "PARTY NAME",
+},
+"finance_paid_xls": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xls",
+    "sheet_name": "paid",
+    "date_col": "Party Name ",
+},
 
     "maintenance_logs": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrPocQhFp-3kIL0QhVYFzIrkD5Wd5QmoShNK3i08MZSx4Wu59y25d0uo687C71guf3vc5FdNcM56_H/pubhtml",
@@ -5208,6 +5222,79 @@ def finance_drs_crs_sd_sc_card(day):
             ("SD (Debtors)", f"{_inr(drs)}  ({len(sd)} parties)"),
             ("SC (Creditors)", f"{_inr(crs)}  ({len(sc)} parties)"),
         ])],
+    }
+def finance_rec_paid_card(day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+
+    # 1. RECEIVED DATA (Google Sheet - values Lakhs mein hain)
+    df_rec, err_r, _ = get_sheet("finance_received_nov")
+    rec_rows = []
+    tot_rec_rs = 0.0
+    if df_rec is not None:
+        r = df_rec.copy()
+        r.columns = [str(c).strip() for c in r.columns]
+        if "PARTY NAME" in r.columns and "RECEIVED" in r.columns:
+            r["party"] = r["PARTY NAME"].astype(str).str.strip()
+            r = r[(r["party"] != "") & (r["party"].str.lower() != "nan")]
+            # 'TOTAL' aur 'AS IN SHORTS' rows ko hatayein warna sum double ho jayega
+            r = r[~r["party"].str.upper().str.contains("TOTAL|AS IN SHORTS", regex=True)]
+            r["val_lakhs"] = pd.to_numeric(
+                r["RECEIVED"].astype(str).str.replace(",", "", regex=False).str.strip(),
+                errors="coerce"
+            ).fillna(0.0)
+            
+            g_rec = r.groupby("party", as_index=False)["val_lakhs"].sum()
+            g_rec = g_rec[g_rec["val_lakhs"] > 0].sort_values("val_lakhs", ascending=False)
+            
+            tot_rec_lakhs = float(g_rec["val_lakhs"].sum())
+            tot_rec_rs = tot_rec_lakhs * 100000.0  # Lakhs ko Rupees mein convert kiya
+            rec_rows = [(esc(row["party"]), f"₹{row['val_lakhs']:,.2f} L") for _, row in g_rec.iterrows()]
+
+    # 2. PAID DATA (.xls file - values Rupees mein hain)
+    df_paid, err_p, _ = get_sheet("finance_paid_xls")
+    paid_rows = []
+    tot_paid_rs = 0.0
+    if df_paid is not None:
+        p = df_paid.copy()
+        p.columns = [str(c).strip() for c in p.columns]  # 'Party Name ' ka extra space hatayega
+        if "Party Name" in p.columns and "Amount" in p.columns:
+            p["party"] = p["Party Name"].astype(str).str.strip()
+            p = p[(p["party"] != "") & (p["party"].str.lower() != "nan")]
+            p = p[~p["party"].str.upper().str.contains("TOTAL", regex=True)]
+            p["val_rs"] = pd.to_numeric(
+                p["Amount"].astype(str).str.replace(",", "", regex=False).str.strip(),
+                errors="coerce"
+            ).fillna(0.0)
+            
+            g_paid = p.groupby("party", as_index=False)["val_rs"].sum()
+            g_paid = g_paid[g_paid["val_rs"] > 0].sort_values("val_rs", ascending=False)
+            
+            tot_paid_rs = float(g_paid["val_rs"].sum())
+            paid_rows = [(esc(row["party"]), _inr(row["val_rs"])) for _, row in g_paid.iterrows()]
+
+    return {
+        # Upar card par dono ka Total Amount dikhega
+        "value": f"Rec: {cr(tot_rec_rs)} | Paid: {cr(tot_paid_rs)}",
+        "desc": f"Total Received: {cr(tot_rec_rs)} ({len(rec_rows)} parties) · Total Paid: {cr(tot_paid_rs)} ({len(paid_rows)} parties)",
+        "color": BLUE,
+        "metrics": [
+            (cr(tot_rec_rs), "Total Received"),
+            (cr(tot_paid_rs), "Total Paid"),
+        ],
+        "sections": [
+            ("📌 Summary", [
+                ("Total Amount Received", f"{_inr(tot_rec_rs)} ({cr(tot_rec_rs)})"),
+                ("Total Amount Paid", f"{_inr(tot_paid_rs)} ({cr(tot_paid_rs)})"),
+            ])
+        ],
+        "details": [
+            (f"📥 Total Amount Received · Party-wise ({len(rec_rows)} parties)",
+             rec_rows + [("TOTAL RECEIVED", f"{_inr(tot_rec_rs)} ({cr(tot_rec_rs)})")] if rec_rows else [("Koi data nahi", "-")]),
+            (f"📤 Total Amount Paid · Party-wise ({len(paid_rows)} parties)",
+             paid_rows + [("TOTAL PAID", f"{_inr(tot_paid_rs)} ({cr(tot_paid_rs)})")] if paid_rows else [("Koi data nahi", "-")]),
+        ],
     }
 
 
