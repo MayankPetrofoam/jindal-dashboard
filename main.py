@@ -3966,18 +3966,20 @@ SHEETS = {
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd.xlsx", "C-Shed Mtrs+Rolls+Prod"),
         ),
     },
-    "received_new": {
-        "type": "excel",
-        "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Received.xlsx",
-        "sheet_name": "Recieved",      # <- tab ka exact naam
-    },
-    "paid_data": {
-        "type": "excel",
-        "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xlsx",
-        "sheet_name": "paid",
-    },
+"finance_received_xls": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Recieved%20.xlsx",
+    "sheet_name": "Recieved ",
+    "date_col": "PARTY NAME",
+},
+"finance_paid_xls": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xlsx",
+    "sheet_name": "paid",
+    "date_col": "Party Name ",
+},
 
     "maintenance_logs": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrPocQhFp-3kIL0QhVYFzIrkD5Wd5QmoShNK3i08MZSx4Wu59y25d0uo687C71guf3vc5FdNcM56_H/pubhtml",
