@@ -1909,7 +1909,13 @@ def category_mix_card(day):
 
     fmt_i = lambda x: f"{int(round(float(x))):,}"
     fmt_k = lambda x: f"{float(x):,.1f}"
-    fmt_a = lambda x: f"₹{float(x):,.2f}"
+    def fmt_a(x):
+        v = float(x)
+        if abs(v) >= 1e7:
+            return f"₹{v / 1e7:,.2f} Cr"
+        elif abs(v) >= 1e5:
+            return f"₹{v / 1e5:,.2f} L"
+        return f"₹{v:,.2f}"
 
     tot_bdl = w[bdl_col].sum()
     tot_pcs = w[pcs_col].sum()
