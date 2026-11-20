@@ -4031,6 +4031,13 @@ SHEETS = {
     "sheet_name": "paid",
     "date_col": "Party Name ",
 },
+"purchase_daily": {
+    "type": "excel",
+    "static": True,
+    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/purchase.xls",
+    "sheet_name": 0,
+    "date_col": "Date",
+},
 
     "maintenance_logs": {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vTrPocQhFp-3kIL0QhVYFzIrkD5Wd5QmoShNK3i08MZSx4Wu59y25d0uo687C71guf3vc5FdNcM56_H/pubhtml",
@@ -6201,6 +6208,122 @@ def prod_category_mix_card(day):
             (f"📅 {day:%b-%y} · Category wise ({len(item_order)} Categories)", cat_rows)
         ],
         "details": details_list,
+    }
+def rec_payable_days_card(day):
+    """Receivable & Payable Days: DRS & CRS + Daily Basis Sales + Purchase sheet se."""
+    drs_df, err1, _ = get_sheet("drs_crs")
+    if drs_df is None:
+        return {"value": "Error", "desc": f"DRS & CRS error: {err1}", "color": RED}
+
+    sales_df, err2, _ = get_sheet("daily_sales_sheet")
+    if sales_df is None:
+        return {"value": "Error", "desc": f"Sales sheet error: {err2}", "color": RED}
+
+    purch_df, err3, _ = get_sheet("purchase_daily")
+    if purch_df is None:
+        return {"value": "Error", "desc": f"Purchase sheet error: {err3}", "color": RED}
+
+    def _fmt_cr(v):
+        v = float(v)
+        if abs(v) >= 1e7:
+            return f"₹{v / 1e7:,.2f} Cr"
+        elif abs(v) >= 1e5:
+            return f"₹{v / 1e5:,.2f} L"
+        return f"₹{v:,.0f}"
+
+    # 1. DRS & CRS se Net Receivable Out (SD) aur Net Creditors Out (SC)
+    d = drs_df.copy()
+    d.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in d.columns]
+    grp_col = next((c for c in d.columns if c.lower() == "group"), None)
+    bal_col = next((c for c in d.columns if "closing" in c.lower()), None)
+    party_col = next((c for c in d.columns if "party" in c.lower()), d.columns[0])
+
+    if not grp_col or not bal_col:
+        return {"value": "Config error", "desc": f"Group/Closing column nahi mila: {list(d.columns)}", "color": RED}
+
+    d[bal_col] = pd.to_numeric(d[bal_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0.0)
+    d["_grp"] = d[grp_col].astype(str).str.strip().str.upper()
+
+    sd_df = d[d["_grp"] == "SD"].copy()
+    sc_df = d[d["_grp"] == "SC"].copy()
+
+    net_rec_out = float(sd_df[bal_col].sum())
+    net_crs_out = float(sc_df[bal_col].sum())
+
+    # 2. DAILY BASIS SALES se Avg Sale P.M Till Date
+    s = sales_df.copy()
+    s.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in s.columns]
+    s_dt_col = next((c for c in s.columns if "date" in c.lower()), "_date" if "_date" in s.columns else None)
+    s_amt_col = next((c for c in s.columns if "sale" in c.lower() or "amount" in c.lower() or "amt" in c.lower()), None)
+
+    if not s_amt_col:
+        return {"value": "Config error", "desc": f"Sale Amount column nahi mila: {list(s.columns)}", "color": RED}
+
+    s[s_amt_col] = pd.to_numeric(s[s_amt_col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
+    if s_dt_col:
+        s["_dt"] = pd.to_datetime(s[s_dt_col], dayfirst=True, errors="coerce")
+        s = s[s["_dt"].notna() & (s["_dt"].dt.date <= day)].copy()
+        s_months = max(int(s["_dt"].dt.to_period("M").nunique()), 1)
+    else:
+        s_months = 1
+
+    tot_sale = float(s[s_amt_col].sum())
+    avg_sale_pm = tot_sale / s_months if s_months else 0.0
+    rec_days = (net_rec_out * 30.0 / avg_sale_pm) if avg_sale_pm > 0 else 0.0
+
+    # 3. PURCHASE sheet se Avg Purchase P.M Till Date (Bill Amount column)
+    p = purch_df.copy()
+    p.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in p.columns]
+    p_dt_col = next((c for c in p.columns if "date" in c.lower()), "_date" if "_date" in p.columns else None)
+    p_amt_col = next((c for c in p.columns if "bill amount" in c.lower()), None) or next(
+        (c for c in p.columns if "amount" in c.lower() or "taxvalue" in c.lower()), None
+    )
+
+    if not p_amt_col:
+        return {"value": "Config error", "desc": f"Purchase Amount column nahi mila: {list(p.columns)}", "color": RED}
+
+    p[p_amt_col] = pd.to_numeric(p[p_amt_col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
+    if p_dt_col:
+        p["_dt"] = pd.to_datetime(p[p_dt_col], dayfirst=True, errors="coerce")
+        p = p[p["_dt"].notna() & (p["_dt"].dt.date <= day)].copy()
+        p_months = max(int(p["_dt"].dt.to_period("M").nunique()), 1)
+    else:
+        p_months = 1
+
+    tot_purch = float(p[p_amt_col].sum())
+    avg_purch_pm = tot_purch / p_months if p_months else 0.0
+    pay_days = (net_crs_out * 30.0 / avg_purch_pm) if avg_purch_pm > 0 else 0.0
+
+    # Top 15 Debtors & Creditors for View Full Details
+    top_sd = sd_df.sort_values(bal_col, ascending=False).head(15)
+    top_sc = sc_df.sort_values(bal_col, ascending=False).head(15)
+
+    return {
+        "value": f"{rec_days:.1f} / {pay_days:.1f} Days",
+        "desc": f"Receivable: {rec_days:.1f} Days · Payable: {pay_days:.1f} Days",
+        "color": BLUE,
+        "metrics": [
+            (f"{rec_days:.1f} Days", "RECEIVABLE DAYS"),
+            (f"{pay_days:.1f} Days", "PAYABLE DAYS"),
+        ],
+        "sections": [
+            ("📊 Calculation Breakdown", [
+                ("Net Receivable Out (SD)", _fmt_cr(net_rec_out)),
+                (f"Avg Sale P.M ({s_months}m till date)", _fmt_cr(avg_sale_pm)),
+                ("Receivable Days", f"{rec_days:.1f} Days"),
+                ("Net Creditors Out (SC)", _fmt_cr(net_crs_out)),
+                (f"Avg Purchase P.M ({p_months}m till date)", _fmt_cr(avg_purch_pm)),
+                ("Payable Days", f"{pay_days:.1f} Days"),
+            ]),
+        ],
+        "details": [
+            (f"📥 Top 15 Debtors (SD · Total {_fmt_cr(net_rec_out)})", [
+                (str(r[party_col]).strip(), _fmt_cr(r[bal_col])) for _, r in top_sd.iterrows()
+            ]),
+            (f"📤 Top 15 Creditors (SC · Total {_fmt_cr(net_crs_out)})", [
+                (str(r[party_col]).strip(), _fmt_cr(r[bal_col])) for _, r in top_sc.iterrows()
+            ]),
+        ],
     }
 
 
