@@ -5935,7 +5935,7 @@ def inv_dead_stock_card(day):
     esc = lambda x: _html.escape(str(x))
     fmt_n = lambda x: f"{int(x):,}" if float(x).is_integer() else f"{x:,.2f}"
 
-df, err, _ = get_sheet("dead_stock_store")
+    df, err, _ = get_sheet("dead_stock_store")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
