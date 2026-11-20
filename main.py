@@ -3973,7 +3973,7 @@ SHEETS = {
     "sheet_name": "Recieved ",
     "date_col": "PARTY NAME",
 },
-"finance_paid_xls": {
+"paid_data": {
     "type": "excel",
     "static": True,
     "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/paid.xlsx",
