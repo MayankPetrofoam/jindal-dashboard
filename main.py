@@ -1861,65 +1861,103 @@ def _cmix_total(frame):
 
 
 def category_mix_card(day):
-    """Category Mix: selected month ka production, item-group wise; View Details mein item + grade wise."""
-    y_df, err, _ = get_sheet("prod_summary")
-    if y_df is None:
+    """Category Mix: cate (1) sheet se har ek ITEM category + Grade wise breakdown aur Amount."""
+    df, err, _ = get_sheet("cate_1")
+    if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
-    ym = day.year * 100 + day.month
-    m = y_df[y_df["ym"] == ym].copy()          # BUNDLES blank wali rows ka kg/pcs bhi count hota hai
-    if m.empty or not (m["BUNDLES"].astype(str).str.strip() != "").any():
+    w = df.copy()
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+
+    def _col(names):
+        for n in names:
+            for c in w.columns:
+                if c.lower() == n.lower():
+                    return c
         return None
 
-    m["grp"] = m["item"].map(_cmix_group)
-    tot = _cmix_total(m)
+    item_col = _col(["ITEM", "Item", "Category"])
+    grade_col = _col(["Grade", "GRADE"])
+    bdl_col = _col(["Bundle", "Bundles", "BDL"])
+    pcs_col = _col(["Pcs", "PCS", "Pieces"])
+    kgs_col = _col(["Kgs", "Kg", "KG"])
+    amt_col = _col(["Amt", "Amount", "Value"])
 
-    order = [g[0] for g in CMIX_GROUPS] + [CMIX_OTHER[0]]
-    summary_rows, details = [], []
-    for name in order:
-        g = m[m["grp"] == name]
-        if g.empty:
-            continue
-        a = _cmix_agg(g)
-        fields, split = _cmix_meta(name)
-        summary_rows.append((name, _cmix_txt(a, fields)))
+    if not item_col:
+        return {"value": "Config error", "desc": f"ITEM column nahi mila: {list(w.columns)}", "color": RED}
 
-        g = g.assign(_sp=g[split].replace("", "No Grade") if split in g.columns else "No Grade")
-        rows = []
-        for (item, sp), f in g.groupby(["item", "_sp"]):
-            rows.append((f"{item.title()} · {sp}", _cmix_txt(_cmix_agg(f), fields)))
-        rows.append(("TOTAL", _cmix_txt(a, fields)))
-        details.append((f"📦 {name} · {_cmix_txt(a, fields)}", rows))
+    for col in [bdl_col, pcs_col, kgs_col, amt_col]:
+        if col:
+            w[col] = pd.to_numeric(
+                w[col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(),
+                errors="coerce",
+            ).fillna(0.0)
+        else:
+            w[col] = 0.0
 
-    summary_rows.append(("TOTAL (sab items)", f"{tot['bdl']:,} Bdls | {tot['pcs']:,.0f} Pcs | {tot['kg']:,.1f} Kg"))
+    # Har ek ITEM category ko lo — blank ITEM ko "UNSPECIFIED" naam do taaki kuch bhi skip na ho
+    w["_item"] = w[item_col].fillna("").astype(str).str.strip()
+    w.loc[w["_item"].isin(["", "nan", "None", "NaN"]), "_item"] = "UNSPECIFIED"
 
-    # --- Saal ka total (shuru se is month tak) + month-wise, taaki sheet ke total se match kiya ja sake ---
-    fy = y_df[y_df["ym"] <= ym]
-    fy_tot = _cmix_total(fy)
-    first = fy["_date"].min()
-    mon_rows = []
-    for k, f in sorted(fy.groupby("ym"), key=lambda x: x[0]):
-        t = _cmix_total(f)
-        mon_rows.append((f"{datetime.date(k // 100, k % 100, 1):%b-%y}", f"{t['bdl']:,} Bdls | {t['pcs']:,.0f} Pcs | {t['kg']:,.1f} Kg"))
-    mon_rows.append(("TOTAL", f"{fy_tot['bdl']:,} Bdls | {fy_tot['pcs']:,.0f} Pcs | {fy_tot['kg']:,.1f} Kg"))
-    details.append((f"📆 Total till {day:%b-%y} (from {first:%d-%m-%y}) · Month-wise", mon_rows))
+    w["_grade"] = w[grade_col].fillna("").astype(str).str.strip() if grade_col else "-"
+    w.loc[w["_grade"].isin(["", "nan", "None", "NaN"]), "_grade"] = "-"
+
+    # Sirf completely empty (all 0) rows hatayein
+    w = w[(w[bdl_col] != 0) | (w[pcs_col] != 0) | (w[kgs_col] != 0) | (w[amt_col] != 0)].copy()
+    if w.empty:
+        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+
+    fmt_i = lambda x: f"{int(round(float(x))):,}"
+    fmt_k = lambda x: f"{float(x):,.1f}"
+    fmt_a = lambda x: f"₹{float(x):,.2f}"
+
+    tot_bdl = w[bdl_col].sum()
+    tot_pcs = w[pcs_col].sum()
+    tot_kgs = w[kgs_col].sum()
+    tot_amt = w[amt_col].sum()
+
+    # Har ek category (ITEM) — ek bhi skip nahi hogi
+    item_order = list(dict.fromkeys(w["_item"].tolist()))
+    summary_rows = []
+    details = []
+
+    for item_name in item_order:
+        g = w[w["_item"] == item_name]
+        c_bdl = g[bdl_col].sum()
+        c_pcs = g[pcs_col].sum()
+        c_kgs = g[kgs_col].sum()
+        c_amt = g[amt_col].sum()
+
+        line_txt = f"{fmt_i(c_bdl)} Bdls | {fmt_i(c_pcs)} Pcs | {fmt_k(c_kgs)} Kg | {fmt_a(c_amt)}"
+        summary_rows.append((item_name, line_txt))
+
+        # View Full Details: Har category ke niche uske saare Grade rows + Category Total
+        g_rows = []
+        for _, r in g.iterrows():
+            g_rows.append((
+                r["_grade"],
+                f"{fmt_i(r[bdl_col])} Bdls | {fmt_i(r[pcs_col])} Pcs | {fmt_k(r[kgs_col])} Kg | {fmt_a(r[amt_col])}",
+            ))
+        g_rows.append((f"TOTAL ({item_name})", line_txt))
+        details.append((f"📦 {item_name} · {line_txt}", g_rows))
+
+    summary_rows.append((
+        "TOTAL (sab items)",
+        f"{fmt_i(tot_bdl)} Bdls | {fmt_i(tot_pcs)} Pcs | {fmt_k(tot_kgs)} Kg | {fmt_a(tot_amt)}",
+    ))
 
     return {
-        "value": f"{tot['bdl']:,} Bdls",
-        "desc": f"Production category mix · {day:%b-%Y}",
+        "value": fmt_a(tot_amt),
+        "desc": f"Category mix ({len(item_order)} categories) · Total Amt: {fmt_a(tot_amt)}",
         "color": BLUE,
         "metrics": [
-            (f"{tot['bdl']:,}", "Bundles"),
-            (f"{tot['pcs']:,.0f}", "Pcs"),
-            (f"{tot['kg']:,.1f}", "Kg"),
+            (fmt_i(tot_bdl), "Bundles"),
+            (fmt_i(tot_pcs), "Pcs"),
+            (fmt_k(tot_kgs), "Kg"),
+            (fmt_a(tot_amt), "Total Amt"),
         ],
         "sections": [
-            (f"🗓 Month {day:%b-%y} · Category wise", summary_rows),
-            (f"📆 Total {first:%b-%y} to {day:%b-%y}", [
-                ("Bundles", f"{fy_tot['bdl']:,}"),
-                ("Pcs", f"{fy_tot['pcs']:,.0f}"),
-                ("Kg", f"{fy_tot['kg']:,.1f}"),
-            ]),
+            (f"📦 All Categories ({len(item_order)} Items) · Qty & Amount", summary_rows),
         ],
         "details": details,
     }
