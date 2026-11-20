@@ -3966,7 +3966,7 @@ SHEETS = {
             ("C Shed", "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/C-Shed%20Mtrs%2BRolls%2BProd.xlsx", "C-Shed Mtrs+Rolls+Prod"),
         ),
     },
-"finance_received_xls": {
+"received_new": {
     "type": "excel",
     "static": True,
     "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Recieved%20.xlsx",
