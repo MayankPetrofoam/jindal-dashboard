@@ -1924,6 +1924,91 @@ def category_mix_card(day):
         ],
         "details": details,
     }
+def _ds_num(v):
+    s = str(v).strip().replace(",", "")
+    if s.upper() in ("", "NIL", "NAN", "NONE", "-"):
+        return 0.0
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    return float(m.group()) if m else 0.0
+
+
+def _ds_parse(rows):
+    """Rows -> items: cat, item, uom, prev, last, bdl."""
+    out, section = [], "main"
+    for r in rows:
+        r = [str(x).strip() for x in r] + [""] * 6
+        a, b, c, d, e, f = r[:6]
+        up = b.upper()
+        if up.startswith("OLD MATTRESS COVER"):
+            section = "Old Mattress Cover"
+            continue
+        if up.startswith("OLD INN"):
+            section = "Old Inner Cover"
+            continue
+        if not b or not a.replace(".", "").isdigit():
+            continue
+        if section == "main":
+            out.append({"cat": re.sub(r"\s+", " ", c).strip().title() or "Other", "item": b,
+                        "uom": d.upper(), "prev": _ds_num(e), "last": _ds_num(f), "bdl": 0.0})
+        else:
+            out.append({"cat": section, "item": b, "uom": "PCS",
+                        "prev": _ds_num(e), "last": _ds_num(f), "bdl": _ds_num(d)})
+    return out
+
+
+def _ds_date_label(h):
+    s = str(h)
+    m = re.search(r"\d{1,2}\.\d{1,2}\.\d{2,4}", s)
+    if m:
+        return m.group()
+    try:
+        return pd.to_datetime(s).strftime("%d.%m.%y")
+    except Exception:
+        return s.strip()
+
+
+def dead_stock_store_card(day):
+    df, err, _ = get_sheet("dead_stock_store")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    base = df.iloc[:, :6]
+    hdr = list(base.columns)
+    items = [x for x in _ds_parse([hdr] + base.values.tolist()) if x["last"] > 0]
+    if not items:
+        return {"value": "0 Items", "desc": "Koi dead stock nahi", "color": BLUE}
+    prev_lbl, last_lbl = _ds_date_label(hdr[4]), _ds_date_label(hdr[5])
+
+    def uom_txt(lst):
+        t = {}
+        for x in lst:
+            t[x["uom"]] = t.get(x["uom"], 0) + x["last"]
+        return " | ".join(f"{v:,.0f} {u}" for u, v in sorted(t.items(), key=lambda kv: -kv[1]))
+
+    cats = {}
+    for x in items:
+        cats.setdefault(x["cat"], []).append(x)
+
+    summary, drill = [], []
+    for cat, lst in cats.items():
+        summary.append((cat, uom_txt(lst)))
+        rows = []
+        for x in lst:
+            if x["bdl"]:
+                txt = f"{x['bdl']:,.0f} Bdl · {x['last']:,.0f} Pcs  ({prev_lbl}: {x['prev']:,.0f})"
+            else:
+                txt = f"{x['last']:,.0f} {x['uom']}  ({prev_lbl}: {x['prev']:,.0f})"
+            rows.append((x["item"], txt))
+        rows.append(("TOTAL", uom_txt(lst)))
+        drill.append((f"▸ {cat} · {len(lst)} materials · {uom_txt(lst)}", rows))
+
+    return {
+        "value": f"{len(cats)} Categories",
+        "desc": f"Dead stock balance as on {last_lbl}",
+        "color": BLUE,
+        "metrics": [(f"{len(cats)}", "Categories"), (f"{len(items)}", "Materials")],
+        "sections": [(f"📦 Category-wise balance · {last_lbl}", summary)],
+        "drill": drill,
+    }
 
 def total_inventory_card(day):
     """Total Inventory Bundles (FG): din + mahine ki total production, category wise + SHED WISE details."""
@@ -2716,6 +2801,8 @@ def stock_balance_card(df, day, issued_col, label):
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "dead_stock_store":
+        return dead_stock_store_card(day)
     if calc == "category_mix":
         return category_mix_card(day)
     if calc == "maint_breakdown":
@@ -3743,6 +3830,12 @@ SHEETS = {
         "sheet_name": "purchase", # <-- Yeh wahi tab ka naam hai jo screenshot mein neeche highlight hai (purchase)
         "date_col": "Date",        # <-- Aapki file mein date column ka naam 'Date' hai
         "dayfirst": True, 
+    },
+    "dead_stock_store": {
+        "type": "excel",
+        "static": True,
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPNIfe4wJlXo4NDQ25eMmQgreu3CEioxI6sBfTCgsJQqPUGtBvYHQf24yCq-gTAGf4KN3qTNEXkxpy/pubhtml",
+        "sheet_name": "DEAD STOCK Monthly",     # <- tab ka exact naam
     },
     "serviceability_live": {
         "type": "serviceability",
@@ -6024,6 +6117,10 @@ def render_kpi(dept_key, idx, title, desc):
             if res is not None and res.get("details"):
                 with st.expander("📋 View Full Details"):
                     st.markdown(_sections_html(res["details"]), unsafe_allow_html=True)
+            if res is not None and res.get("drill"):
+                for _lbl, _rows in res["drill"]:
+                    with st.expander(_lbl):
+                        st.markdown(_sections_html([("Material-wise balance", _rows)]), unsafe_allow_html=True)
 
             if res is None:
                 _card(slot, title, "No Data Available for This Date", desc, GREY, chosen.strftime(DATE_FMT))
