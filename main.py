@@ -1936,7 +1936,7 @@ def _ds_parse(rows):
     """Rows -> items: cat, item, uom, prev, last, bdl."""
     out, section = [], "main"
     for r in rows:
-        r = [str(x).strip() for x in r] + [""] * 6
+        r = [("" if str(x).strip().lower() == "nan" else str(x).strip()) for x in r] + [""] * 6
         a, b, c, d, e, f = r[:6]
         up = b.upper()
         if up.startswith("OLD MATTRESS COVER"):
@@ -1972,8 +1972,12 @@ def dead_stock_store_card(day):
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
     base = df.iloc[:, :6]
-    hdr = list(base.columns)
-    items = [x for x in _ds_parse([hdr] + base.values.tolist()) if x["last"] > 0]
+    if all(isinstance(c, int) for c in base.columns):      # Google Sheet: header row data ke andar hai
+        rows = base.values.tolist()
+    else:                                                   # Excel file: header = columns
+        rows = [list(base.columns)] + base.values.tolist()
+    hdr = rows[0]
+    items = [x for x in _ds_parse(rows) if x["last"] > 0]
     if not items:
         return {"value": "0 Items", "desc": "Koi dead stock nahi", "color": BLUE}
     prev_lbl, last_lbl = _ds_date_label(hdr[4]), _ds_date_label(hdr[5])
@@ -3832,10 +3836,9 @@ SHEETS = {
         "dayfirst": True, 
     },
     "dead_stock_store": {
-        "type": "excel",
-        "static": True,
+        "type": "pm_sched",
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vSPNIfe4wJlXo4NDQ25eMmQgreu3CEioxI6sBfTCgsJQqPUGtBvYHQf24yCq-gTAGf4KN3qTNEXkxpy/pubhtml",
-        "sheet_name": "DEAD STOCK Monthly",     # <- tab ka exact naam
+        "worksheet": "0",     # <- "DEAD STOCK Monthly" tab ka gid (sheet address mein #gid=XXXX wala number)
     },
     "serviceability_live": {
         "type": "serviceability",
@@ -4178,7 +4181,7 @@ KPI_SOURCES = {
 },
 
     ("inventory", "Total Inventory Bundles (FG)"): {"sheet": "prod_summary", "calc": "total_inv"},
-    ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "stock_data", "calc": "stock_dead", "dead_days": 90},
+    ("inventory", "Dead Stock (Value & Qty)"): {"sheet": "dead_stock_store", "calc": "dead_stock_store"},
 
     # Production Department ke saare blocks ki live binding:
     ("production", "Total Production & Yield"): {"sheet": "production_logs", "calc": "prod_log", "type": "total"},
