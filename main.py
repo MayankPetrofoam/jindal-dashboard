@@ -5532,15 +5532,20 @@ def finance_total_due_month_card(day):
 # ====================================================================
 def _gtm_prepare(df):
     cols = [c for c in df.columns if not str(c).startswith("_")]
-    norm = lambda s: re.sub(r"[^A-Z0-9-]", "", str(s).upper())
+    norm = lambda s: re.sub(r"[^A-Z0-9->]", "", str(s).upper())
     pick = lambda *k: next((c for c in cols if norm(c) in k), None)
-    c_p, c_m = pick("PARTYNAME", "PARTY", "ACCOUNTNAME"), pick("MONTH")
-    c_a, c_b = pick("91-120DAYS", "91-120"), pick("120-180DAYS", "121-180DAYS", "120-180", "121-180")
-    if not all([c_p, c_m, c_a, c_b]):
-        raise DataError(f"Party Name / Month / 91-120 Days / 120-180 Days column nahi mila. Columns: {cols}")
+    
+    c_p = pick("PARTYNAME", "PARTY", "ACCOUNTNAME")
+    c_m = pick("MONTH")
+    c_a = pick("61-120DAYS", "61-120", "91-120DAYS", "91-120")
+    c_b = pick(">120DAYS", ">120", "120-180DAYS", "121-180DAYS", "120-180", "121-180")
+    
+    if not all([c_p, c_a, c_b]):
+        raise DataError(f"Party Name / 61-120 Days / >120 Days column nahi mila. Columns: {cols}")
+        
     w = pd.DataFrame({
         "party": df[c_p].astype(str).str.strip(),
-        "m": df[c_m].map(_bal_month_no),
+        "m": df[c_m].map(_bal_month_no) if c_m else datetime.datetime.now(IST).month,
         "a": _num(df[c_a]).fillna(0.0),
         "b": _num(df[c_b]).fillna(0.0),
     })
@@ -5568,7 +5573,7 @@ def _drs_total_sd():
 
 def finance_gt90_month_card(day):
     import html as _html
-    df, err, _ = get_sheet("finance_ageing_new")
+    df, err, _ = get_sheet("finance_gt90")
     if df is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
 
