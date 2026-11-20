@@ -620,7 +620,8 @@ def prepare(df, date_col, dayfirst=True, ffill_cols=(), anchor=None, extra_date_
             raise DataError(f"extra date column '{c}' not found. Sheet columns: {list(df.columns)}")
         out["_d_" + c] = _parse_dates(out[c], dayfirst).dt.date
     if out["_date"].isna().all():
-        out["_date"] = datetime.datetime.now(IST).date()
+        hdr_dates = _parse_dates(pd.Series(list(out.columns)), dayfirst=True).dropna()
+        out["_date"] = hdr_dates.iloc[-1].date() if not hdr_dates.empty else datetime.datetime.now(IST).date()
     else:
         out = out.dropna(subset=["_date"])
     out = out.sort_values(["_date"] + (["_grp"] if "_grp" in out.columns else []), kind="stable")
