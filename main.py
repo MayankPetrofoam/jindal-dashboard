@@ -3473,7 +3473,7 @@ if calc == "order_serviceability":
 
     # ---------- FOAMING: STATIC VALUES (Temporary) ----------
     # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
-   if calc == "sum_consumption":
+if calc == "sum_consumption":
         col = spec.get("col", "CONS")
         if col not in df.columns:
             raise DataError(f"Column '{col}' not found.")
