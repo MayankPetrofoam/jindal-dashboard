@@ -2976,6 +2976,8 @@ def compute_kpi(df, spec, day):
     if calc == "dead_stock_store":
         return dead_stock_store_card(day)
     if calc == "total_received_paid":
+        return finance_recv_paid_month_card(day)
+    if calc == "total_received_paid":
         return finance_recv_paid_card(day)
     if calc == "finance_recv_pay_days":
         return finance_recv_pay_days_card(day)
@@ -4418,6 +4420,10 @@ KPI_SOURCES = {
 },
     ("finance", "Total Amt Received / Paid"): {
         "sheet": "received_new",         # <- pehle received_data tha
+        "calc": "total_received_paid",
+    },
+    ("finance", "Total Amt Received / Paid"): {
+        "sheet": "received_data",         # <- received_new se badla (month-wise received.xls)
         "calc": "total_received_paid",
     },
 
@@ -6306,6 +6312,148 @@ def finance_recv_paid_card(day):
         ],
     }
 RP_FY_START = datetime.date(2026, 4, 1)
+# ====================================================================
+# FINANCE: TOTAL AMT RECEIVED / PAID  (MONTH-WISE)
+# ====================================================================
+_RP_MON = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+           "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+
+
+def _rp_mno(x):
+    s = str(x).strip().upper()
+    if s.isdigit() and 1 <= int(s) <= 12:
+        return int(s)
+    return _RP_MON.get(s[:3])
+
+
+def _rp_fy_order(m):
+    return (m - 4) % 12          # Apr=0 ... Mar=11
+
+
+def _rp_prep(rdf, pdf):
+    """Received aur Paid dono ko month number ke saath saaf karke (r, p) dataframe deta hai."""
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    pick = lambda d, keys: next((c for c in d.columns if not str(c).startswith("_") and norm(c) in keys), None)
+
+    r_p, r_m, r_a = pick(rdf, ("PARTYNAME",)), pick(rdf, ("MONTH",)), pick(rdf, ("RECEIVED", "TOTAL"))
+    if not (r_p and r_m and r_a):
+        raise DataError(f"Received sheet mein PARTY NAME / Month / RECEIVED (ya Total) column nahi mila. Columns: {list(rdf.columns)}")
+    p_p, p_m, p_a = pick(pdf, ("PARTYNAME",)), pick(pdf, ("MONTH",)), pick(pdf, ("AMOUNT",))
+    p_c = pick(pdf, ("PAYMENTCATEGORY", "CATEGORY"))
+    if not (p_p and p_m and p_a):
+        raise DataError(f"Paid sheet mein Party Name / Month / Amount column nahi mila. Columns: {list(pdf.columns)}")
+
+    r = pd.DataFrame({"m": rdf[r_m].map(_rp_mno),
+                      "party": rdf[r_p].astype(str).str.strip(),
+                      "amt": _num(rdf[r_a]).fillna(0.0) * RECEIVED_UNIT})
+    r = r[r["m"].notna()].copy()
+    r["m"] = r["m"].astype(int)
+    # har month ke block mein 'TOTAL' / 'AS IN SHORTS' row ke baad ka kachra (purana ledger) hata do
+    stop = r["party"].str.upper().str.replace(r"\s+", " ", regex=True).str.match(r"^(GRAND )?TOTAL$|^AS IN SHORTS$")
+    r = r[~stop.groupby(r["m"]).cummax()]
+    r = r[(r["party"] != "") & (r["party"].str.lower() != "nan")]
+
+    p = pd.DataFrame({"m": pdf[p_m].map(_rp_mno),
+                      "party": pdf[p_p].astype(str).str.strip(),
+                      "cat": pdf[p_c].astype(str).str.strip() if p_c else pdf[p_p].astype(str).str.strip(),
+                      "amt": _num(pdf[p_a]).fillna(0.0)})
+    p = p[p["m"].notna()].copy()
+    p["m"] = p["m"].astype(int)
+    p = p[(p["party"] != "") & (p["party"].str.lower() != "nan")]
+    p["cat"] = p["cat"].replace({"": "Uncategorised", "nan": "Uncategorised"})
+    return r, p, bool(p_c)
+
+
+def _rp_month_dates(df):
+    """Month dropdown ke liye: received + paid sheet ke har month ki ek date (current month = aaj)."""
+    today = datetime.datetime.now(IST).date()
+    months = set()
+    for d in (df, get_sheet("paid_data")[0]):
+        if d is None:
+            continue
+        c = next((c for c in d.columns if re.sub(r"[^A-Z]", "", str(c).upper()) == "MONTH"), None)
+        if c:
+            months |= {m for m in d[c].map(_rp_mno).dropna().astype(int)}
+    return sorted({_bal_month_date(m, today) for m in months}, reverse=True)
+
+
+def finance_recv_paid_month_card(day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    rdf, e1, _ = get_sheet("received_data")
+    pdf, e2, _ = get_sheet("paid_data")
+    if rdf is None:
+        return {"value": "Error", "desc": f"Received data error: {e1}", "color": RED}
+    if pdf is None:
+        return {"value": "Error", "desc": f"Paid data error: {e2}", "color": RED}
+    try:
+        r, p, has_cat = _rp_prep(rdf, pdf)
+    except DataError as e:
+        return {"value": "Config error", "desc": str(e), "color": RED}
+
+    cr = lambda x: f"{x / 10000000:,.2f} Cr"
+    sel = day.month
+    today = datetime.datetime.now(IST).date()
+    lab = f"{datetime.date(day.year, sel, 1):%b-%y}"
+    live = (day.year, day.month) == (today.year, today.month)
+
+    r_m, p_m = r[r["m"] == sel], p[p["m"] == sel]
+    if r_m.empty and p_m.empty:
+        return None
+    rec_m, paid_m = float(r_m["amt"].sum()), float(p_m["amt"].sum())
+
+    # 1 April se selected month tak (cumulative)
+    upto = _rp_fy_order(sel)
+    r_y = r[r["m"].map(_rp_fy_order) <= upto]
+    p_y = p[p["m"].map(_rp_fy_order) <= upto]
+    rec_y, paid_y = float(r_y["amt"].sum()), float(p_y["amt"].sum())
+
+    # month-wise table
+    all_m = sorted(set(r["m"]) | set(p["m"]), key=_rp_fy_order)
+    all_m = [m for m in all_m if _rp_fy_order(m) <= upto]
+    fy_year = day.year if sel >= 4 else day.year - 1
+    mrows = []
+    for m in reversed(all_m):
+        a = float(r.loc[r["m"] == m, "amt"].sum())
+        b = float(p.loc[p["m"] == m, "amt"].sum())
+        yy = fy_year if m >= 4 else fy_year + 1
+        mrows.append((f"{datetime.date(yy, m, 1):%b-%y}", f"Recd {cr(a)} | Paid {cr(b)} | Net {cr(a - b)}"))
+    mrows.append(("TOTAL (YTD)", f"Recd {cr(rec_y)} | Paid {cr(paid_y)} | Net {cr(rec_y - paid_y)}"))
+
+    r_by = r_m.groupby("party")["amt"].sum().sort_values(ascending=False)
+    r_by = r_by[r_by > 0]
+    p_cat = p_m.groupby("cat")["amt"].sum().sort_values(ascending=False)
+    p_by = p_m.groupby("party")["amt"].sum().sort_values(ascending=False)
+
+    details = [
+        (f"📅 Month-wise (Apr se {lab})", mrows),
+        (f"💰 {lab} · Received party-wise ({len(r_by)} parties)",
+         [(esc(k), _inr(v)) for k, v in r_by.items()] + [("TOTAL RECEIVED", _inr(rec_m))]),
+    ]
+    if has_cat:
+        details.append((f"📂 {lab} · Paid category-wise ({len(p_cat)})",
+                        [(esc(k), _inr(v)) for k, v in p_cat.items()] + [("TOTAL PAID", _inr(paid_m))]))
+        details.append((f"💸 {lab} · Paid party-wise ({len(p_by)})",
+                        [(esc(k), _inr(v)) for k, v in p_by.items()] + [("TOTAL PAID", _inr(paid_m))]))
+    else:
+        details.append((f"💸 {lab} · Paid ({len(p_by)} heads)",
+                        [(esc(k), _inr(v)) for k, v in p_by.items()] + [("TOTAL PAID", _inr(paid_m))]))
+
+    return {
+        "value": f"Recd {cr(rec_m)} | Paid {cr(paid_m)}",
+        "desc": f"{lab}{' (till date)' if live else ''} · Month total",
+        "color": BLUE,
+        "metrics": [(cr(rec_m), f"Received {lab}"), (cr(paid_m), f"Paid {lab}")],
+        "sections": [
+            (f"📌 {lab} · Exact amount", [
+                ("Received", _inr(rec_m)), ("Paid", _inr(paid_m)),
+                ("Net (Received - Paid)", _inr(rec_m - paid_m))]),
+            (f"📆 1 Apr to {lab} (till date)", [
+                ("Received", _inr(rec_y)), ("Paid", _inr(paid_y)),
+                ("Net (Received - Paid)", _inr(rec_y - paid_y))]),
+        ],
+        "details": details,
+    }
 
 
 def _rp_avg_month(df, amt_col, day):
@@ -6986,6 +7134,8 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = _due_month_dates(df)
             if spec.get("calc") == "finance_gt90_month":
                 dates = _gtm_month_dates(df)
+            if spec.get("calc") == "total_received_paid":
+                dates = _rp_month_dates(df)
 
 
             # FIXED / MANUAL values (Poly Stock, TDI, Pop Polymer): month ya date chunne ki zarurat nahi.
