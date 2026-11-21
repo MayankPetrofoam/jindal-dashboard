@@ -2968,6 +2968,8 @@ def compute_kpi(df, spec, day):
         return maint_breakdown_card(df, day)
     if calc == "maint_pm":
         return maint_pm_card(df, day)
+    if calc == "maint_downtime":
+        return maint_downtime_card(df, day)
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
     if calc == "tonnage_daily":
         return tonnage_card(day)
@@ -4386,6 +4388,10 @@ KPI_SOURCES = {
         "sheet": "pm_schedule",
         "calc": "maint_pm",
     },
+    ("maint", "Total Downtime"): {
+        "sheet": "maintenance_logs",     # wahi sheet jo Breakdown card use karta hai
+        "calc": "maint_downtime",
+    },
     # <<< ORDER MANAGEMENT DATA SOURCE >>>
     ("order", "Orders 0-7 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_0_7"},
     ("order", "Orders 7-14 Days Old"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_age_7_14"},
@@ -4599,6 +4605,7 @@ DEPARTMENTS = [
         "kpis": [
             ("Current Breakdown Machines", "Currently under repair"),
             ("Preventive Maintenance %", "Schedule completion"),
+            ("Total Downtime", "Breakdown hours (Month / YTD)"),
         ],
         "links": [
             ("📊 Maintenance Dashboard (Power BI)", None),
@@ -5796,6 +5803,89 @@ def maint_pm_card(df, day):
             (f"🏭 {day:%b-%y} · Section-wise (PM done)", sec_done),
             (f"✅ {day:%b-%y} · PM ho chuki machines ({done})", [(r["machine"].title(), r["section"]) for _, r in cur[cur["done"]].iterrows()]),
         ],
+    }
+def _bd_start_end(df):
+    """Har row ka breakdown start / end datetime aur downtime (hours)."""
+    c_t = _mcol(df, "BREAKDOWN TIME")
+    c_rd = _mcol(df, "RESOLUTION DATE")
+    c_r = _mcol(df, "ISSUE RESOLVED")
+    w = df[df["_date"].notna()].copy()
+
+    # Breakdown time (hh:mm:ss ya 2:30 PM dono chalenge)
+    txt = w[c_t].astype(str).str.strip() if c_t else pd.Series("", index=w.index)
+    t = pd.to_timedelta(txt, errors="coerce")
+    bad = t.isna()
+    if bad.any():
+        alt = pd.to_datetime(txt[bad], errors="coerce")
+        t[bad] = pd.to_timedelta(alt.dt.hour.fillna(0) * 3600 + alt.dt.minute.fillna(0) * 60, unit="s")
+    t = t.fillna(pd.Timedelta(0))
+    w["start"] = pd.to_datetime(w["_date"]) + t
+
+    # Resolution datetime
+    if c_rd:
+        try:
+            w["end"] = pd.to_datetime(w[c_rd], dayfirst=True, errors="coerce", format="mixed")
+        except Exception:
+            w["end"] = pd.to_datetime(w[c_rd], dayfirst=True, errors="coerce")
+    else:
+        w["end"] = pd.NaT
+
+    solved = w[c_r].astype(str).str.strip().str.upper().eq("TRUE") if c_r else False
+    now = datetime.datetime.now(IST).replace(tzinfo=None)
+    w["open"] = ~solved
+    w.loc[w["open"], "end"] = now                      # pending issue: abhi tak ka downtime
+    w["hrs"] = ((w["end"] - w["start"]).dt.total_seconds() / 3600).clip(lower=0)
+    w["no_end"] = w["hrs"].isna()                      # solved hai par resolution time nahi bhara
+    w["hrs"] = w["hrs"].fillna(0.0)
+    return w
+
+
+def maint_downtime_card(df, day):
+    c_m = _mcol(df, "MACHINE NAME")
+    c_i = _mcol(df, "ISSUE DESCRIPTION")
+    if not c_m:
+        return {"value": "Config error", "desc": f"Machine Name column nahi mila. Columns: {list(df.columns)}", "color": RED}
+
+    w = _bd_start_end(df)
+    w["machine"] = w[c_m].astype(str).str.strip()
+    w = w[~w["machine"].isin(["", "nan", "None"])]
+
+    fy_start = datetime.date(day.year if day.month >= 4 else day.year - 1, 4, 1)   # saal April se
+    m_start, m_end = _month_range(day)
+    mon = w[(w["_date"] >= m_start) & (w["_date"] <= m_end)]
+    ytd = w[(w["_date"] >= fy_start) & (w["_date"] <= day)]
+    d_day = w[w["_date"] == day]
+
+    h = lambda x: f"{x:,.1f} Hrs"
+    missing = int(ytd["no_end"].sum())
+
+    # machine-wise (selected month) - sabse zyada downtime upar
+    mw = (mon.groupby("machine")["hrs"].agg(["sum", "count"]).sort_values("sum", ascending=False))
+    mrows = [(m, f"{r['sum']:,.1f} Hrs · {int(r['count'])} breakdowns") for m, r in mw.iterrows()]
+
+    # month-wise (saal ka)
+    ymw = ytd.assign(ym=ytd["_date"].map(lambda x: (x.year, x.month))).groupby("ym")["hrs"].agg(["sum", "count"])
+    yrows = [(f"{datetime.date(y, m, 1):%b-%y}", f"{r['sum']:,.1f} Hrs · {int(r['count'])} breakdowns")
+             for (y, m), r in ymw.sort_index(ascending=False).iterrows()]
+    yrows.append(("TOTAL (YTD)", f"{ytd['hrs'].sum():,.1f} Hrs"))
+
+    details = [
+        (f"🏭 {day:%b-%y} · Machine-wise downtime ({len(mrows)} machines)", mrows or [("Koi breakdown nahi", "✅")]),
+        (f"📊 Month-wise (Apr-{fy_start.year % 100} se {day:%b-%y})", yrows),
+    ]
+    if missing:
+        details.append(("⚠ Check", [(f"{missing} solved breakdowns", "Resolution date/time nahi bhara, unka downtime 0 gina")]))
+
+    return {
+        "value": h(mon["hrs"].sum()),
+        "desc": f"Total downtime · {day:%b-%y} · {len(mon)} breakdowns",
+        "color": RED if mon["hrs"].sum() > 0 else BLUE,
+        "metrics": [
+            (f"{d_day['hrs'].sum():,.1f}", f"Hrs {day:%d-%m}"),
+            (f"{mon['hrs'].sum():,.1f}", f"Hrs {day:%b-%y}"),
+            (f"{ytd['hrs'].sum():,.1f}", "Hrs YTD"),
+        ],
+        "details": details,
     }
 # ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
