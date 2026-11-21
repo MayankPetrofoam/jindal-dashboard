@@ -3463,8 +3463,7 @@ return {
                 "extra": " | ".join(parts) if parts else "No unapproved orders",
                 "details": [("📋 Not Approved Orders", det_list)]
             }
-
-    if calc == "order_serviceability":
+if calc == "order_serviceability":
             if total_left == 0:
                 return None
             approved = int(orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED").sum())
