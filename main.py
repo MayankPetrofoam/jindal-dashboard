@@ -3439,6 +3439,30 @@ def compute_kpi(df, spec, day):
             return {"value": f"{total_left} Orders", "desc": "Total Pending",
                     "color": RED if total_left > 0 else BLUE, "extra": " | ".join(parts) + "<br>" + line2,
                     "details": [("📋 All Pending Orders", det_list)]}
+    if calc == "order_not_approved":
+        tab_col = "TAB_NAME" if "TAB_NAME" in orders.columns else "TAB_GID"
+        fin_cols = [c for c in orders.columns if "FINANCE" in str(c).upper()]
+        na_mask = pd.Series(False, index=orders.index)
+        for fc in fin_cols:
+            na_mask = na_mask | (orders[fc].astype(str).str.strip().str.upper() == "NOT APPROVED")
+        
+        na_orders = orders[na_mask].copy()
+        parts = [f"{t}: {len(g)}" for t, g in na_orders.groupby(tab_col)]
+        
+        det_list = []
+        for _, r in na_orders.iterrows():
+            party = r.get("PARTY", r.get("PARTY NAME", "Unknown"))
+            ord_no = r.get("ORDER NO", r.get("ORDER NO.", ""))
+            reason = r.get("REASON", "")
+            det_list.append((f"{r.get(tab_col, '')} - Order {ord_no}", f"{party} ({reason})"))
+            
+return {
+            "value": f"{len(na_orders)} Orders",
+            "desc": "Finance Approval Pending",
+            "color": RED if len(na_orders) > 0 else BLUE,
+            "extra": " | ".join(parts) if parts else "No unapproved orders",
+            "details": [("📋 Not Approved Orders", det_list)]
+        }
 
         if calc == "order_serviceability":
             if total_left == 0:
@@ -4432,6 +4456,7 @@ KPI_SOURCES = {
     ("order", "Orders Left (No. / Qty)"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_pending"},
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
     ("order", "Serviceability %"): {"sheet": "serviceability_live", "calc": "serviceability_live"},
+    ("order", "Orders Not Approved"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_not_approved"},
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
@@ -4596,6 +4621,7 @@ DEPARTMENTS = [
             ("Orders Left (No. / Qty)", "Total pending combined"),
             ("Current Schedule", "Aaj ke orders"),
             ("Serviceability %", "Approved vs Total"),
+            ("Orders Not Approved", "Finance approval pending"),
         ],
         "links": [
             ("📊 Order Dispatch Console (Power BI)", None),
