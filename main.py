@@ -3442,10 +3442,10 @@ def compute_kpi(df, spec, day):
     if calc == "order_not_approved":
         tab_col = "TAB_NAME" if "TAB_NAME" in orders_all.columns else "TAB_GID"
         fin_cols = [c for c in orders_all.columns if "FINANCE" in str(c).upper()]
-        na_mask = pd.Series(False, index=orders.index)
+        na_mask = pd.Series(False, index=orders_all.index)
         for fc in fin_cols:
-            na_mask = na_mask | (orders[fc].astype(str).str.strip().str.upper() == "NOT APPROVED")
-        
+            na_mask = na_mask | (orders_all[fc].astype(str).str.strip().str.upper() == "NOT APPROVED")
+
         na_orders = orders_all[na_mask].copy()
         parts = [f"{t}: {len(g)}" for t, g in na_orders.groupby(tab_col)]
         
