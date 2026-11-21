@@ -4250,7 +4250,7 @@ SHEETS = {
     },
     "tdi_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi(1).xlsx?v=9", # <-- Yahan exact naam aur version dala hai
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/tdi.xlsx", # <-- Yahan exact naam aur version dala hai
         "sheet_name": "tdi",
         "date_col": "Date",
         "dayfirst": True,
