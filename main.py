@@ -3669,31 +3669,48 @@ return {
         return {"value": _inr(d["amount"].sum()), "desc": txt, "color": BLUE,
                 "extra": f"{d['item'].nunique():,} items in stock on this date"}
 
-    if calc == "stock_dead":
-        days = spec.get("dead_days", 90)
-        cutoff = day - datetime.timedelta(days=days)
-        g = (df[df["_date"] <= day]
-            .groupby(["group", "item", "_date"], as_index=False)
-            .agg(qty=("qty", "sum"), amount=("amount", "sum")))
-        today = g[g["_date"] == day].set_index(["group", "item"])[["qty", "amount"]]
-        if today.empty:
+if calc == "stock_dead":
+        import re
+        # Sheet ke headers (jaise 'Balance \n 09.10.26' aur '18.10.26') se dates nikalna
+        date_cols = {}
+        for col in df.columns:
+            m = re.search(r'(\d{2}\.\d{2}\.\d{2,4})', str(col))
+            if m:
+                dt = pd.to_datetime(m.group(1), dayfirst=True, errors="coerce")
+                if pd.notna(dt):
+                    date_cols[dt.date()] = col
+
+        if not date_cols:
             return None
-        first = g.groupby(["group", "item"])["_date"].min()
-        win = g[g["_date"] >= cutoff].groupby(["group", "item"]).agg(
-            qmin=("qty", "min"), qmax=("qty", "max"))
-        s = win.join(today, how="inner")
-        s["first"] = first.reindex(s.index)
-        dead = s[(s["qmin"] == s["qmax"]) & (s["qmax"] > 0)
-                & s["first"].apply(lambda x: x <= cutoff)]
-        total = today["amount"].sum()
-        dv, dq = float(dead["amount"].sum()), float(dead["qty"].sum())
-        by = dead.groupby(level=0)["amount"].sum().sort_values(ascending=False)
-        txt = " | ".join(f"{k.title()}: {_inr(v)}" for k, v in by.head(3).items())
-        pct = f"{dv / total * 100:.1f}%" if total else "0%"
-        return {"value": f"{_inr(dv)} | {dq:,.0f} Qty",
-                "desc": f"{len(dead):,} items, {days}+ din se koi movement nahi ({pct} of stock)",
-                "color": RED if len(dead) else BLUE,
-                "extra": txt or "Koi dead stock nahi"}
+
+        # Selected date (day) agar sheet mein hai to wo lein, warna latest available date lein
+        target_date = day if day in date_cols else max(date_cols.keys())
+        target_col = date_cols[target_date]
+
+        d = df.copy()
+        d["qty_num"] = pd.to_numeric(d[target_col], errors="coerce").fillna(0)
+        # Section headers (jahan SR. NO. khali hai) aur NIL/0 items ko hatana
+        sr_col = [c for c in d.columns if "SR" in str(c).upper()]
+        if sr_col:
+            d = d[d[sr_col[0]].notna()]
+        dead = d[(d["qty_num"] > 0) & (d["MATERIAL"].notna())].copy()
+
+        dq = float(dead["qty_num"].sum())
+        if "Category" in dead.columns:
+            by = dead.groupby(dead["Category"].fillna("Other"))["qty_num"].sum().sort_values(ascending=False)
+            txt = " | ".join(f"{k}: {v:,.0f}" for k, v in by.head(3).items())
+        else:
+            txt = ""
+
+        det_list = [(f"{r['MATERIAL']}", f"{int(r['qty_num'])} {r.get('UOM', '')}") for _, r in dead.iterrows()]
+
+        return {
+            "value": f"{len(dead)} Items | {dq:,.0f} Qty",
+            "desc": f"As on {target_date.strftime('%d-%m-%Y')} (Sheet Stock)",
+            "color": RED if len(dead) else BLUE,
+            "extra": txt or "Koi dead stock nahi",
+            "details": [("📦 Dead Stock Items", det_list)]
+        }
 
     # ---------- MAINTENANCE ----------
     # ---------- MAINTENANCE ----------
