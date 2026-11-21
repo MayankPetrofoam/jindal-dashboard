@@ -4502,12 +4502,12 @@ KPI_SOURCES = {
 MISSING_SOURCE = {
     ("purchase", "Goods Below MS"): "Needs a stock tab with item, current stock and minimum stock columns "
                                     "(not in the PO 'Consolidated' tab)",
-}
     ("production", "Average Manpower (Section-wise)"): "Section-wise manpower sheet connect hona baaki hai",
     ("production", "Targets"): "Production target sheet connect hona baaki hai",
     ("finance", "Dispute Cases"): "Dispute cases ki sheet connect hona baaki hai",
     ("other", "Material Returns"): "Material returns ki sheet connect hona baaki hai",
     ("other", "Capacity Utilisation"): "Max capacity + actual production ka data connect hona baaki hai",
+}
 DEFAULT_MISSING = "Source tab not provided yet (the PO STATUS sheet only holds purchase-order rows)"
 
 # ====================================================================
