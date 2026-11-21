@@ -3456,13 +3456,13 @@ def compute_kpi(df, spec, day):
             reason = r.get("REASON", "")
             det_list.append((f"{r.get(tab_col, '')} - Order {ord_no}", f"{party} ({reason})"))
             
-    return {
-        "value": f"{len(na_orders)} Orders",
-        "desc": "Finance Approval Pending",
-        "color": RED if len(na_orders) > 0 else BLUE,
-        "extra": " | ".join(parts) if parts else "No unapproved orders",
-        "details": [("📋 Not Approved Orders", det_list)]
-    }
+        return {
+            "value": f"{len(na_orders)} Orders",
+            "desc": "Finance Approval Pending",
+            "color": RED if len(na_orders) > 0 else BLUE,
+            "extra": " | ".join(parts) if parts else "No unapproved orders",
+            "details": [("📋 Not Approved Orders", det_list)]
+        }
     if calc == "order_serviceability":
         if total_left == 0:
             return None
@@ -3669,7 +3669,7 @@ def compute_kpi(df, spec, day):
                 "extra": f"{d['item'].nunique():,} items in stock on this date"}
 
     if calc == "stock_dead":
-        import re
+
         # Sheet ke headers (jaise 'Balance \n 09.10.26' aur '18.10.26') se dates nikalna
         date_cols = {}
         for col in df.columns:
