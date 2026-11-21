@@ -3464,7 +3464,7 @@ return {
             "details": [("📋 Not Approved Orders", det_list)]
         }
 
-if calc == "order_serviceability":
+   if calc == "order_serviceability":
             if total_left == 0:
                 return None
             approved = int(orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED").sum())
@@ -3474,7 +3474,7 @@ if calc == "order_serviceability":
 
     # ---------- FOAMING: STATIC VALUES (Temporary) ----------
     # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
-    if calc == "sum_consumption":
+   if calc == "sum_consumption":
         col = spec.get("col", "CONS")
         if col not in df.columns:
             raise DataError(f"Column '{col}' not found.")
