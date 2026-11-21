@@ -3456,7 +3456,7 @@ def compute_kpi(df, spec, day):
             reason = r.get("REASON", "")
             det_list.append((f"{r.get(tab_col, '')} - Order {ord_no}", f"{party} ({reason})"))
             
-return {
+      return {
             "value": f"{len(na_orders)} Orders",
             "desc": "Finance Approval Pending",
             "color": RED if len(na_orders) > 0 else BLUE,
