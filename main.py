@@ -220,6 +220,27 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+# ---------- Cards ki height barabar (department-wise) ----------
+st.markdown(
+    """
+    <style>
+    /* marker ko chhupa do (jagah na ghere) */
+    div[data-testid="stElementContainer"]:has(span[class^="dept-"]),
+    div[data-testid="element-container"]:has(span[class^="dept-"]) { display: none !important; }
+
+    /* PRODUCTION: 4 cards, sab ki height barabar */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.dept-production)
+      div[data-testid="stVerticalBlockBorderWrapper"] {
+        min-height: 480px !important;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(.dept-production)
+      div[data-testid="stVerticalBlockBorderWrapper"] > div {
+        min-height: inherit !important;   /* View Full Details ko neeche rakhta hai */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ====================================================================
 # 2b. PROFESSIONAL THEME (upar wali CSS ke upar override; purani CSS jyon ki tyon hai)
@@ -7030,6 +7051,7 @@ def render_kpi(dept_key, idx, title, desc):
 
 
 def render_department_button(dept):
+st.markdown(f'<span class="dept-{dept["key"]}"></span>', unsafe_allow_html=True)
     label = f"{dept['icon']} {dept['name']}"
     with st.popover(label, use_container_width=True):
         st.caption("Open detailed dashboard / sheet")
