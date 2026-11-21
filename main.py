@@ -7051,7 +7051,7 @@ def render_kpi(dept_key, idx, title, desc):
 
 
 def render_department_button(dept):
-st.markdown(f'<span class="dept-{dept["key"]}"></span>', unsafe_allow_html=True)
+    st.markdown(f'<span class="dept-{dept["key"]}"></span>', unsafe_allow_html=True)
     label = f"{dept['icon']} {dept['name']}"
     with st.popover(label, use_container_width=True):
         st.caption("Open detailed dashboard / sheet")
