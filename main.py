@@ -4503,6 +4503,11 @@ MISSING_SOURCE = {
     ("purchase", "Goods Below MS"): "Needs a stock tab with item, current stock and minimum stock columns "
                                     "(not in the PO 'Consolidated' tab)",
 }
+    ("production", "Average Manpower (Section-wise)"): "Section-wise manpower sheet connect hona baaki hai",
+    ("production", "Targets"): "Production target sheet connect hona baaki hai",
+    ("finance", "Dispute Cases"): "Dispute cases ki sheet connect hona baaki hai",
+    ("other", "Material Returns"): "Material returns ki sheet connect hona baaki hai",
+    ("other", "Capacity Utilisation"): "Max capacity + actual production ka data connect hona baaki hai",
 DEFAULT_MISSING = "Source tab not provided yet (the PO STATUS sheet only holds purchase-order rows)"
 
 # ====================================================================
@@ -4571,6 +4576,8 @@ DEPARTMENTS = [
             ("Bonded", "Bonded production (A Shed)"),
             ("Rollpack & Yield", "Rollpack production"),
             ("SCRAP", "Scrap production (O Shed)"),
+            ("Average Manpower (Section-wise)", "Daily average workers per section"),
+            ("Targets", "Planned vs actual production"),
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
@@ -4670,6 +4677,7 @@ DEPARTMENTS = [
             ("Total Due (Drs & Crs)", "Overdue amounts"),
             ("CREDIT NOTE (CN)", "Credit note, month wise"),
             ("DEBIT NOTE (DN)", "Debit note, month wise"),
+            ("Dispute Cases", "Count & value (₹)"),
         ],
         "links": [
             ("📊 Finance Dashboard (Power BI)", None),
@@ -4702,6 +4710,8 @@ DEPARTMENTS = [
             ("Audits", "Open audit points"),
             ("Customer-wise Target vs Sale", "Overall achievement"),
             ("Customer Complaints", "Total complaints, start se ab tak"),
+            ("Material Returns", "Rejected goods returned: qty / value"),
+            ("Capacity Utilisation", "Actual production / max capacity × 100"),
         ],
         "links": [
             ("📊 Freight Report (Power BI)", "https://app.powerbi.com/groups/me/reports/43dfa27d-52db-4423-b40d-2732870ef9f2/d02bed28a39f2f8e3034?experience=power-bi"),
