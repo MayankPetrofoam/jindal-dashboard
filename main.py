@@ -3456,22 +3456,21 @@ def compute_kpi(df, spec, day):
             reason = r.get("REASON", "")
             det_list.append((f"{r.get(tab_col, '')} - Order {ord_no}", f"{party} ({reason})"))
             
-      
-        return {
-                "value": f"{len(na_orders)} Orders",
-                "desc": "Finance Approval Pending",
-                "color": RED if len(na_orders) > 0 else BLUE,
-                "extra": " | ".join(parts) if parts else "No unapproved orders",
-                "details": [("📋 Not Approved Orders", det_list)]
-            }
+      return {
+            "value": f"{len(na_orders)} Orders",
+            "desc": "Finance Approval Pending",
+            "color": RED if len(na_orders) > 0 else BLUE,
+            "extra": " | ".join(parts) if parts else "No unapproved orders",
+            "details": [("📋 Not Approved Orders", det_list)]
+        }
 
     if calc == "order_serviceability":
-            if total_left == 0:
-                return None
-            approved = int(orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED").sum())
-            pct = approved / total_left * 100
-            return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total_left} Total",
-                    "color": BLUE if pct > 80 else AMBER}
+        if total_left == 0:
+            return None
+        approved = int(orders["FINANCE"].astype(str).str.strip().str.upper().eq("APPROVED").sum())
+        pct = approved / total_left * 100
+        return {"value": f"{pct:.1f}%", "desc": f"{approved} Approved / {total_left} Total",
+                "color": BLUE if pct > 80 else AMBER}
 
     # ---------- FOAMING: STATIC VALUES (Temporary) ----------
     # ---------- FOAMING: TONNAGE (CONSUMPTION) ----------
