@@ -2970,6 +2970,8 @@ def compute_kpi(df, spec, day):
         return maint_pm_card(df, day)
     if calc == "maint_downtime":
         return maint_downtime_card(df, day)
+    if calc == "complaints":
+        return complaints_card(df, day)
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
     if calc == "tonnage_daily":
         return tonnage_card(day)
@@ -4004,6 +4006,11 @@ SHEETS = {
         "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRvqJtmKH0joq5-PXPaoxw1_x7mCTjCOK1RjnpU9ssGA4c5Xfp0sUhek56whkI2XNAxgXonXPqC75tF/pubhtml",
         "worksheet": "0",
     },
+    "quality_complaints": {
+        "type": "complaints",
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vT7oigcyMG9P2uflYPMo_i75-IQW1dBS2AVeOqW8qT0bDJ6Drb2CUaluFGS_Gi_1vq6viA22BvYeoyY/pubhtml",
+        "worksheet": "1131499541",          # apne tab ka gid
+    },
     "finance_due_m": {
         "type": "excel",
         "static": True,
@@ -4372,6 +4379,10 @@ KPI_SOURCES = {
         "sheet": "freight_data",
         "calc": "freight_mtd",
     },
+    ("other", "Customer Complaints"): {
+        "sheet": "quality_complaints",
+        "calc": "complaints",
+    },
     ("finance", "Receivable / Payable Days"): {
         "sheet": "finance_drs_crs_new",
         "calc": "finance_recv_pay_days",
@@ -4669,6 +4680,7 @@ DEPARTMENTS = [
             ("Quality", "Pass rate"),
             ("Audits", "Open audit points"),
             ("Customer-wise Target vs Sale", "Overall achievement"),
+            ("Customer Complaints", "Total complaints, start se ab tak"),
         ],
         "links": [
             ("📊 Freight Report (Power BI)", "https://app.powerbi.com/groups/me/reports/43dfa27d-52db-4423-b40d-2732870ef9f2/d02bed28a39f2f8e3034?experience=power-bi"),
@@ -4885,6 +4897,11 @@ def get_sheet(name):
     errors = st.session_state.setdefault("_errors", {})
     good = st.session_state.setdefault("_last_good", {})
     try:
+        if cfg.get("type") == "complaints":
+            df, fetched = _fetch_complaints_cached(cfg["url"], str(cfg.get("worksheet", "0")))
+            good[name] = (df, fetched)
+            errors.pop(name, None)
+            return df, None, fetched
         if cfg.get("type") == "gviz":
             base = cfg["url"].split("/pub")[0]
             csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
@@ -5888,6 +5905,139 @@ def maint_downtime_card(df, day):
         "details": details,
     }
 # ====================================================================
+# OTHERS: CUSTOMER COMPLAINTS
+# ====================================================================
+def _cmp_date(s):
+    s = re.sub(r"\s+", "", str(s))
+    m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$", s)
+    if not m:
+        return None
+    d, mo, y = int(m[1]), int(m[2]), int(m[3])
+    if y < 100:
+        y += 2000
+    try:
+        return datetime.date(y, mo, d)
+    except ValueError:
+        return None
+
+
+@st.cache_data(ttl=REFRESH_SECONDS - 5, show_spinner=False)
+def _fetch_complaints_cached(url, gid):
+    base = url.split("/pub")[0]
+    data = _http_get(f"{base}/pub?output=csv&gid={gid}")
+    if data.lstrip()[:1] == b"<":
+        raise PermissionError("Complaint sheet publish nahi hui. File > Share > Publish to web karein aur gid check karein.")
+    rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
+    hdr = next((i for i, r in enumerate(rows)
+                if any(c.strip().upper() == "DATE" for c in r) and any("COMPLAINT" in c.upper() for c in r)), None)
+    if hdr is None:
+        raise DataError("Complaint sheet mein 'DATE' aur 'COMPLAINT' wali header row nahi mili.")
+    df = _frame_from_rows(rows[hdr:])
+    df.columns = [re.sub(r"\s+", " ", str(c)).strip().upper() for c in df.columns]
+    df["_date"] = df["DATE"].map(_cmp_date)
+    df = df[df["_date"].notna()].copy()
+    if df.empty:
+        raise DataError("Complaint sheet mein koi valid date nahi mili.")
+    return df, datetime.datetime.now(IST)
+
+
+CMP_ISSUES = [
+    ("Taper", ("TAPER",)),
+    ("Tearing", ("TEAR",)),
+    ("Stamping / Marking", ("STAMP", "MARKING")),
+    ("Size / Thickness", ("SIZE", "THICK")),
+    ("Packing", ("PACK",)),
+    ("Side not clean", ("SIDE NOT",)),
+    ("Colour / Hardness / Soft", ("COLOUR", "COLOR", "HARD", "SOFT")),
+    ("Yellowness", ("YELLOW",)),
+    ("Wave cutting", ("WAVE",)),
+    ("Damage", ("DAMAGE",)),
+    ("Weight", ("WEIGHT",)),
+]
+
+
+def _cmp_issue_labels(text):
+    t = str(text).upper()
+    out = [name for name, keys in CMP_ISSUES if any(k in t for k in keys)]
+    return out or ["Other"]
+
+
+def _cmp_grade(p):
+    s = str(p).strip().upper()
+    s = re.sub(r"(\d)(?=[A-Z])", r"\1 ", s)
+    s = re.sub(r"\s*\+", "+", s)
+    return re.sub(r"\s+", " ", s)
+
+
+def complaints_card(df, day):
+    import html as _html
+    esc = lambda x: _html.escape(str(x))
+    need = ["PRODUCT NAME", "CUSTOMER", "COMPLAINT", "PREVENTIVE ACTION"]
+    miss = [c for c in need if c not in df.columns]
+    if miss:
+        return {"value": "Config error", "desc": f"Columns nahi mile: {miss}. Mile hue: {list(df.columns)}", "color": RED}
+
+    w = df[(df["_date"] <= day)].copy()
+    w["comp"] = w["COMPLAINT"].astype(str).str.strip()
+    w = w[w["comp"] != ""]
+    if w.empty:
+        return {"value": "0 Complaints", "desc": "Is date tak koi complaint nahi", "color": BLUE}
+
+    w["action"] = w["PREVENTIVE ACTION"].astype(str).str.strip()
+    w["done"] = w["action"] != ""
+    w["grade"] = w["PRODUCT NAME"].map(_cmp_grade)
+    w["cust"] = w["CUSTOMER"].astype(str).str.strip().str.title()
+    w = w.sort_values("_date", ascending=False)
+
+    total, done = len(w), int(w["done"].sum())
+    pending = total - done
+    first, last = w["_date"].min(), w["_date"].max()
+
+    # issue-wise count (ek complaint mein 2 issue ho to dono ginte hain)
+    issue_cnt = {}
+    for t in w["comp"]:
+        for lab in _cmp_issue_labels(t):
+            issue_cnt[lab] = issue_cnt.get(lab, 0) + 1
+    issues = sorted(issue_cnt.items(), key=lambda x: -x[1])
+
+    g = w[w["grade"] != ""]["grade"].value_counts()
+    c = w[~w["cust"].str.lower().isin(["", "nan", "none"])]["cust"].value_counts()
+    top = lambda s, n=3: " , ".join(f"{k} ({v})" for k, v in s.head(n).items()) or "-"
+    top_issues = " , ".join(f"{k} ({v})" for k, v in issues[:3])
+
+    # month-wise
+    w["ym"] = w["_date"].map(lambda d: (d.year, d.month))
+    mrows = [(f"{datetime.date(y, m, 1):%b-%y}", f"{len(f)} complaints | {int(f['done'].sum())} action taken | {len(f) - int(f['done'].sum())} pending")
+             for (y, m), f in sorted(w.groupby("ym"), key=lambda x: x[0], reverse=True)]
+    mrows.append(("TOTAL", f"{total} complaints | {done} action taken | {pending} pending"))
+
+    full = [(f"{r['_date']:%d-%m-%y} · {esc(r['grade'])} · {esc(r['cust'] or '-')}",
+             f"❌ {esc(r['comp'])}<br>{'✅ ' + esc(r['action']) if r['done'] else '⏳ Action pending'}")
+            for _, r in w.iterrows()]
+
+    return {
+        "value": f"{total} Complaints",
+        "desc": f"{first:%d-%b-%y} se {day:%d-%b-%y} tak (last complaint {last:%d-%b-%y})",
+        "color": RED if pending else BLUE,
+        "metrics": [
+            (f"{total}", "Total Complaints"),
+            (f"{done}", "Action Taken"),
+            (f"{pending}", "Action Pending"),
+        ],
+        "sections": [("📌 Key Highlights", [
+            ("Top Issue", top_issues),
+            ("Top Grades", top(g)),
+            ("Top Customers / Locations", top(c)),
+        ])],
+        "details": [
+            ("📊 Month-wise", mrows),
+            ("🧩 Issue-wise", [(k, f"{v} complaints") for k, v in issues]),
+            ("🏷 Grade-wise", [(esc(k), f"{v} complaints") for k, v in g.items()]),
+            ("📍 Customer-wise", [(esc(k), f"{v} complaints") for k, v in c.items()]),
+            (f"📋 All Complaints ({total})", full),
+        ],
+    }
+# ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
 #   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
 #   Due % = Total Due Amt (us month ka) / Total O/S (us month ka) * 100
@@ -6688,6 +6838,8 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = [datetime.datetime.now(IST).date()]
             else:
                 dates = available_dates(df)
+            if spec.get("calc") == "complaints":
+                dates = [datetime.datetime.now(IST).date()]
             # HR: dates sirf wo jin din attendance / OT bhara hai (aaj ki date nahi)
             if str(spec.get("calc", "")).startswith("hr_"):
                 _hd = _hr_dates(df)
@@ -6805,6 +6957,9 @@ def render_kpi(dept_key, idx, title, desc):
             )
 
             month_dates = [d for d in dates if (d.year, d.month) == chosen_m]
+            if not month_dates and spec.get("calc") == "complaints":
+                _ms, _me = _month_range(datetime.date(chosen_m[0], chosen_m[1], 1))
+                month_dates = [min(_me, datetime.datetime.now(IST).date())]
             
             if not month_dates and (spec.get("calc") in ("lb_stock", "dead_stock", "inv_dead_stock") or spec.get("sheet") == "dead_stock_store"):
                 month_dates = [datetime.datetime.now(IST).date()]
@@ -6823,6 +6978,8 @@ def render_kpi(dept_key, idx, title, desc):
 
             # Yahan is_min_stock add karna zaroori tha
             hide_date = is_pillow or is_finance or is_foaming or is_min_stock or is_note or (spec.get("calc", "").startswith("sales_") and not spec.get("show_date"))
+            if spec.get("calc") == "complaints":
+                hide_date = True
 
             if hide_date:
                 chosen = month_dates[0]
