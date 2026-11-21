@@ -3456,13 +3456,14 @@ def compute_kpi(df, spec, day):
             reason = r.get("REASON", "")
             det_list.append((f"{r.get(tab_col, '')} - Order {ord_no}", f"{party} ({reason})"))
             
-      return {
-            "value": f"{len(na_orders)} Orders",
-            "desc": "Finance Approval Pending",
-            "color": RED if len(na_orders) > 0 else BLUE,
-            "extra": " | ".join(parts) if parts else "No unapproved orders",
-            "details": [("📋 Not Approved Orders", det_list)]
-        }
+      
+        return {
+                "value": f"{len(na_orders)} Orders",
+                "desc": "Finance Approval Pending",
+                "color": RED if len(na_orders) > 0 else BLUE,
+                "extra": " | ".join(parts) if parts else "No unapproved orders",
+                "details": [("📋 Not Approved Orders", det_list)]
+            }
 
     if calc == "order_serviceability":
             if total_left == 0:
