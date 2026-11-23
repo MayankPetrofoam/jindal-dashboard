@@ -3022,10 +3022,86 @@ def pending_vs_completed_card(sheet_key, day, label):
             (f"✅ Completed ({len(done)})", [(r["name"], "Done") for _, r in done.iterrows()] or [("Abhi koi nahi", "-")]),
         ],
     }
+_DSP_ORDER = ["April", "May", "June", "July", "August", "September", "October", "November", "December",
+              "January", "February", "March"]
+
+
+def _dsp_prepare(df):
+    w = df.copy()
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+    low = {c.lower(): c for c in w.columns}
+    party, month = low.get("party name"), low.get("month")
+    c1, c2 = low.get("91-180 days"), low.get("181-270 days")
+    if not (party and month and c1 and c2):
+        return None, f"Columns nahi mile: {list(w.columns)}"
+    out = pd.DataFrame({
+        "party": w[party].astype(str).str.strip(),
+        "month": w[month].astype(str).str.strip().str.title(),
+        "a": pd.to_numeric(w[c1].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0.0),
+        "b": pd.to_numeric(w[c2].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0.0),
+    })
+    out = out[(out["party"] != "") & (out["party"].str.lower() != "nan")]
+    return out, None
+
+
+def _dsp_month_dates(df):
+    """Month dropdown ke liye: sheet ke har month ki ek date (FY April-26 se March-27)."""
+    w, _e = _dsp_prepare(df)
+    if w is None:
+        return [datetime.datetime.now(IST).date()]
+    out = []
+    for m in w["month"].unique():
+        if m in _DSP_ORDER:
+            n = _DSP_ORDER.index(m) + 4
+            n = n - 12 if n > 12 else n
+            out.append(datetime.date(2026 if n >= 4 else 2027, n, 1))
+    return sorted(out, reverse=True) or [datetime.datetime.now(IST).date()]
+
+
+def finance_dispute_card(day):
+    df, err, _ = get_sheet("dispute_cases")
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, err = _dsp_prepare(df)
+    if w is None:
+        return {"value": "Config error", "desc": err, "color": RED}
+    mname = day.strftime("%B")
+    m = w[w["month"] == mname].copy()
+    if m.empty:
+        return {"value": "0", "desc": f"{mname} ka dispute data nahi hai", "color": GREY}
+    m["t"] = m["a"] + m["b"]
+    tot, ta, tb = m["t"].sum(), m["a"].sum(), m["b"].sum()
+    ca, cb = int((m["a"] > 0).sum()), int((m["b"] > 0).sum())
+    cases = int((m["t"] > 0).sum())
+    top = m[m["t"] > 0].sort_values("t", ascending=False).head(15)
+    top_rows = [(r.party, f"{_cm_amt(r.t)} (91-180: {_cm_amt(r.a)} | 181-270: {_cm_amt(r.b)})") for r in top.itertuples()]
+    trend = []
+    for mn in _DSP_ORDER:
+        x = w[w["month"] == mn]
+        if x.empty:
+            continue
+        t = x["a"] + x["b"]
+        trend.append((mn, f"{_cm_amt(t.sum())} | {int((t > 0).sum())} cases"))
+    return {
+        "value": _cm_amt(tot),
+        "desc": f"Dispute cases · {mname} · {cases} parties",
+        "color": BLUE,
+        "metrics": [
+            (_cm_amt(tot), "Total Value"), (f"{cases}", "Total Cases"),
+            (_cm_amt(ta), "91-180 Days"), (f"{ca}", "91-180 Cases"),
+            (_cm_amt(tb), "181-270 Days"), (f"{cb}", "181-270 Cases"),
+        ],
+        "details": [
+            (f"🔝 Top 15 Parties · {mname}", top_rows),
+            ("📊 Month-wise (Value | Cases)", trend),
+        ],
+    }
 
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "finance_dispute":
+        return finance_dispute_card(day)
     if calc == "projects_target":
         return pending_vs_completed_card("projects_data", day, "Projects")
     if calc == "rnd_pending":
@@ -4191,6 +4267,13 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+"dispute_cases": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/dispute_cases.xlsx",
+        "sheet_name": "Sheet1",
+        "date_col": "Party Name",
+    },
 "cate_1": {
         "type": "excel",
         "static": True,
@@ -4570,6 +4653,7 @@ KPI_SOURCES = {
         "sheet": "cn_sheet",      # Yahan apni CN wali sheet ka naam daalein
         "calc": "credit_note",
     },
+    ("finance", "Dispute Cases"): {"sheet": "dispute_cases", "calc": "finance_dispute"},
     ("finance", "DEBIT NOTE (DN)"): {
         "sheet": "dn_sheet",      # Yahan apni DN wali sheet ka naam daalein
         "calc": "debit_note",
@@ -7235,6 +7319,8 @@ def render_kpi(dept_key, idx, title, desc):
                 if not _p.empty:
                     dates = sorted(set(_p["_date"].dropna().unique()), reverse=True)
             # DRS & CRS month-wise: sheet ke har month ki ek date, taaki dropdown mein saare months aayein
+            if spec.get("calc") == "finance_dispute":
+                dates = _dsp_month_dates(df)
             if spec.get("calc") == "finance_drs_crs_month":
                 dates = [datetime.datetime.now(IST).date()]     # <- pehle _drs_crs_bal_month_dates(df) tha
             if spec.get("calc") == "maint_pm":
