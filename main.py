@@ -3104,9 +3104,9 @@ def finance_dispute_card(day):
 HR_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
 HR_OT_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
 HR_STAFF_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
-HR_TAB_MANPOWER = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
-HR_TAB_OVERTIME = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
-HR_TAB_STAFF = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_TAB_MANPOWER = "DEPTT"
+HR_TAB_OVERTIME = "OVERTIME"
+HR_TAB_STAFF = "MASTER"
 
 _HR_MON = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
 _HR_FIX = {"PROD MANGER": "PROD MANAGER", "STICHING COVERING": "STICHING & COVERING", "STICHING & COVRING": "STICHING & COVERING",
@@ -4897,9 +4897,6 @@ KPI_SOURCES = {
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_overtime"},
     ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_dept"},
     ("hr", "Staff / Helper / Supervisor %"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_staff"},
-    ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
-    ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
-    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept_csv"},
 
 
     ("foaming", "Tonnage Foaming"): {
