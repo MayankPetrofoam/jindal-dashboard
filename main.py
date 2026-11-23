@@ -3004,10 +3004,75 @@ def pending_vs_completed_card(sheet_key, day, label):
             (f"✅ Completed ({len(done)})", [(r["name"], "Done") for _, r in done.iterrows()] or [("Abhi koi nahi", "-")]),
         ],
     }
+import csv, io, re, calendar, datetime, requests
+import pandas as pd
+
+HR_MASTER_URL = "https://raw.githubusercontent.com/<user>/<repo>/main/hr_master.csv"  # <- apna URL
+_HR_MONTHS = {"JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,"JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12}
+_HR_DEPT_FIX = {"PROD MANGER":"PROD MANAGER","STICHING COVERING":"STICHING & COVERING","BAILLING":"BAILING",
+    "P P C":"PPC","H R":"HR","FIRE ND SAFETY":"FIRE & SAFETY","FIRE &SAFETY":"FIRE & SAFETY",
+    "HOUSKEEPING":"HOUSE KEEPING","MATERIAL MOVMENT":"MATERIAL MOVEMENT","ECOM":"E COMMERCE","ACCOUNT":"ACCOUNTS"}
+
+def _hr_dept_name(s):
+    u = re.sub(r"\s+", " ", str(s).upper().replace(";", " ").replace(".", " ")).strip()
+    return _HR_DEPT_FIX.get(u, u)
+
+def _hr_val(v):
+    v = str(v).strip().replace(",", "")
+    return float(v) if re.fullmatch(r"-?\d+(\.\d+)?", v) else None
+
+@st.cache_data(ttl=600)
+def hr_master_df():
+    txt = requests.get(HR_MASTER_URL, timeout=30).content.decode("utf-8-sig")
+    out, cur, j = [], None, None
+    for r in csv.reader(io.StringIO(txt)):
+        c = [str(x).strip() for x in r]
+        m = re.search(r"DAILY\s*MAN\s*POWER\s*DETA\w*\s*\(?\s*([A-Z]+)\s*(\d{4})", " ".join(c).upper())
+        if m and m.group(1)[:3] in _HR_MONTHS:
+            cur, j = (int(m.group(2)), _HR_MONTHS[m.group(1)[:3]]), None
+            continue
+        if cur is None:
+            continue
+        if j is None:
+            j = next((k for k in range(len(c) - 2) if c[k] == "1" and c[k+1] == "2" and c[k+2] == "3"), None)
+            continue
+        name = _hr_dept_name(c[0]) if c else ""
+        if name == "TOTAL":
+            cur, j = None, None
+            continue
+        if not name or name.startswith("ABSENT"):
+            continue
+        tgt = _hr_val(c[3]) if len(c) > 3 else None
+        for d in range(1, calendar.monthrange(cur[0], cur[1])[1] + 1):
+            k = j + d - 1
+            v = _hr_val(c[k]) if k < len(c) else None
+            if v is not None:
+                out.append({"_date": datetime.date(cur[0], cur[1], d), "DEPT": name,
+                            "MANPOWER": v, "TARGET": tgt or 0.0})
+    df = pd.DataFrame(out)
+    if df.empty:
+        return df
+    df = df.groupby(["_date", "DEPT"], as_index=False).agg(MANPOWER=("MANPOWER","max"), TARGET=("TARGET","max"))
+    tot = df.groupby("_date")["MANPOWER"].sum()
+    return df[df["_date"].isin(tot[tot > 0].index)]
+
+def hr_dept_csv_card(day):
+    df = hr_master_df()
+    d = df[df["_date"] == day] if len(df) else df
+    if d.empty:
+        return {"value": "No data", "desc": "Is date ka data HR master file me nahi hai", "color": "#9ca3af"}
+    d = d.sort_values("MANPOWER", ascending=False)
+    present, target = int(d["MANPOWER"].sum()), int(d["TARGET"].sum())
+    rows = [f'{r.DEPT}: {int(r.MANPOWER)}' + (f' / {int(r.TARGET)}' if r.TARGET else '') for r in d.itertuples()]
+    return {"value": f"{present}", "desc": "Dept-wise manpower (present / required)", "color": "#2563eb",
+            "metrics": [("Present", present), ("Required", target or "-"), ("Departments", len(d))],
+            "details": {"Dept-wise": rows}}
 
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "hr_dept_csv":
+        return hr_dept_csv_card(day)
     if calc == "projects_target":
         return pending_vs_completed_card("projects_data", day, "Projects")
     if calc == "rnd_pending":
@@ -4570,7 +4635,7 @@ KPI_SOURCES = {
     ("sales", "Category Mix (Kgs)"): {"sheet": "prod_summary", "calc": "category_mix_kgs"},
     ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
-    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept"},
+    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "hr_dept_csv": "hr_dept"},
 
     ("foaming", "Tonnage Foaming"): {
         "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
@@ -7148,6 +7213,9 @@ def render_kpi(dept_key, idx, title, desc):
             if spec.get("calc") == "complaints":
                 dates = [datetime.datetime.now(IST).date()]
             # HR: dates sirf wo jin din attendance / OT bhara hai (aaj ki date nahi)
+     if spec.get("calc") == "hr_dept_csv":
+        _m = hr_master_df()
+        dates = sorted(_m["_date"].unique()) if len(_m) else []
             if str(spec.get("calc", "")).startswith("hr_"):
                 _hd = _hr_dates(df)
                 if _hd:
