@@ -2969,10 +2969,49 @@ def stock_balance_card(df, day, issued_col, label):
         "color": RED if balance < 0 else BLUE,
         "sections": sections,
     }
+def pending_vs_completed_card(sheet_key, day, label):
+    """Sheet mein name column + STATUS column chahiye. Status = Completed / Pending."""
+    df, err, _ = get_sheet(sheet_key)
+    if df is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    cols = [c for c in df.columns if not str(c).startswith("_")]
+    norm = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+    c_name = next((c for c in cols if norm(c) in ("PROJECT", "PROJECTNAME", "PRODUCT", "PRODUCTNAME", "ITEM", "NAME")), None)
+    c_stat = next((c for c in cols if norm(c) == "STATUS"), None)
+    if not c_name or not c_stat:
+        return {"value": "Config error", "desc": f"Name / Status column nahi mila. Columns: {cols}", "color": RED}
+
+    w = pd.DataFrame({"name": df[c_name].astype(str).str.strip(),
+                      "status": df[c_stat].astype(str).str.strip().str.upper()})
+    w = w[(w["name"] != "") & (w["name"].str.lower() != "nan")]
+    is_done = w["status"].isin(["COMPLETED", "COMPLETE", "DONE"])
+    done, pend = w[is_done], w[~is_done]
+    total = len(w)
+    pct = (len(done) / total * 100) if total else 0.0
+
+    return {
+        "value": f"{len(done)} / {total}",
+        "desc": f"{label} · {pct:.0f}% completed",
+        "color": BLUE if pct >= 80 else (AMBER if pct >= 50 else RED),
+        "metrics": [
+            (f"{pct:.0f}%", "Completed", "yield"),
+            (f"{total}", "Total"),
+            (f"{len(done)}", "Completed"),
+            (f"{len(pend)}", "Pending"),
+        ],
+        "details": [
+            (f"⏳ Pending ({len(pend)})", [(r["name"], r["status"] or "Pending") for _, r in pend.iterrows()] or [("Koi pending nahi", "✅")]),
+            (f"✅ Completed ({len(done)})", [(r["name"], "Done") for _, r in done.iterrows()] or [("Abhi koi nahi", "-")]),
+        ],
+    }
 
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "projects_target":
+        return pending_vs_completed_card("projects_data", day, "Projects")
+    if calc == "rnd_pending":
+        return pending_vs_completed_card("rnd_data", day, "Product development")
     if calc == "dead_stock_store":
         return dead_stock_store_card(day)
     if calc == "total_received_paid":
@@ -4281,6 +4320,20 @@ SHEETS = {
         "date_col": "DATE",
         "dayfirst": True,
     },
+    "projects_data": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/projects.xlsx",
+        "sheet_name": "Sheet1",
+        "date_col": "Status",
+    },
+    "rnd_data": {
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/rnd.xlsx",
+        "sheet_name": "Sheet1",
+        "date_col": "Status",
+    },
     "grade_category": {
         "type": "excel",
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Grade%20wise%20category.xlsx",
@@ -4479,6 +4532,8 @@ KPI_SOURCES = {
     ("order", "Current Schedule"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_current_schedule"},
     ("order", "Serviceability %"): {"sheet": "serviceability_live", "calc": "serviceability_live"},
     ("order", "Orders Not Approved"): {"sheet": ["order_management_1", "order_management_2"], "calc": "order_not_approved"},
+    ("projects", "Target vs Completed"): {"sheet": "projects_data", "calc": "projects_target"},
+    ("rnd", "Product Development Pending vs Completed"): {"sheet": "rnd_data", "calc": "rnd_pending"},
 
     # <<< FINANCE DATA SOURCE >>>
     ("finance", "Total Drs & Crs"): {
@@ -4644,6 +4699,8 @@ DEPARTMENTS = [
             ("Current Schedule", "Aaj ke orders"),
             ("Serviceability %", "Approved vs Total"),
             ("Orders Not Approved", "Finance approval pending"),
+            ("PPC Wise", "PPC wise pending orders"),  
+    
         ],
         "links": [
             ("📊 Order Dispatch Console (Power BI)", None),
@@ -4760,6 +4817,8 @@ DEPARTMENTS = [
             ("Customer Complaints", "Total complaints, start se ab tak"),
             ("Material Returns", "Rejected goods returned: qty / value"),
             ("Capacity Utilisation", "Actual production / max capacity × 100"),
+            ("Scrap By Product Management", "Scrap by product"),
+
         ],
         "links": [
             ("📊 Freight Report (Power BI)", "https://app.powerbi.com/groups/me/reports/43dfa27d-52db-4423-b40d-2732870ef9f2/d02bed28a39f2f8e3034?experience=power-bi"),
@@ -4767,11 +4826,33 @@ DEPARTMENTS = [
             ("📊 Customer Target vs Sale (Power BI)", None),
         ],
     },
+    {
+        "key": "projects",
+        "icon": "🏗️",
+        "name": "PROJECTS",
+        "kpis": [
+            ("Target vs Completed", "Project target vs completed"),
+        ],
+        "links": [
+            ("📋 Projects Sheet", None),
+        ],
+    },
+    {
+        "key": "rnd",
+        "icon": "🔬",
+        "name": "R&D (RESEARCH & DEVELOPMENT)",
+        "kpis": [
+            ("Product Development Pending vs Completed", "Pending vs completed products"),
+        ],
+        "links": [
+            ("📋 R&D Sheet", None),
+        ],
+    },
 ]
 
 # Dashboard mein departments ka order (upar se neeche)
 DISPLAY_ORDER = ["foaming", "production", "order", "sales", "purchase",
-                "inventory", "finance", "maint", "hr", "other","online"]
+                "inventory", "finance", "maint", "hr", "other","online", "projects", "rnd"]
 DEPARTMENTS.sort(key=lambda d: DISPLAY_ORDER.index(d["key"]))
 
 
