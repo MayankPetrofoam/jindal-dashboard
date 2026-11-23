@@ -4270,7 +4270,7 @@ SHEETS = {
 "dispute_cases": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/dispute_cases.xlsx",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Dispute%20Cases%20Values%20%26%20Numbers.xlsx",
         "sheet_name": "Sheet1",
         "date_col": "Party Name",
     },
