@@ -3149,7 +3149,7 @@ def _hr_parse_manpower(rows):
         if cur is None:
             continue
         if j is None:
-            j = next((k for k in range(len(c) - 2) if c[k] == "1" and c[k + 1] == "2" and c[k + 2] == "3"), None)
+            j = next((k for k in range(len(c) - 2) if _hr_val(c[k]) == 1 and _hr_val(c[k + 1]) == 2 and _hr_val(c[k + 2]) == 3), None)
             continue
         name = _hr_name(c[0]) if c else ""
         if name == "TOTAL":
@@ -3230,7 +3230,14 @@ def _hr_parse_staff(rows):
 
 @st.cache_data(ttl=600, show_spinner=False)
 def hr_manpower_df():
-    return _hr_parse_manpower(_hr_tab_rows(HR_PUB_URL, HR_TAB_MANPOWER))
+    tabs = discover_tabs(HR_PUB_URL)
+    first = [t for t in tabs if HR_TAB_MANPOWER and HR_TAB_MANPOWER.upper() in t[0].upper()]
+    for name, gid in first + [t for t in tabs if t not in first]:     # pehle naam wali tab, phir baaki sab tabs
+        data = _http_get(HR_PUB_URL.split("/pub")[0] + f"/pub?output=csv&gid={gid}")
+        df = _hr_parse_manpower(list(csv.reader(io.StringIO(data.decode("utf-8-sig")))))
+        if len(df):
+            return df
+    raise DataError(f"Manpower data kisi tab me nahi mila. Tabs: {[n for n, _ in tabs]}")
 
 
 @st.cache_data(ttl=600, show_spinner=False)
