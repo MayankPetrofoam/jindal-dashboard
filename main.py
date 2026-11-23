@@ -3687,22 +3687,75 @@ def compute_kpi(df, spec, day):
             }
 
     # ---------- OTHERS: FREIGHT ----------
+    # ---------- OTHERS: FREIGHT (STD vs ACT rate) ----------
     if calc == "freight_mtd":
         sub = df[(df["_date"] >= day.replace(day=1)) & (df["_date"] <= day)]
         if sub.empty:
             return {"value": "₹0", "desc": "No freight data this month", "color": GREY}
 
-        act_rate_col = next((c for c in sub.columns if "ACT" in str(c).upper()), None)
-        if not act_rate_col:
-            return {"value": "Config error", "desc": "ACT. RATE column nahi mila", "color": RED}
+        _fn = lambda s: re.sub(r"[^A-Z]", "", str(s).upper())
+        _fc = {}
+        for _c in sub.columns:
+            _fc.setdefault(_fn(_c), _c)
+        c_std, c_act = _fc.get("STDRATE"), _fc.get("ACTRATE")
+        if not c_act or not c_std:
+            return {"value": "Config error", "desc": f"STD. RATE / ACT. RATE column nahi mila. Columns: {list(sub.columns)}", "color": RED}
 
-        total_amt = _num(sub[act_rate_col]).sum()
-        total_inv = sub["INV. NO."].nunique() if "INV. NO." in sub.columns else len(sub)
+        w = pd.DataFrame({
+            "std": _num(sub[c_std]).fillna(0.0), "act": _num(sub[c_act]).fillna(0.0),
+            "inv": sub[_fc["INVNO"]].astype(str).str.strip() if "INVNO" in _fc else "",
+            "state": sub[_fc["STATE"]].astype(str).str.strip().str.upper() if "STATE" in _fc else "-",
+            "stn": sub[_fc["STATION"]].astype(str).str.strip().str.upper() if "STATION" in _fc else "-",
+            "veh": sub[_fc["VEHICLE"]].astype(str).str.strip().str.upper() if "VEHICLE" in _fc else "-",
+            "tr": sub[_fc["TRANSPORTERNAME"]].astype(str).str.strip().str.upper() if "TRANSPORTERNAME" in _fc else "-",
+            "paid": _num(sub[_fc["PAID"]]).fillna(0.0) if "PAID" in _fc else 0.0,
+            "bal": _num(sub[_fc["BAL"]]).fillna(0.0) if "BAL" in _fc else 0.0,
+        })
+        w = w[(w["std"] != 0) | (w["act"] != 0)].copy()
+        if w.empty:
+            return {"value": "₹0", "desc": "No freight data this month", "color": GREY}
+        w["diff"] = w["std"] - w["act"]          # + = bachat (std se sasta), - = extra kharcha
+        trips = len(w)
+        tot_std, tot_act, net = w["std"].sum(), w["act"].sum(), w["diff"].sum()
+        over = w[w["diff"] < 0]
+        save = w[w["diff"] > 0]
+        pct = lambda a, b: (a / b * 100) if b else 0.0
 
+        def fr(v):
+            s = "-" if v < 0 else ""
+            v = abs(float(v))
+            if v >= 1e7: return f"{s}₹{v / 1e7:,.2f} Cr"
+            if v >= 1e5: return f"{s}₹{v / 1e5:,.2f} L"
+            return f"{s}₹{v:,.0f}"
+
+        def grp(col, n=10, loss_only=False):
+            g = w.groupby(col).agg(trips=("act", "size"), std=("std", "sum"), act=("act", "sum"), diff=("diff", "sum"))
+            g = g[g["diff"] < 0] if loss_only else g
+            g = g.sort_values("diff" if loss_only else "act", ascending=loss_only).head(n)
+            return [(k, f"{int(r['trips'])} trips | Act {fr(r['act'])} | Std {fr(r['std'])} | "
+                        f"{'Bachat' if r['diff'] >= 0 else 'Extra'} {fr(abs(r['diff']))}") for k, r in g.iterrows()]
+
+        tr_rows = grp("tr", 15)
+        stn_loss = grp("stn", 10, loss_only=True)
+        state_rows = grp("state", 10)
+        veh_rows = grp("veh", 10)
+        inv_n = w["inv"].replace("", pd.NA).dropna().nunique() or trips
         return {
-            "value": _inr(total_amt),
-            "desc": f"Month-to-date: {total_inv} Invoices",
-            "color": BLUE
+            "value": _inr(tot_act),
+            "desc": f"Month-to-date: {inv_n} Invoices · Net {'Bachat' if net >= 0 else 'Extra'}: {fr(abs(net))}",
+            "color": BLUE if net >= 0 else AMBER,
+            "metrics": [
+                (fr(tot_std), "Std Rate Total"), (fr(tot_act), "Actual Total"),
+                (fr(net), "Net (Std - Act)"), (f"{len(over)} ({pct(len(over), trips):.1f}%)", "Over-rate Trips"),
+                (fr(save["diff"].sum()), "Bachat"), (fr(abs(over["diff"].sum())), "Extra Kharcha"),
+                (fr(w["paid"].sum()), "Paid"), (fr(w["bal"].sum()), "Pending Bal."),
+            ],
+            "details": [
+                ("🚛 Transporter-wise (Actual freight)", tr_rows),
+                ("🔻 Top Loss Stations (Act > Std)", stn_loss),
+                ("🗺 State-wise", state_rows),
+                ("🚚 Vehicle type-wise", veh_rows),
+            ],
         }
 
     # ---------- FINANCE: TOTAL DRS & CRS ----------
