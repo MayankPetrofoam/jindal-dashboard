@@ -3097,9 +3097,232 @@ def finance_dispute_card(day):
         ],
     }
 
+# ====================================================================
+# HR (Google Sheet "Publish to web" se): Manpower, Overtime, Staff/Helper/Supervisor %, Dept-wise
+# ====================================================================
+# Teeno ke link alag-alag (Google Sheet > Publish to web wale link)
+HR_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_OT_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_STAFF_PUB_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_TAB_MANPOWER = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_TAB_OVERTIME = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+HR_TAB_STAFF = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQSzgc1P_NlZIKyfqO1IEhn2DinG1MlWTGYXsl7WLsQe-hQJa5iDClXRZReUAIkHg/pubhtml"
+
+_HR_MON = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+_HR_FIX = {"PROD MANGER": "PROD MANAGER", "STICHING COVERING": "STICHING & COVERING", "STICHING & COVRING": "STICHING & COVERING",
+           "BAILLING": "BAILING", "P P C": "PPC", "H R": "HR", "FIRE ND SAFETY": "FIRE & SAFETY", "FIRE &SAFETY": "FIRE & SAFETY",
+           "HOUSKEEPING": "HOUSE KEEPING", "HOUSEKEEPING": "HOUSE KEEPING", "MATERIAL MOVMENT": "MATERIAL MOVEMENT",
+           "ECOM": "E COMMERCE", "ACCOUNT": "ACCOUNTS", "MAINT.": "MAINT", "E - SHED": "E SHED", "MOULDING": "MOULD"}
+# Staff / Helper / Supervisor ka rule (DESIGNATION ke hisaab se). Badalna ho to yahan badlo.
+HR_SUPERVISOR_WORDS = ("SUPERVISOR",)       # SUPERVISOR + ASST SUPERVISOR
+HR_HELPER_WORDS = ("HELPER",)               # baaki sab (operator, skilled, manager, gm, guard...) = Staff
+
+
+def _hr_name(s):
+    u = re.sub(r"\s+", " ", str(s).upper().replace(";", " ").replace(".", " ")).strip()
+    return _HR_FIX.get(u, u)
+
+
+def _hr_val(v):
+    v = str(v).strip().replace(",", "")
+    return float(v) if re.fullmatch(r"-?\d+(\.\d+)?", v) else None
+
+
+def _hr_tab_rows(pub_url, keyword=""):
+    tabs = discover_tabs(pub_url)
+    pick = next((g for n, g in tabs if keyword and keyword.upper() in n.upper()), tabs[0][1] if not keyword else None)
+    if pick is None:
+        raise DataError(f"HR tab '{keyword}' nahi mila. Tabs: {[n for n, _ in tabs]}")
+    data = _http_get(pub_url.split("/pub")[0] + f"/pub?output=csv&gid={pick}")
+    return list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
+
+
+def _hr_parse_manpower(rows):
+    """Monthly blocks: title row -> header (1,2,3..) -> department rows -> TOTAL."""
+    out, cur, j = [], None, None
+    for r in rows:
+        c = [str(x).strip() for x in r]
+        m = re.search(r"DAILY\s*MAN\s*POWER\s*DETA\w*\s*\(?\s*([A-Z]+)\s*(\d{4})", " ".join(c).upper())
+        if m and m.group(1)[:3] in _HR_MON:
+            cur, j = (int(m.group(2)), _HR_MON[m.group(1)[:3]]), None
+            continue
+        if cur is None:
+            continue
+        if j is None:
+            j = next((k for k in range(len(c) - 2) if c[k] == "1" and c[k + 1] == "2" and c[k + 2] == "3"), None)
+            continue
+        name = _hr_name(c[0]) if c else ""
+        if name == "TOTAL":
+            cur, j = None, None
+            continue
+        if not name or name.startswith("ABSENT"):
+            continue
+        tgt = _hr_val(c[3]) if len(c) > 3 else None
+        for d in range(1, calendar.monthrange(cur[0], cur[1])[1] + 1):
+            k = j + d - 1
+            v = _hr_val(c[k]) if k < len(c) else None
+            if v is not None:
+                out.append({"_date": datetime.date(cur[0], cur[1], d), "dept": name, "man": v, "target": tgt or 0.0})
+    df = pd.DataFrame(out, columns=["_date", "dept", "man", "target"])
+    if df.empty:
+        return df
+    df = df.groupby(["_date", "dept"], as_index=False).agg(man=("man", "max"), target=("target", "max"))
+    tot = df.groupby("_date")["man"].sum()
+    return df[df["_date"].isin(tot[tot > 0].index)]
+
+
+def _hr_parse_overtime(rows):
+    """Monthly blocks: 'LIST OF OVERTIME ... MONTH OF <MONTH> <YEAR>' -> header (1-Jan, 2-Jan..) -> dept rows -> TOTAL."""
+    out, year, cols = [], None, None
+    for r in rows:
+        c = [str(x).strip() for x in r]
+        m = re.search(r"MONTH OF\s+([A-Z]+)\s+(\d{4})", " ".join(c).upper())
+        if m:
+            year, cols = int(m.group(2)), None
+            continue
+        if year is None:
+            continue
+        if cols is None:
+            found = {}
+            for k, h in enumerate(c):
+                mm = re.fullmatch(r"(\d{1,2})-([A-Za-z]{3})", h)
+                if mm and mm.group(2).upper() in _HR_MON:
+                    found[k] = (int(mm.group(1)), _HR_MON[mm.group(2).upper()])
+            if found:
+                cols = found
+            continue
+        name = _hr_name(c[0]) if c else ""
+        if name == "TOTAL":
+            year, cols = None, None
+            continue
+        if not name:
+            continue
+        for k, (d, mo) in cols.items():
+            v = _hr_val(c[k]) if k < len(c) else None
+            if v is not None:
+                try:
+                    out.append({"_date": datetime.date(year, mo, d), "dept": name, "ot": v})
+                except ValueError:
+                    pass
+    df = pd.DataFrame(out, columns=["_date", "dept", "ot"])
+    return df.groupby(["_date", "dept"], as_index=False)["ot"].sum() if not df.empty else df
+
+
+def _hr_parse_staff(rows):
+    if not rows:
+        return pd.DataFrame(columns=["dept", "grp"])
+    head = [re.sub(r"\s+", " ", str(h)).strip().upper() for h in rows[0]]
+    if "DESIGNATION" not in head:
+        raise DataError(f"HR staff sheet me DESIGNATION column nahi mila. Columns: {head}")
+    di = head.index("DESIGNATION")
+    pi = head.index("DEPARTMENT") if "DEPARTMENT" in head else None
+    out = []
+    for r in rows[1:]:
+        des = str(r[di]).strip().upper() if di < len(r) else ""
+        if not des:
+            continue
+        dept = _hr_name(r[pi]) if pi is not None and pi < len(r) and str(r[pi]).strip() else "UNSPECIFIED"
+        grp = ("Supervisor" if any(w in des for w in HR_SUPERVISOR_WORDS)
+               else "Helper" if any(w in des for w in HR_HELPER_WORDS) else "Staff")
+        out.append({"dept": dept, "grp": grp})
+    return pd.DataFrame(out, columns=["dept", "grp"])
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hr_manpower_df():
+    return _hr_parse_manpower(_hr_tab_rows(HR_PUB_URL, HR_TAB_MANPOWER))
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hr_overtime_df():
+    return _hr_parse_overtime(_hr_tab_rows(HR_OT_PUB_URL, HR_TAB_OVERTIME))
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hr_staff_df():
+    return _hr_parse_staff(_hr_tab_rows(HR_STAFF_PUB_URL, HR_TAB_STAFF))
+
+
+def _hr_dates_manpower():
+    d = hr_manpower_df()
+    return sorted(d["_date"].unique(), reverse=True) if len(d) else []
+
+
+def _hr_dates_overtime():
+    d = hr_overtime_df()
+    if d.empty:
+        return []
+    t = d.groupby("_date")["ot"].sum()
+    return sorted(t[t > 0].index, reverse=True)
+
+
+def hrg_manpower_card(day):
+    d = hr_manpower_df()
+    tot = d.groupby("_date")["man"].sum()
+    if day not in tot.index:
+        return None
+    month = tot[(tot.index >= day.replace(day=1)) & (tot.index <= day)]
+    avg = month.mean() if len(month) else 0
+    return {"value": f"{tot.loc[day]:,.0f} Present", "desc": f"Monthly avg: {avg:,.1f} per working day",
+            "color": BLUE, "extra": f"Working days this month (till date): {len(month)}"}
+
+
+def hrg_overtime_card(day):
+    d = hr_overtime_df()
+    if d.empty:
+        return None
+    tot = d.groupby("_date")["ot"].sum()
+    if day not in tot.index or tot.loc[day] <= 0:
+        return None
+    month = tot[(tot.index >= day.replace(day=1)) & (tot.index <= day) & (tot > 0)]
+    avg = month.mean() if len(month) else 0
+    return {"value": f"{tot.loc[day]:,.0f} Hrs", "desc": f"Monthly avg: {avg:,.1f} Hrs per working day",
+            "color": BLUE, "extra": f"Total OT this month (till date): {month.sum():,.0f} Hrs"}
+
+
+def hrg_dept_card(day):
+    d = hr_manpower_df()
+    x = d[d["_date"] == day].sort_values("man", ascending=False)
+    if x.empty:
+        return None
+    ot = hr_overtime_df()
+    ot_map = ot[ot["_date"] == day].set_index("dept")["ot"].to_dict() if len(ot) else {}
+    present, req = int(x["man"].sum()), int(x["target"].sum())
+    rows = []
+    for r in x.itertuples():
+        t = f" / {int(r.target)} req" if r.target else ""
+        o = f" | OT {ot_map[r.dept]:g} Hrs" if ot_map.get(r.dept) else ""
+        rows.append((r.dept.title(), f"{int(r.man)} present{t}{o}"))
+    top = " | ".join(f"{r.dept.title()}: {int(r.man)}" for r in x.head(3).itertuples())
+    return {"value": f"{len(x[x['man'] > 0])} Depts present", "desc": top, "color": BLUE,
+            "metrics": [(f"{present}", "Present"), (f"{req}" if req else "-", "Required"), (f"{len(x)}", "Departments")],
+            "details": [(f"🏭 Department-wise · {day:%d-%b-%Y}", rows)]}
+
+
+def hrg_staff_card(day):
+    s = hr_staff_df()
+    if s.empty:
+        return None
+    n = len(s)
+    cnt = s["grp"].value_counts()
+    pct = lambda g: cnt.get(g, 0) / n * 100
+    rows = []
+    for dp, g in s.groupby("dept"):
+        c = g["grp"].value_counts()
+        rows.append((dp.title(), f"Helper {c.get('Helper', 0)} | Supervisor {c.get('Supervisor', 0)} | Staff {c.get('Staff', 0)} | Total {len(g)}"))
+    return {"value": f"{n} Employees",
+            "desc": "Employee master ke hisaab se (daily present nahi)", "color": BLUE,
+            "metrics": [(f"{pct('Helper'):.1f}%", "Helper"), (f"{pct('Supervisor'):.1f}%", "Supervisor"),
+                        (f"{pct('Staff'):.1f}%", "Staff"), (f"{n}", "Total")],
+            "details": [("🏭 Department-wise (Helper | Supervisor | Staff)", rows)]}
+
 
 def compute_kpi(df, spec, day):
     calc = spec.get("calc")
+    if calc == "hrg_manpower": return hrg_manpower_card(day)
+    if calc == "hrg_overtime": return hrg_overtime_card(day)
+    if calc == "hrg_dept":     return hrg_dept_card(day)
+    if calc == "hrg_staff":    return hrg_staff_card(day)
     if calc == "finance_dispute":
         return finance_dispute_card(day)
     if calc == "projects_target":
@@ -4670,9 +4893,14 @@ KPI_SOURCES = {
     },
     ("sales", "Category Mix (Pcs)"): {"sheet": "prod_summary", "calc": "category_mix_pcs"},
     ("sales", "Category Mix (Kgs)"): {"sheet": "prod_summary", "calc": "category_mix_kgs"},
+    ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_manpower"},
+    ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_overtime"},
+    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_dept"},
+    ("hr", "Staff / Helper / Supervisor %"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_staff"},
     ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
     ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept_csv"},
+
 
     ("foaming", "Tonnage Foaming"): {
         "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
@@ -7266,6 +7494,12 @@ def render_kpi(dept_key, idx, title, desc):
                 _hd = _hr_dates(df)
                 if _hd:
                     dates = _hd
+            if spec.get("calc") in ("hrg_manpower", "hrg_dept"):
+                dates = _hr_dates_manpower() or dates
+            if spec.get("calc") == "hrg_overtime":
+                dates = _hr_dates_overtime() or dates
+            if spec.get("calc") == "hrg_staff":
+                dates = sorted(set(_hr_dates_manpower()) | {datetime.datetime.now(IST).date()}, reverse=True)
 
             # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
             if spec.get("type") == "rollpack":
