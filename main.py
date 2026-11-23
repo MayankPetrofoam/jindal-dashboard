@@ -1916,7 +1916,7 @@ def _cm_load(day=None):
         target_short = day.strftime("%b").lower()
         m_series = w[month_col].astype(str).str.strip().str.lower()
         w = w[m_series.str.startswith(target_short)]
-    if day is not None and month_col and "_date" in w.columns:
+    if False:   # static sheet ki _date = aaj ki date hoti hai, isliye month Month column se hi filter hoga
         w = w[(pd.to_datetime(w["_date"]).dt.year == day.year) & (pd.to_datetime(w["_date"]).dt.month == day.month)]
     elif day is not None and month_col:
         target_m = day.strftime("%B").lower()
@@ -4194,9 +4194,9 @@ SHEETS = {
 "cate_1": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xlsx",
-        "sheet_name": "cate(1)",
-        "date_col": "Month",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xls",
+        "sheet_name": 0,
+        "date_col": "Grade",
     },
 "min_stock": {
     "type": "excel",
