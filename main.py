@@ -4588,7 +4588,7 @@ KPI_SOURCES = {
     ("sales", "Category Mix (Kgs)"): {"sheet": "prod_summary", "calc": "category_mix_kgs"},
     ("hr", "Manpower Present & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_manpower"},
     ("hr", "Overtime & Monthly Avg"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_overtime"},
-    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "hr_dept_csv": "hr_dept"},
+    ("hr", "Dept-wise Report"): {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hr_dept_csv"},
 
     ("foaming", "Tonnage Foaming"): {
         "sheet": "foaming_chemicals",     # monthly sheet (purane mahine, jahan daily data nahi hai)
@@ -4696,8 +4696,7 @@ DEPARTMENTS = [
             ("Bonded", "Bonded production (A Shed)"),
             ("Rollpack & Yield", "Rollpack production"),
             ("SCRAP", "Scrap production (O Shed)"),
-            ("Average Manpower (Section-wise)", "Daily average workers per section"),
-            ("Targets", "Planned vs actual production"),
+        
         ],
         "links": [
             ("📊 Operational Yield View (Power BI)", "https://app.powerbi.com/groups/me/reports/f282dbe5-3439-4fa4-a5f0-8c379545e54e/52c82f933a4a050d4027?experience=power-bi"),
@@ -7104,6 +7103,19 @@ def _sections_html(sections):
         )
         out.append(f'<div class="kpi-sec"><div class="kpi-sec-h" style="margin-bottom: 6px;">{heading}</div>{body}</div>')
     return "".join(out)
+PROD_AVG_MANPOWER = {}   # baad me data aaye to: {"Bdls & Yield": "18", "Mould": "12"}
+PROD_TARGETS = {}        # baad me data aaye to: {"Bdls & Yield": "20 Tons"}
+
+def _prod_add_tiles(res, title):
+    """Production ke har card me 2 tiles jodta hai: Avg Manpower aur Target."""
+    r = dict(res)
+    m = list(r.get("metrics") or [])
+    if not m:
+        m = [(r.get("value", "—"), "Value")]
+    m.append((PROD_AVG_MANPOWER.get(title, "—"), "Avg Manpower"))
+    m.append((PROD_TARGETS.get(title, "—"), "Target"))
+    r["metrics"] = m
+    return r
 
 
 def _card(slot, title, value, desc, color, date_text=None, error=False, extra=None,
@@ -7334,6 +7346,8 @@ def render_kpi(dept_key, idx, title, desc):
                 log.exception("KPI %s/%s failed", dept_key, title)
                 _card(slot, title, "Config error", f"{type(exc).__name__}: {exc}", RED, label, error=True)
                 return
+            if res is not None and dept_key == "production":
+                res = _prod_add_tiles(res, title)
 
             if res is not None and res.get("details"):
                 with st.expander("📋 View Full Details"):
