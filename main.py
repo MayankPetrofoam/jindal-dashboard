@@ -7213,9 +7213,9 @@ def render_kpi(dept_key, idx, title, desc):
             if spec.get("calc") == "complaints":
                 dates = [datetime.datetime.now(IST).date()]
             # HR: dates sirf wo jin din attendance / OT bhara hai (aaj ki date nahi)
-     if spec.get("calc") == "hr_dept_csv":
-        _m = hr_master_df()
-        dates = sorted(_m["_date"].unique()) if len(_m) else []
+            if spec.get("calc") == "hr_dept_csv":
+                _m = hr_master_df()
+               dates = sorted(_m["_date"].unique()) if len(_m) else []
             if str(spec.get("calc", "")).startswith("hr_"):
                 _hd = _hr_dates(df)
                 if _hd:
