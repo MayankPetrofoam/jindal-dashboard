@@ -1890,10 +1890,16 @@ def _cm_group(item):
         return "Sofa Cum Bed"
     if u == "BONDED SHEET":
         return "Bonded Sheet"
+    if u == "FOAM MATTRESS BARE":
+        return "Foam Mattress Bare"
+    if u == "ORTHO PILLOW":
+        return "Ortho Pillow"
+    if u == "MATTRESS COVER":
+        return "Mattress Cover"
     return None
 
 
-def _cm_load():
+def _cm_load(day=None):
     df, err, _ = get_sheet("cate_1")
     if df is None:
         return None, err
@@ -1903,8 +1909,16 @@ def _cm_load():
     pick = lambda *n: next((low[x.lower()] for x in n if x.lower() in low), None)
     item, grade = pick("ITEM", "Category"), pick("Grade")
     pcs, kgs, amt = pick("Pcs", "Pieces"), pick("Kgs", "Kg"), pick("Amt", "Amount", "Value")
+    month_col = pick("Month", "Date")
     if not (item and pcs and kgs and amt):
         return None, f"Columns nahi mile: {list(w.columns)}"
+    if day is not None and month_col and "_date" in w.columns:
+        w = w[(pd.to_datetime(w["_date"]).dt.year == day.year) & (pd.to_datetime(w["_date"]).dt.month == day.month)]
+    elif day is not None and month_col:
+        target_m = day.strftime("%B").lower()
+        target_short = day.strftime("%b-%y").lower()
+        m_series = w[month_col].astype(str).str.strip().str.lower()
+        w = w[m_series.str.startswith(target_m) | (m_series == target_short)]
     for c in (pcs, kgs, amt):
         w[c] = pd.to_numeric(w[c].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
     w["_item"] = w[item].fillna("").astype(str).str.strip()
@@ -1932,7 +1946,7 @@ def _cm_tile(name, a, b):
 
 
 def category_mix_pcs_card(day):
-    r, err = _cm_load()
+    r, err = _cm_load(day)
     if r is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
     w, pcs, kgs, amt = r
@@ -1940,7 +1954,7 @@ def category_mix_pcs_card(day):
     if w.empty:
         return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
     sections, details = [], []
-    for g in ["Pillow", "Mattress", "Sofa Cum Bed", "Bonded Sheet"]:
+    for g in ["Pillow", "Mattress", "Sofa Cum Bed", "Bonded Sheet", "Foam Mattress Bare", "Ortho Pillow", "Mattress Cover"]:
         x = w[w["_grp"] == g]
         if x.empty:
             continue
@@ -1961,7 +1975,7 @@ def category_mix_pcs_card(day):
 
 
 def category_mix_kgs_card(day):
-    r, err = _cm_load()
+    r, err = _cm_load(day)
     if r is None:
         return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
     w, pcs, kgs, amt = r
