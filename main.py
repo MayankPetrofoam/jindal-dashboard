@@ -4188,12 +4188,12 @@ SHEETS = {
         "dayfirst": True,
     },
 "cate_1": {
-    "type": "excel",
-    "static": True,
-    "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xls",
-    "sheet_name": 0,
-    "date_col": "Grade",
-},
+        "type": "excel",
+        "static": True,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xlsx",
+        "sheet_name": "Sheet1",
+        "date_col": "Month",
+    },
 "min_stock": {
     "type": "excel",
     "static": True,
