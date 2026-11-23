@@ -1912,6 +1912,10 @@ def _cm_load(day=None):
     month_col = pick("Month", "Date")
     if not (item and pcs and kgs and amt):
         return None, f"Columns nahi mile: {list(w.columns)}"
+    if day is not None and month_col:
+        target_short = day.strftime("%b").lower()
+        m_series = w[month_col].astype(str).str.strip().str.lower()
+        w = w[m_series.str.startswith(target_short)]
     if day is not None and month_col and "_date" in w.columns:
         w = w[(pd.to_datetime(w["_date"]).dt.year == day.year) & (pd.to_datetime(w["_date"]).dt.month == day.month)]
     elif day is not None and month_col:
@@ -4191,7 +4195,7 @@ SHEETS = {
         "type": "excel",
         "static": True,
         "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xlsx",
-        "sheet_name": "Sheet1",
+        "sheet_name": "cate(1)",
         "date_col": "Month",
     },
 "min_stock": {
