@@ -3733,7 +3733,7 @@ def compute_kpi(df, spec, day):
             g = g[g["diff"] < 0] if loss_only else g
             g = g.sort_values("diff" if loss_only else "act", ascending=loss_only).head(n)
             return [(k, f"{int(r['trips'])} trips | Act {fr(r['act'])} | Std {fr(r['std'])} | "
-                        f"{'Bachat' if r['diff'] >= 0 else 'Extra'} {fr(abs(r['diff']))}") for k, r in g.iterrows()]
+                        f"{'Savings' if r['diff'] >= 0 else 'Extra'} {fr(abs(r['diff']))}") for k, r in g.iterrows()]
 
         tr_rows = grp("tr", 15)
         stn_loss = grp("stn", 10, loss_only=True)
@@ -3742,12 +3742,12 @@ def compute_kpi(df, spec, day):
         inv_n = w["inv"].replace("", pd.NA).dropna().nunique() or trips
         return {
             "value": _inr(tot_act),
-            "desc": f"Month-to-date: {inv_n} Invoices · Net {'Bachat' if net >= 0 else 'Extra'}: {fr(abs(net))}",
+            "desc": f"Month-to-date: {inv_n} Invoices · Net {'Savings' if net >= 0 else 'Extra Cost'}: {fr(abs(net))}",
             "color": BLUE if net >= 0 else AMBER,
             "metrics": [
                 (fr(tot_std), "Std Rate Total"), (fr(tot_act), "Actual Total"),
                 (fr(net), "Net (Std - Act)"), (f"{len(over)} ({pct(len(over), trips):.1f}%)", "Over-rate Trips"),
-                (fr(save["diff"].sum()), "Bachat"), (fr(abs(over["diff"].sum())), "Extra Kharcha"),
+                (fr(save["diff"].sum()), "Savings"), (fr(abs(over["diff"].sum())), "Extra Cost"),
                 (fr(w["paid"].sum()), "Paid"), (fr(w["bal"].sum()), "Pending Bal."),
             ],
             "details": [
