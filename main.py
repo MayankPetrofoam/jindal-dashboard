@@ -7987,7 +7987,7 @@ def render_kpi(dept_key, idx, title, desc):
                 _card(slot, title, "Config error", f"{type(exc).__name__}: {exc}", RED, label, error=True)
                 return
             if res is not None and dept_key == "production":
-                res = _prod_add_tiles(res, title, day)
+                res = _prod_add_tiles(res, title)
 
             if res is not None and res.get("details"):
                 with st.expander("📋 View Full Details"):
