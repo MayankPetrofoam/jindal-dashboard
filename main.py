@@ -1145,7 +1145,7 @@ def _fetch_excel_cached(url, sheet_name, date_col, dayfirst, static=False):
     df["_date"] = df[date_col].apply(_to_date)
     df = df.dropna(subset=["_date"]).copy()
     if df.empty:
-        raise DataError(f"'{date_col}' column mein koi valid date nahi mili")
+        raise DataError(f"'{date_col}' column has no valid date")
     return df, datetime.datetime.now(IST)
 
 
@@ -1170,7 +1170,7 @@ def _pcol(df, name):
         if n.endswith(want) and not str(c).startswith("_"):
             return df[c]
 
-    raise DataError(f"Column '{name}' nahi mila. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
+    raise DataError(f"Column '{name}' not found. Columns: {[c for c in df.columns if not str(c).startswith('_')]}")
 
 
 def _hr_daily(df):
@@ -1179,7 +1179,7 @@ def _hr_daily(df):
     cols = {_norm(c): c for c in df.columns if not str(c).startswith("_")}
     for need in ("department", "actual man power", "total over time hours"):
         if need not in cols:
-            raise DataError(f"HR sheet mein column '{need}' nahi mila. Columns: {list(cols.values())}")
+            raise DataError(f"HR sheet: column '{need}' not found. Columns: {list(cols.values())}")
     w = pd.DataFrame({"_date": df["_date"]})
     w["dept"] = (df[cols["department"]].astype(str).str.strip().str.upper()
                 .str.replace(r"\s+", " ", regex=True)
@@ -1196,7 +1196,7 @@ def _hr_dates(df):
     return sorted(t[(t["man"] > 0) | (t["ot"] > 0)].index, reverse=True)
 
 
-@st.cache_data(ttl=900, show_spinner="Stock file load ho rahi hai (badi file hai)...")
+@st.cache_data(ttl=900, show_spinner="Loading stock file (large file)...")
 def _fetch_stock_cached(url, sheet_name):
     src = io.BytesIO(_http_get(_direct_url(url))) if re.match(r"^https?://", url or "") else url
     raw = pd.read_excel(src, sheet_name=sheet_name, dtype=object, engine="openpyxl")
@@ -1206,7 +1206,7 @@ def _fetch_stock_cached(url, sheet_name):
         for k, c in keys.items():
             if k.startswith(prefix):
                 return c
-        raise DataError(f"Column '{prefix}' nahi mila. Columns: {list(raw.columns)}")
+        raise DataError(f"Column '{prefix}' not found. Columns: {list(raw.columns)}")
 
     df = pd.DataFrame({
         "date": _parse_dates(raw[pick("DATE")], True),
@@ -1221,7 +1221,7 @@ def _fetch_stock_cached(url, sheet_name):
     df["amount"] = df["amount"].fillna(0)
     df["_date"] = df["date"].dt.date
     if df.empty:
-        raise DataError("Stock sheet mein koi valid date nahi mili")
+        raise DataError("No valid date found in stock sheet")
     return df, datetime.datetime.now(IST)
 
 
@@ -1242,7 +1242,7 @@ _YIELD_DATE_FORMATS = ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d-%b-%y", "%d-%m-%Y",
                        "%d-%b-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d/%m/%y"]
 
 
-@st.cache_data(ttl=900, show_spinner="Production summary load ho rahi hai (badi file hai)...")
+@st.cache_data(ttl=900, show_spinner="Loading production summary (large file)...")
 def _fetch_yield_cached(url, sheet_name):
     """Columns: DATE, ITEM NAME, BUNDLES, KGS  ->  _date, ym, item, kg, BUNDLES, grade (1/2/3)."""
     is_csv = str(url).lower().split("?")[0].endswith(".csv")
@@ -1285,7 +1285,7 @@ def _fetch_yield_cached(url, sheet_name):
     cat_col = next((c for c in raw.columns if str(c).startswith("CAT")), None)
     
     if not all([date_col, item_col, kg_col, bdl_col]):
-        raise DataError(f"Columns nahi mile (DATE / ITEM NAME / KGS / BUNDLES). Mile hue: {list(raw.columns)}")
+        raise DataError(f"Columns not found (DATE / ITEM NAME / KGS / BUNDLES). Found: {list(raw.columns)}")
 
     txt = raw[date_col].astype(str).str.strip()
     d = pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]")
@@ -1312,7 +1312,7 @@ def _fetch_yield_cached(url, sheet_name):
     df.loc[df["item"].isin(THIRD_GRADE_ITEMS), "grade"] = 3
     df = df[d.notna()].copy()
     if df.empty:
-        raise DataError("Production summary mein koi valid date nahi mili")
+        raise DataError("No valid date found in production summary")
     return df, datetime.datetime.now(IST)
 
 
@@ -1399,7 +1399,7 @@ def bonded_card(day):
     m_rows = y_df[b.str.match(r"^\d{2}-A")]
     
     if m_rows.empty:
-        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-A bonded row nahi mili", "color": GREY}
+        return {"value": "No Data", "desc": "No 26-A bonded row found in Prod. Summary", "color": GREY}
 
     # Agar chuni hui date par data nahi hai, toh pichli latest date ka data uthao
     actual_day = day
@@ -1445,7 +1445,7 @@ def mould_card(day):
     m_rows = y_df[b.str.match(r"^\d{2}-J")]
     
     if m_rows.empty:
-        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-J mould row nahi mili", "color": GREY}
+        return {"value": "No Data", "desc": "No 26-J mould row found in Prod. Summary", "color": GREY}
 
     m_start, m_end = _month_range(day)
     d_day = pillow_agg(m_rows[m_rows["_date"] == day])
@@ -1518,7 +1518,7 @@ def finance_gt90_card(day):
     amt_col = next((c for c in cols if norm(c) == "TOTALAMOUNT"), None)
     
     if not amt_col:
-        return {"value": "Error", "desc": f"TOTAL AMOUNT column nahi mila. Columns: {cols}", "color": RED}
+        return {"value": "Error", "desc": f"TOTAL AMOUNT column not found. Columns: {cols}", "color": RED}
 
     # Data clean karna aur sum nikalna
     total_amt = _num(df[amt_col]).fillna(0.0).sum()
@@ -1555,7 +1555,7 @@ def finance_drs_crs_card(day):
     bal_col = next((c for c in cols if norm(c) == "BALAMT"), None)
     
     if not grp_col or not bal_col:
-        return {"value": "Error", "desc": f"GROUP / BAL.AMT column nahi mila. Columns: {cols}", "color": RED}
+        return {"value": "Error", "desc": f"GROUP / BAL.AMT column not found. Columns: {cols}", "color": RED}
 
     # Data ko clean karna
     w = pd.DataFrame({
@@ -1752,7 +1752,7 @@ def _note_month_card(sheet, tag, day):
         details.insert(0, (f"👥 Party-wise {tag} · {day:%b-%Y} ({len(prow)} parties)",
                            prow + [("TOTAL", _inr(mon_total))]))
     else:
-        details.insert(0, ("👥 Party-wise", [("Party column nahi mila", "Sheet columns: " + ", ".join(map(str, cols)))]))
+        details.insert(0, ("👥 Party-wise", [("Party column not found", "Sheet columns: " + ", ".join(map(str, cols)))]))
 
     return {
         "value": f"{mon_total / 10000000:,.2f}",
@@ -1911,7 +1911,7 @@ def _cm_load(day=None):
     pcs, kgs, amt = pick("Pcs", "Pieces"), pick("Kgs", "Kg"), pick("Amt", "Amount", "Value")
     month_col = pick("Month", "Date")
     if not (item and pcs and kgs and amt):
-        return None, f"Columns nahi mile: {list(w.columns)}"
+        return None, f"Columns not found: {list(w.columns)}"
     if day is not None and month_col:
         target_short = day.strftime("%b").lower()
         m_series = w[month_col].astype(str).str.strip().str.lower()
@@ -1956,7 +1956,7 @@ def category_mix_pcs_card(day):
     w, pcs, kgs, amt = r
     w = w[w["_grp"].notna()]
     if w.empty:
-        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
     sections, details = [], []
     for g in ["Pillow", "Mattress", "Sofa Cum Bed", "Bonded Sheet", "Foam Mattress Bare", "Ortho Pillow", "Mattress Cover"]:
         x = w[w["_grp"] == g]
@@ -1985,7 +1985,7 @@ def category_mix_kgs_card(day):
     w, pcs, kgs, amt = r
     w = w[w["_grp"].isna()]
     if w.empty:
-        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
     items = w.groupby("_item")[[kgs, amt]].sum().sort_values(amt, ascending=False)
     tiles = [_cm_tile(i, f"{v[kgs]:,.1f} Kg", _cm_amt(v[amt])) for i, v in items.iterrows()]
     details = []
@@ -1996,7 +1996,7 @@ def category_mix_kgs_card(day):
         details.append((f"📦 {i} · Grade-wise", rows))
     return {
         "value": _cm_amt(w[amt].sum()),
-        "desc": f"Kgs wali categories ({len(items)})",
+        "desc": f"gs categories ({len(items)})",
         "color": BLUE,
         "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")] + tiles,
         "details": details,
@@ -2027,7 +2027,7 @@ def category_mix_card(day):
     amt_col = _col(["Amt", "Amount", "Value"])
 
     if not item_col:
-        return {"value": "Config error", "desc": f"ITEM column nahi mila: {list(w.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"ITEM column not found: {list(w.columns)}", "color": RED}
 
     for col in [bdl_col, pcs_col, kgs_col, amt_col]:
         if col:
@@ -2048,7 +2048,7 @@ def category_mix_card(day):
     # Sirf completely empty (all 0) rows hatayein
     w = w[(w[bdl_col] != 0) | (w[pcs_col] != 0) | (w[kgs_col] != 0) | (w[amt_col] != 0)].copy()
     if w.empty:
-        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
 
     fmt_i = lambda x: f"{int(round(float(x))):,}"
     fmt_k = lambda x: f"{float(x):,.1f}"
@@ -2165,7 +2165,7 @@ def dead_stock_store_card(day):
     hdr = rows[0]
     items = [x for x in _ds_parse(rows) if x["last"] > 0]
     if not items:
-        return {"value": "0 Items", "desc": "Koi dead stock nahi", "color": BLUE}
+        return {"value": "0 Items", "desc": "No dead stock", "color": BLUE}
     prev_lbl, last_lbl = _ds_date_label(hdr[4]), _ds_date_label(hdr[5])
 
     def uom_txt(lst):
@@ -2308,7 +2308,7 @@ def scrap_card(day):
     o_rows = y_df[b.str.match(r"^\d{2}-O")]
     
     if o_rows.empty:
-        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-O scrap row nahi mili", "color": GREY}
+        return {"value": "No Data", "desc": "No 26-O scrap row found in Prod. Summary", "color": GREY}
 
     m_start, m_end = _month_range(day)
 
@@ -2385,7 +2385,7 @@ def pillow_card(day):
     p = y_df[b.str.match(r"^\d{2}-K")]
     
     if p.empty:
-        return {"value": "No Data", "desc": "Prod. Summary mein koi 26-K pillow row nahi mili", "color": GREY}
+        return {"value": "No Data", "desc": "No 26-K pillow row found in Prod. Summary", "color": GREY}
 
     m_start, m_end = _month_range(day)
     d_day = pillow_agg(p[p["_date"] == day])
@@ -2464,7 +2464,7 @@ def mattress_card(day):
     return {
         "value": f"{ys(dy)} Yield | {a_day['bdl']:,} Bdls | {a_day['sheets']:,.0f} Sheets",
         "desc": "Mattress production (H + M shed) & yield (M shed)" if m_df is not None
-                else f"⚠ M-Shed yield nahi mili: {m_err}",
+                else f"⚠ M-Shed yield not found: {m_err}",
         "color": BLUE if m_df is not None else AMBER,
         "metrics": [
             (f"{dy['pct']:.2f}%" if dy else "—", "Yield", "yield"),
@@ -2543,7 +2543,7 @@ def _fetch_shed_cached(files):
         frames.append(t.dropna(subset=["_date"]))
     df = pd.concat(frames, ignore_index=True)
     if df.empty:
-        raise DataError("Shed files mein koi valid date nahi mili")
+        raise DataError("No valid date found in shed files")
     return df, datetime.datetime.now(IST)
 
 
@@ -2570,7 +2570,7 @@ def _fetch_rolls_cached(files):
         frames.append(t.dropna(subset=["_date"]))   # header row apne aap hat jayegi
     df = pd.concat(frames, ignore_index=True)
     if df.empty:
-        raise DataError("B/C shed files mein koi valid date nahi mili")
+        raise DataError("No valid date found in B/C shed files")
     return df, datetime.datetime.now(IST)
 
 
@@ -2638,7 +2638,7 @@ def _fetch_dyield_cached(files):
         hdr = next((i for i in range(min(15, len(raw0)))
                     if any(str(c).strip().upper() == "DATE" for c in raw0.iloc[i].tolist())), None)
         if hdr is None:
-            raise DataError(f"{shed} yield file mein 'DATE' wali header row nahi mili")
+            raise DataError(f"{shed} yield file mein 'DATE' header row not found")
         raw = raw0.iloc[hdr + 1:].copy()
         raw.columns = [re.sub(r"\s+", " ", str(c).strip().upper()) for c in raw0.iloc[hdr].tolist()]
         date_col = next((c for c in raw.columns if c == "DATE"), None)
@@ -2646,7 +2646,7 @@ def _fetch_dyield_cached(files):
         val_col = next((c for c in raw.columns if "SHED" in c), None)
         if not all([date_col, item_col, val_col]):
             raise DataError(f"{shed} yield file mein DATE / ITEM / SHED columns nahi mile. "
-                            f"Mile hue: {list(raw.columns)}")
+                            f"Found: {list(raw.columns)}")
         d = _parse_mixed_dates(raw[date_col])
         t = pd.DataFrame({
             "shed": shed,
@@ -2657,7 +2657,7 @@ def _fetch_dyield_cached(files):
         frames.append(t[d.notna() & (t["item"] != "") & (t["item"] != "NAN")])
     df = pd.concat(frames, ignore_index=True)
     if df.empty:
-        raise DataError("Yield files mein koi valid date nahi mili")
+        raise DataError("No valid date found in yield files")
     return df, datetime.datetime.now(IST)
 
 
@@ -2791,7 +2791,7 @@ def _fetch_chem_daily_cached(files):
         hdr = next((i for i in range(min(15, len(raw)))
                     if str(raw.iloc[i, 0]).strip().upper() == "CHEMICALS"), None)
         if hdr is None:
-            raise DataError(f"Tonnage file mein 'CHEMICALS' wali header row nahi mili: {url}")
+            raise DataError(f"'CHEMICALS' header row not found in Tonnage file: {url}")
         dates = _parse_mixed_dates(pd.Series(raw.iloc[hdr, 2:].tolist()))
         body = raw.iloc[hdr + 1:]
         names = (body.iloc[:, 0].astype(str).str.strip().str.upper()
@@ -2818,7 +2818,7 @@ def _fetch_chem_daily_cached(files):
             f = pd.concat([f, s], ignore_index=True)
         frames.append(f)
     if not frames:
-        raise DataError("Tonnage daily files mein koi valid date nahi mili")
+        raise DataError("No valid date found in tonnage daily files")
     return pd.concat(frames, ignore_index=True), datetime.datetime.now(IST)
 
 
@@ -2921,7 +2921,7 @@ def stock_balance_card(df, day, issued_col, label):
     c_typ = find("Vech Type", "Vch Type", "Voucher Type")
     
     if not c_bal or not c_rec or not c_iss:
-        raise DataError(f"{label} sheet mein columns nahi mile.")
+        raise DataError(f"{label} columns not found.")
 
     # 1. Selected Date tak ka Balance (Sabse aakhri valid balance)
     sub = df[df["_date"] <= day].copy()
@@ -2961,7 +2961,7 @@ def stock_balance_card(df, day, issued_col, label):
     if last_dt == day:
         note = f"Balance as on {day.strftime('%d-%b-%Y')}"
     else:
-        note = f"Last entry {last_dt.strftime('%d-%b-%Y')} ka balance"
+        note = f"Balance as of last entry {last_dt.strftime('%d-%b-%Y')}"
 
     sections = [
         (f"🗓 Month Total ({day:%b-%y})", [
@@ -2976,7 +2976,7 @@ def stock_balance_card(df, day, issued_col, label):
     if opening is not None:
         calc_bal = opening + t_in - t_out
         if abs(calc_bal - balance) > 1:
-            sections.append(("⚠ Check: sheet balance match nahi", [
+            sections.append(("⚠ Check: sheet balance does not match", [
                 ("Sheet balance", f"{balance:,.0f} Kg"),
                 ("Opening + In - Out", f"{calc_bal:,.0f} Kg"),
             ]))
@@ -2997,7 +2997,7 @@ def pending_vs_completed_card(sheet_key, day, label):
     c_name = next((c for c in cols if norm(c) in ("PROJECT", "PROJECTNAME", "PRODUCT", "PRODUCTNAME", "ITEM", "NAME")), None)
     c_stat = next((c for c in cols if norm(c) == "STATUS"), None)
     if not c_name or not c_stat:
-        return {"value": "Config error", "desc": f"Name / Status column nahi mila. Columns: {cols}", "color": RED}
+        return {"value": "Config error", "desc": f"Name / Status column not found: {cols}", "color": RED}
 
     w = pd.DataFrame({"name": df[c_name].astype(str).str.strip(),
                       "status": df[c_stat].astype(str).str.strip().str.upper()})
@@ -3018,8 +3018,8 @@ def pending_vs_completed_card(sheet_key, day, label):
             (f"{len(pend)}", "Pending"),
         ],
         "details": [
-            (f"⏳ Pending ({len(pend)})", [(r["name"], r["status"] or "Pending") for _, r in pend.iterrows()] or [("Koi pending nahi", "✅")]),
-            (f"✅ Completed ({len(done)})", [(r["name"], "Done") for _, r in done.iterrows()] or [("Abhi koi nahi", "-")]),
+            (f"⏳ Pending ({len(pend)})", [(r["name"], r["status"] or "Pending") for _, r in pend.iterrows()] or [("Nothing pending", "✅")]),
+            (f"✅ Completed ({len(done)})", [(r["name"], "Done") for _, r in done.iterrows()] or [("None right now", "-")]),
         ],
     }
 _DSP_ORDER = ["April", "May", "June", "July", "August", "September", "October", "November", "December",
@@ -3033,7 +3033,7 @@ def _dsp_prepare(df):
     party, month = low.get("party name"), low.get("month")
     c1, c2 = low.get("91-180 days"), low.get("181-270 days")
     if not (party and month and c1 and c2):
-        return None, f"Columns nahi mile: {list(w.columns)}"
+        return None, f"Columns not found: {list(w.columns)}"
     out = pd.DataFrame({
         "party": w[party].astype(str).str.strip(),
         "month": w[month].astype(str).str.strip().str.title(),
@@ -3068,7 +3068,7 @@ def finance_dispute_card(day):
     mname = day.strftime("%B")
     m = w[w["month"] == mname].copy()
     if m.empty:
-        return {"value": "0", "desc": f"{mname} ka dispute data nahi hai", "color": GREY}
+        return {"value": "0", "desc": f"{mname} has no dispute data", "color": GREY}
     m["t"] = m["a"] + m["b"]
     tot, ta, tb = m["t"].sum(), m["a"].sum(), m["b"].sum()
     ca, cb = int((m["a"] > 0).sum()), int((m["b"] > 0).sum())
@@ -3132,7 +3132,7 @@ def _hr_tab_rows(pub_url, keyword=""):
     tabs = discover_tabs(pub_url)
     pick = next((g for n, g in tabs if keyword and keyword.upper() in n.upper()), tabs[0][1] if not keyword else None)
     if pick is None:
-        raise DataError(f"HR tab '{keyword}' nahi mila. Tabs: {[n for n, _ in tabs]}")
+        raise DataError(f"HR tab '{keyword}' not found. Tabs: {[n for n, _ in tabs]}")
     data = _http_get(pub_url.split("/pub")[0] + f"/pub?output=csv&gid={pick}")
     return list(csv.reader(io.StringIO(data.decode("utf-8-sig"))))
 
@@ -3213,7 +3213,7 @@ def _hr_parse_staff(rows):
         return pd.DataFrame(columns=["dept", "grp"])
     head = [re.sub(r"\s+", " ", str(h)).strip().upper() for h in rows[0]]
     if "DESIGNATION" not in head:
-        raise DataError(f"HR staff sheet me DESIGNATION column nahi mila. Columns: {head}")
+        raise DataError(f"DESIGNATION column not found in HR staff sheet: {head}")
     di = head.index("DESIGNATION")
     pi = head.index("DEPARTMENT") if "DEPARTMENT" in head else None
     out = []
@@ -3237,7 +3237,7 @@ def hr_manpower_df():
         df = _hr_parse_manpower(list(csv.reader(io.StringIO(data.decode("utf-8-sig")))))
         if len(df):
             return df
-    raise DataError(f"Manpower data kisi tab me nahi mila. Tabs: {[n for n, _ in tabs]}")
+    raise DataError(f"Manpower data not found in any tab. Tabs: {[n for n, _ in tabs]}")
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -3318,7 +3318,7 @@ def hrg_staff_card(day):
         c = g["grp"].value_counts()
         rows.append((dp.title(), f"Helper {c.get('Helper', 0)} | Supervisor {c.get('Supervisor', 0)} | Staff {c.get('Staff', 0)} | Total {len(g)}"))
     return {"value": f"{n} Employees",
-            "desc": "Employee master ke hisaab se (daily present nahi)", "color": BLUE,
+            "desc": "Based on employee master (not daily attendance))", "color": BLUE,
             "metrics": [(f"{pct('Helper'):.1f}%", "Helper"), (f"{pct('Supervisor'):.1f}%", "Supervisor"),
                         (f"{pct('Staff'):.1f}%", "Staff"), (f"{n}", "Total")],
             "details": [("🏭 Department-wise (Helper | Supervisor | Staff)", rows)]}
@@ -3392,7 +3392,7 @@ def hrg_staff_card(day):
         rows.append((dp.title(), f"Helper {c.get('Helper', 0)} | Supervisor {c.get('Supervisor', 0)} | Staff {c.get('Staff', 0)} | Total {len(g)}"))
     return {
         "value": f"{n} Employees",
-        "desc": "Employee master ke hisaab se (daily present nahi)",
+        "desc": "Based on employee master (not daily attendance)",
         "color": BLUE,
         "metrics": [
             (f"{cnt.get('Helper', 0)}", f"Helper · {pct('Helper'):.1f}%"),
@@ -3431,7 +3431,7 @@ PPC_NAMES = ["ASHIMA", "DIMPLE", "RAMAN", "SAJID", "SACHIN"]
 
 def _ppc_wise_card(df, day):
     if "ORDER NO" not in df.columns:
-        return {"value": "Error", "desc": "ORDER NO column nahi mila", "color": RED}
+        return {"value": "Error", "desc": "ORDER NO column not found", "color": RED}
     tab_col = "TAB_NAME" if "TAB_NAME" in df.columns else "TAB_GID"
 
     # Orders Left jaisa hi rule: ek ORDER NO = ek order (pehli date wala)
@@ -3450,7 +3450,7 @@ def _ppc_wise_card(df, day):
         out = []
         for _, r in g.iterrows():
             party = r.get("PARTY", r.get("PARTY NAME", "Unknown"))
-            age = f"{int(r['_age'])} din" if pd.notna(r["_age"]) else "date nahi"
+            age = f"{int(r['_age'])} din" if pd.notna(r["_age"]) else "No date"
             q = ""
             if qty_col and str(r.get(qty_col, "")).strip() not in ("", "nan"):
                 q = f" · Qty {r[qty_col]}"
@@ -3469,7 +3469,7 @@ def _ppc_wise_card(df, day):
         "desc": "PPC wise pending (Open Anyone's Block)",
         "color": RED if total > 0 else BLUE,
         "drill": drill,
-        "drill_heading": "Pending orders (oldest pehle)",
+        "drill_heading": "Pending orders (oldest first)",
     }
 
 
@@ -3558,7 +3558,7 @@ def compute_kpi(df, spec, day):
         if not total_col:
             total_col = next((c for c in df.columns if "TOTAL" in str(c).upper()), None)
         if not total_col:
-            return {"value": "Error", "desc": f"Total column nahi mila. Columns: {list(df.columns)}", "color": RED}
+            return {"value": "Error", "desc": f"Total column not found. Columns: {list(df.columns)}", "color": RED}
         total_sum = _num(df[total_col]).sum()
         return {
             "value": f"{total_sum / 10000000:,.2f}",
@@ -3596,7 +3596,7 @@ def compute_kpi(df, spec, day):
         if ptype == "rollpack":
             f_df, err_f, _ = get_sheet("f_yield")
             if f_df is None:
-                return {"value": "Error", "desc": f"F-Shed yield data nahi mila: {err_f}", "color": RED}
+                return {"value": "Error", "desc": f"F-Shed yield data not found: {err_f}", "color": RED}
             m_start, m_end = _month_range(day)
             dy, my = d_yield(f_df, day, day), d_yield(f_df, m_start, m_end)
 
@@ -3849,7 +3849,7 @@ def compute_kpi(df, spec, day):
             _fc.setdefault(_fn(_c), _c)
         c_std, c_act = _fc.get("STDRATE"), _fc.get("ACTRATE")
         if not c_act or not c_std:
-            return {"value": "Config error", "desc": f"STD. RATE / ACT. RATE column nahi mila. Columns: {list(sub.columns)}", "color": RED}
+            return {"value": "Config error", "desc": f"STD. RATE / ACT. RATE column not found. Columns: {list(sub.columns)}", "color": RED}
 
         w = pd.DataFrame({
             "std": _num(sub[c_std]).fillna(0.0), "act": _num(sub[c_act]).fillna(0.0),
@@ -3943,7 +3943,7 @@ def compute_kpi(df, spec, day):
     # Rule: 0-7 + 7-14 + 14-21 + 21+  =  ORDERS LEFT   (hamesha, kisi bhi date par)
     if calc and str(calc).startswith("order_"):
         if "ORDER NO" not in df.columns or "FINANCE" not in df.columns:
-            return {"value": "Error", "desc": "ORDER NO / FINANCE column nahi mila", "color": RED}
+            return {"value": "Error", "desc": "ORDER NO / FINANCE column not found", "color": RED}
 
         orders_all = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
 
@@ -3995,7 +3995,7 @@ def compute_kpi(df, spec, day):
                      f"14-21: {counts['order_age_14_21']} + 21+: {counts['order_age_21_plus']} = {total_left}")
             if int(undated.sum()):
                 by_tab = orders[undated].groupby(tab_col).size()
-                line2 += f"<br>Bina date ({int(undated.sum())}, 0-7 mein ginte): " + ", ".join(
+                line2 += f"<br>No date ({int(undated.sum())}, counted in 0-7): " + ", ".join(
                     f"{t} {n}" for t, n in by_tab.items())
             
             # Yahan View Details ki list banayein
@@ -4086,7 +4086,7 @@ def compute_kpi(df, spec, day):
         col_mtr = exact_col("MTR")      # exact: 'HEIGHT(MTR)' is column se match nahi hoga
 
         if not col_grade or not col_mtr:
-            raise DataError(f"LB Stock sheet mein 'GRADE' ya 'MTR' column nahi mila. Columns: {list(df.columns)}")
+            raise DataError(f"'GRADE' or 'MTR' column not found in LB Stock sheet. Columns: {list(df.columns)}")
 
         df_clean = df.copy()
         df_clean["_m"] = _num(df_clean[col_mtr]).fillna(0)
@@ -4140,8 +4140,8 @@ def compute_kpi(df, spec, day):
         if _sheet_tot > 0:
             _ok = abs(_sheet_tot - total_mtr) < 0.5
             details.append(("🧮 Check", [("Sum of MTR rows", f"{total_mtr:,.1f} Mtr"),
-                                        ("Sheet ka apna total", f"{_sheet_tot:,.1f} Mtr"),
-                                        ("Result", "✅ Match" if _ok else "⚠ Match nahi - sheet check karein")]))
+                                        ("Sheet's own total", f"{_sheet_tot:,.1f} Mtr"),
+                                        ("Result", "✅ Match" if _ok else "⚠ No match - please check the sheet")]))
 
         width_line = ""
         if col_width:
@@ -4184,7 +4184,7 @@ def compute_kpi(df, spec, day):
         n_below = int(below.sum())
         
         if n_below == 0:
-            return {"value": "0 Items", "desc": "Sab items minimum se upar hain", "color": BLUE, "extra": "Healthy Stock"}
+            return {"value": "0 Items", "desc": "All items are above minimum", "color": BLUE, "extra": "Healthy Stock"}
 
         # 5. Card ke liye Top 3 names
         names = ", ".join(item[below].head(3).tolist())
@@ -4275,7 +4275,7 @@ def compute_kpi(df, spec, day):
             "value": f"{len(dead)} Items | {dq:,.0f} Qty",
             "desc": f"As on {target_date.strftime('%d-%m-%Y')} (Sheet Stock)",
             "color": RED if len(dead) else BLUE,
-            "extra": txt or "Koi dead stock nahi",
+            "extra": txt or "No dead stock",
             "details": [("📦 Dead Stock Items", det_list)]
         }
 
@@ -5141,8 +5141,8 @@ KPI_SOURCES = {
 MISSING_SOURCE = {
     ("purchase", "Goods Below MS"): "Needs a stock tab with item, current stock and minimum stock columns "
                                     "(not in the PO 'Consolidated' tab)",
-    ("production", "Average Manpower (Section-wise)"): "Section-wise manpower sheet connect hona baaki hai",
-    ("production", "Targets"): "Production target sheet connect hona baaki hai",
+    ("production", "Average Manpower (Section-wise)"): "Section-wise manpower sheet is not connected yet",
+    ("production", "Targets"): "Production target sheet is not connected yet",
     ("finance", "Dispute Cases"): "Dispute cases ki sheet connect hona baaki hai",
     ("other", "Material Returns"): "Material returns ki sheet connect hona baaki hai",
     ("other", "Capacity Utilisation"): "Max capacity + actual production ka data connect hona baaki hai",
@@ -5227,12 +5227,12 @@ DEPARTMENTS = [
         "icon": "📦",
         "name": "ORDER MANAGEMENT",
         "kpis": [
-            ("Orders 0-7 Days Old", "Naye pending orders"),
+            ("Orders 0-7 Days Old", "New pending orders"),
             ("Orders 7-14 Days Old", "Pending 7 to 14 days"),
             ("Orders 14-21 Days Old", "Pending 14 to 21 days"),
             ("Orders 21+ Days Old", "Critical: Pending > 21 days"),
             ("Orders Left (No. / Qty)", "Total pending combined"),
-            ("Current Schedule", "Aaj ke orders"),
+            ("Current Schedule", "Today's orders"),
             ("Serviceability %", "Approved vs Total"),
             ("Orders Not Approved", "Finance approval pending"),
             ("PPC Wise", "PPC wise pending orders"),  
@@ -5424,7 +5424,7 @@ def _fetch_multi_cached(url, gids, date_col, dayfirst, ignore):
             problems.append(f"gid {gid}: {type(exc).__name__}: {exc}")
 
     if not frames:
-        raise DataError("Kisi bhi tab se data nahi mila. " + " | ".join(problems))
+        raise DataError("No data found in any tab. " + " | ".join(problems))
 
     df = pd.concat(frames, ignore_index=True, sort=False).fillna("")
 
@@ -5577,7 +5577,7 @@ def _fetch_orders_cached(url, gids):
     if problems:
         log.warning("order tabs skipped: %s", " | ".join(problems))
     if not frames:
-        raise DataError("Kisi bhi order tab se data nahi mila. " + " | ".join(problems))
+        raise DataError("No data found in any order tab. " + " | ".join(problems))
     return pd.concat(frames, ignore_index=True), datetime.datetime.now(IST)
 
 
@@ -5608,7 +5608,7 @@ def get_sheet(name):
             csv_url = f"{base}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
             data = _http_get(csv_url)
             if data.lstrip()[:1] == b"<":
-                raise PermissionError("Google Sheet data nahi de rahi, check karein ki Publish to web on hai.")
+                raise PermissionError("Google Sheet is not returning data; check that Publish to web is on.")
             df = _frame_from_csv(data, header_hint="GRADE")
             df["_date"] = datetime.datetime.now(IST).date()
             good[name] = (df, datetime.datetime.now(IST))
@@ -5619,7 +5619,7 @@ def get_sheet(name):
             csv_url = u if u.lower().split("?")[0].endswith(".csv") else f"{u.split('/pub')[0]}/pub?output=csv&gid={cfg.get('worksheet', '0')}"
             data = _http_get(csv_url)
             if data.lstrip()[:1] == b"<":
-                raise PermissionError("Preventive sheet data nahi de rahi, check karein ki Publish to web on hai.")
+                raise PermissionError("Preventive sheet is not returning data; check that Publish to web is on.")
             df = pd.read_csv(io.BytesIO(data), header=None, dtype=str)
             df["_date"] = datetime.datetime.now(IST).date()
             good[name] = (df, datetime.datetime.now(IST))
@@ -5724,7 +5724,7 @@ def get_serviceability_data(url, sheet_name):
             break
             
     if hdr_idx is None:
-        raise DataError("Serviceability sheet mein 'MONTH' wali header row nahi mili.")
+        raise DataError("'MONTH' header row not found in Serviceability sheet.")
 
     raw.columns = [str(c).strip().upper() for c in raw.iloc[hdr_idx].tolist()]
     df = raw.iloc[hdr_idx + 1:].copy() # Header ke neeche ka data
@@ -5780,7 +5780,7 @@ def get_serviceability_data(url, sheet_name):
             break
             
     if hdr_idx is None:
-        raise DataError("Serviceability sheet mein 'MONTH' wali header row nahi mili.")
+        raise DataError("'MONTH' header row not found in Serviceability sheet.")
 
     raw.columns = [str(c).strip().upper() for c in raw.iloc[hdr_idx].tolist()]
     df = raw.iloc[hdr_idx + 1:].copy()
@@ -5909,14 +5909,14 @@ def _fetch_serviceability_cached(url, gid):
     base = url.split("/pub")[0]
     data = _http_get(f"{base}/pub?output=csv&gid={gid}")
     if data.lstrip()[:1] == b"<":
-        raise PermissionError("Google ne data nahi diya. Sheet ko 'Publish to web' karein "
+        raise PermissionError("Google returned no data. 'Publish to web' the sheet "
                               "(File > Share > Publish to web) aur gid check karein.")
     rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
 
     # layout check: shed header row mein F=B ... N=K-J hona chahiye
     ok = any(len(r) > 13 and r[5].strip().upper() == "B" and r[13].strip().upper() == "K-J" for r in rows[:15])
     if not ok:
-        raise DataError("Serviceability sheet ka layout badal gaya hai: shed header row (B, C, D, E, H, 2ND/X, "
+        raise DataError("Serviceability sheet layout has changed: shed header row (B, C, D, E, H, 2ND/X, "
                         "F, 3RD, K-J) column F se N tak nahi mili.")
 
     def n(v):
@@ -5942,7 +5942,7 @@ def _fetch_serviceability_cached(url, gid):
             rec["o_" + k] = n(r[SERV_OTHER_START + i])
         recs.append(rec)
     if not recs:
-        raise DataError("Serviceability sheet mein koi valid date wali row nahi mili.")
+        raise DataError("No row with a valid date found in Serviceability sheet.")
     df = pd.DataFrame(recs).drop_duplicates("_date", keep="last").sort_values("_date").reset_index(drop=True)
     return df, datetime.datetime.now(IST)
 
@@ -5970,7 +5970,7 @@ def _serv_trucks_rows(a):
 def _serv_mat_rows(a):
     rows = [(SERV_LABELS[k], f"{_sq(v)} trucks") for k, v in a["mat"].items() if v > 0]
     tot = sum(a["mat"].values())
-    return rows + [("TOTAL (material nahi tha)", f"{_sq(tot)} trucks")] if rows else \
+    return rows + [("TOTAL (no material)", f"{_sq(tot)} trucks")] if rows else \
         [("Material not available", "Not Any Entry In Shed")]
 
 
@@ -5978,7 +5978,7 @@ def _serv_oth_rows(a):
     rows = [(k, f"{_sq(v)} trucks") for k, v in a["oth"].items() if v > 0]
     tot = sum(a["oth"].values())
     return rows + [("TOTAL (other reasons)", f"{_sq(tot)} trucks")] if rows else \
-        [("Other reasons", "✅ Koi nahi")]
+        [("Other reasons", "✅ None")]
 
 
 def serviceability_card_live(day):
@@ -6002,8 +6002,8 @@ def serviceability_card_live(day):
     ]
     reasons = sum(a_day["mat"].values()) + sum(a_day["oth"].values())
     if abs(reasons - a_day["left"]) > 0.01:
-        details.append(("⚠ Check: karan ka total, Trucks Left se match nahi", [
-            ("Trucks Left", _sq(a_day["left"])), ("Sab karan jod ke", _sq(reasons))]))
+        details.append(("⚠ Check: total of reasons does not match Trucks Left", [
+            ("Trucks Left", _sq(a_day["left"])), ("Sum of all reasons", _sq(reasons))]))
 
     details += [
         (f"🗓 Month {day:%b-%y} · Trucks", _serv_trucks_rows(a_mon)),
@@ -7406,7 +7406,7 @@ def prod_category_mix_card(day):
     amt_col = _find_col(["Amt", "Amount", "Value", "Total Amt", "Net Amt"])
 
     if not item_col:
-        return {"value": "Config error", "desc": f"ITEM column nahi mila: {list(w.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"ITEM column not found: {list(w.columns)}", "color": RED}
 
     for col in [bdl_col, pcs_col, kgs_col, amt_col]:
         if col:
@@ -7425,7 +7425,7 @@ def prod_category_mix_card(day):
     w = w[(w[bdl_col] != 0) | (w[pcs_col] != 0) | (w[kgs_col] != 0) | (w[amt_col] != 0)].copy()
 
     if w.empty:
-        return {"value": "0 Items", "desc": "Koi data nahi mila", "color": GREY}
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
 
     tot_bdl = w[bdl_col].sum()
     tot_pcs = w[pcs_col].sum()
@@ -7460,7 +7460,7 @@ def prod_category_mix_card(day):
 
     # Sabse niche Grand Total row
     grand_line = f"{fmt_i(tot_bdl)} Bdls | {fmt_i(tot_pcs)} Pcs | {fmt_k(tot_kgs)} Kg | {fmt_amt(tot_amt)}"
-    cat_rows.append(("TOTAL (sab items)", grand_line))
+    cat_rows.append(("TOTAL (all items)", grand_line))
 
     return {
         "value": fmt_amt(tot_amt),
