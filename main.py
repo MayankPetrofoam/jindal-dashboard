@@ -3322,6 +3322,110 @@ def hrg_staff_card(day):
             "metrics": [(f"{pct('Helper'):.1f}%", "Helper"), (f"{pct('Supervisor'):.1f}%", "Supervisor"),
                         (f"{pct('Staff'):.1f}%", "Staff"), (f"{n}", "Total")],
             "details": [("🏭 Department-wise (Helper | Supervisor | Staff)", rows)]}
+# ===== HR NEW VERSIONS (sir ke changes) - purane hrg_* ke neeche paste karo =====
+def hrg_manpower_card(day):
+    d = hr_manpower_df()
+    tot = d.groupby("_date")["man"].sum()
+    if day not in tot.index:
+        return None
+    m_start, m_end = _month_range(day)
+    month = tot[(tot.index >= m_start) & (tot.index <= day) & (tot > 0)]
+    full = tot[(tot.index >= m_start) & (tot.index <= m_end) & (tot > 0)]
+    avg = month.mean() if len(month) else 0
+    rows = [(dt.strftime("%d-%m-%Y"), f"{v:,.0f} Present")
+            for dt, v in full.sort_index(ascending=False).items()]
+    return {
+        "value": f"{tot.loc[day]:,.0f} Present",
+        "desc": f"Present on {day:%d-%b-%Y}",
+        "color": BLUE,
+        "sections": [(f"📊 Monthly Avg · {day:%b-%y}", [
+            ("Avg per working day", f"{avg:,.1f}"),
+            ("Working days (till date)", f"{len(month)}")])],
+        "details": [
+            (f"🗓 Month total · {day:%b-%y}", [("Total man-days", f"{full.sum():,.0f}")]),
+            (f"📅 Day-wise · {day:%b-%y}", rows),
+        ],
+    }
+
+
+def hrg_overtime_card(day):
+    d = hr_overtime_df()
+    if d.empty:
+        return None
+    tot = d.groupby("_date")["ot"].sum()
+    if day not in tot.index or tot.loc[day] <= 0:
+        return None
+    m_start, m_end = _month_range(day)
+    month = tot[(tot.index >= m_start) & (tot.index <= day) & (tot > 0)]
+    full = tot[(tot.index >= m_start) & (tot.index <= m_end) & (tot > 0)]
+    avg = month.mean() if len(month) else 0
+    day_rows = [(dt.strftime("%d-%m-%Y"), f"{v:,.0f} Hrs")
+                for dt, v in full.sort_index(ascending=False).items()]
+    dp = d[(d["_date"] >= m_start) & (d["_date"] <= m_end)].groupby("dept")["ot"].sum()
+    dp = dp[dp > 0].sort_values(ascending=False)
+    dept_rows = [(k.title(), f"{v:,.0f} Hrs") for k, v in dp.items()]
+    return {
+        "value": f"{tot.loc[day]:,.0f} Hrs",
+        "desc": f"Overtime on {day:%d-%b-%Y}",
+        "color": BLUE,
+        "sections": [(f"📊 Monthly · {day:%b-%y}", [
+            ("Avg OT per working day", f"{avg:,.1f} Hrs"),
+            ("Month total OT", f"{full.sum():,.0f} Hrs")])],
+        "details": [
+            (f"🗓 Month total OT · {day:%b-%y}", [("Total OT", f"{full.sum():,.0f} Hrs")]),
+            (f"📅 Day-wise OT · {day:%b-%y}", day_rows),
+            (f"🏭 Dept-wise OT · {day:%b-%y}", dept_rows + [("TOTAL", f"{dp.sum():,.0f} Hrs")]),
+        ],
+    }
+
+
+def hrg_staff_card(day):
+    s = hr_staff_df()
+    if s.empty:
+        return None
+    n = len(s)
+    cnt = s["grp"].value_counts()
+    pct = lambda g: cnt.get(g, 0) / n * 100
+    rows = []
+    for dp, g in s.groupby("dept"):
+        c = g["grp"].value_counts()
+        rows.append((dp.title(), f"Helper {c.get('Helper', 0)} | Supervisor {c.get('Supervisor', 0)} | Staff {c.get('Staff', 0)} | Total {len(g)}"))
+    return {
+        "value": f"{n} Employees",
+        "desc": "Employee master ke hisaab se (daily present nahi)",
+        "color": BLUE,
+        "metrics": [
+            (f"{cnt.get('Helper', 0)}", f"Helper · {pct('Helper'):.1f}%"),
+            (f"{cnt.get('Supervisor', 0)}", f"Supervisor · {pct('Supervisor'):.1f}%"),
+            (f"{cnt.get('Staff', 0)}", f"Staff · {pct('Staff'):.1f}%"),
+            (f"{n}", "Total · 100%"),
+        ],
+        "details": [("🏭 Department-wise (Helper | Supervisor | Staff)", rows)],
+    }
+
+
+def hrg_dept_card(day):
+    d = hr_manpower_df()
+    x = d[d["_date"] == day].sort_values("man", ascending=False)
+    if x.empty:
+        return None
+    ot = hr_overtime_df()
+    ot_map = ot[ot["_date"] == day].set_index("dept")["ot"].to_dict() if len(ot) else {}
+    present, req = int(x["man"].sum()), int(x["target"].sum())
+    rows = []
+    for r in x.itertuples():
+        t = f"{int(r.target)}" if r.target else "-"
+        o = f"{ot_map.get(r.dept, 0):g}"
+        rows.append((r.dept.title(), f"Present {int(r.man)} | Req {t} | OT {o} Hrs"))
+    rows.append(("TOTAL", f"Present {present} | Req {req} | OT {sum(ot_map.values()):g} Hrs"))
+    return {
+        "value": f"{len(x[x['man'] > 0])} Depts present",
+        "desc": f"Department-wise · {day:%d-%b-%Y}",
+        "color": BLUE,
+        "metrics": [(f"{present}", "Present"), (f"{req}" if req else "-", "Required"), (f"{len(x)}", "Departments")],
+        "sections": [(f"🏭 Sabhi departments · {day:%d-%b-%Y}", rows)],
+        "details": [(f"🏭 Department-wise · {day:%d-%b-%Y}", rows)],
+    }
 
 
 def compute_kpi(df, spec, day):
