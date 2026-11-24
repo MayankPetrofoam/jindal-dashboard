@@ -7590,22 +7590,29 @@ def _prod_add_tiles(res, title):
     r["metrics"] = m
     return r
 # ============ PRODUCTION: AVG MANPOWER (day-wise) + TARGET (unit-wise) — ADD-ON ============
+# ============ PRODUCTION: AVG MANPOWER (day-wise) + TARGET (unit-wise) — FIXED ============
 import re as _re2
 import pandas as _pd2
 import datetime as _dt2
 
-# Google Sheet ka "Publish to web" link (pubhtml) aur DAILY tab ka gid yaha daalo
-PROD_TARGET_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-f8spNA_4dJLh7yGuzJdESA9D9eKfBEtYH3d-aI6vgc50qkwM__cbrk6wU0pRmg/pubhtml"   # .../pubhtml ya .../pub?...
-PROD_TARGET_GID = "760559634"                     # e.g. "0" ya lamba number
+PROD_TARGET_PUB = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-f8spNA_4dJLh7yGuzJdESA9D9eKfBEtYH3d-aI6vgc50qkwM__cbrk6wU0pRmg/pubhtml"
+PROD_TARGET_GID = "760559634"
 
 _PT_DATE_RE = _re2.compile(r"^\d{1,2}-[A-Za-z]{3}-\d{2}$")
 
 def _pt_csv_url():
     base = PROD_TARGET_PUB.split("/pub")[0]
-    return f"{base}/pub?output=csv&gid={PROD_TARGET_GID}"
+    return f"{base}/pub?gid={PROD_TARGET_GID}&single=true&output=csv"
+
+def _pt_to_num(val):
+    try:
+        s = str(val or "").replace(",", "").strip()
+        return float(s) if s else None
+    except Exception:
+        return None
 
 def _pt_unit(u):
-    u = str(u or "").strip().upper().replace(" ", "")
+    u = str(u or "").strip().upper().replace(" ", "").replace(".", "")
     if u.startswith("ROLL"):  return "Rolls"
     if u.startswith("MTR"):   return "Mtr"
     if u.startswith("KG"):    return "Kg"
@@ -7616,16 +7623,16 @@ def _pt_unit(u):
 
 @st.cache_data(ttl=600, show_spinner=False)
 def prod_target_df():
-    """cols: ym (YYYY-MM), shed, unit, sub, target  — 'Target (Per Shift)' column se"""
     try:
         raw = _pd2.read_csv(_pt_csv_url(), header=None, dtype=str, keep_default_na=False)
     except Exception:
         return _pd2.DataFrame(columns=["ym", "shed", "unit", "sub", "target"])
+    
     rows = raw.values.tolist()
     out = []
-    hdr_idx = [i for i, r in enumerate(rows) if str(r[0]).strip() == "Shed Name"]
+    hdr_idx = [i for i, r in enumerate(rows) if len(r) > 0 and str(r[0]).strip().lower() == "shed name"]
+    
     for k, h in enumerate(hdr_idx):
-        # month = date row ke sabse common (year, month)
         drow = rows[h - 1] if h > 0 else []
         yms = []
         for c in drow:
@@ -7642,32 +7649,37 @@ def prod_target_df():
         end = hdr_idx[k + 1] - 1 if k + 1 < len(hdr_idx) else len(rows)
         shed = ""
         for r in rows[h + 1:end]:
-            if not any(str(x).strip() for x in r[:4]):
+            if len(r) < 4 or not any(str(x).strip() for x in r[:4]):
                 continue
             if str(r[0]).strip():
                 shed = str(r[0]).strip()
-            t = _num(r[3]) if str(r[3]).strip() else None
+            t = _pt_to_num(r[3])
             if t is None or t == 0:
                 continue
-            out.append({"ym": ym, "shed": shed, "unit": _pt_unit(r[1]),
-                        "sub": str(r[2]).strip(), "target": float(t)})
+            out.append({
+                "ym": ym,
+                "shed": shed,
+                "unit": _pt_unit(r[1]),
+                "sub": str(r[2]).strip(),
+                "target": float(t)
+            })
     return _pd2.DataFrame(out)
 
-# card -> [(label, shed-key in production sheet, manpower-dept keywords in HR sheet)]
+# Keys ko UPPERCASE rakha hai taaki title case mismatch na ho
 PROD_CARD_MAP = {
-    "Rolls & Yield":    [("Peeling", "PEELING", ["PEELING"]), ("Looper", "LOOPER", ["LOOPER"])],
-    "Bdls & Yield":     [("D Shed", "SHED D", ["D SHED"]), ("E Shed", "SHED E", ["E SHED"])],
-    "Rollpack & Yield": [("Emma", "EMMA", ["EMMA"])],
-    "Mattress & Yield": [("Mattress", "MATTEress".upper(), ["MATTRESS"])],
-    "Pillow & Yield":   [("Pillow", "PILLOW", ["PILLOW"])],
-    "Mould":            [("Mould", "MOULD", ["MOULD"])],
-    "Bonded":           [("Bonded", "BONDED", ["BOUND", "BONDED"])],
+    "ROLLS & YIELD":    [("Peeling", "PEELING", ["PEELING"]), ("Looper", "LOOPER", ["LOOPER"])],
+    "BDLS & YIELD":     [("D Shed", "SHED D", ["D SHED", "SHED D"]), ("E Shed", "SHED E", ["E SHED", "SHED E"])],
+    "ROLLPACK & YIELD": [("Emma", "EMMA", ["EMMA"])],
+    "MATTRESS & YIELD": [("Mattress", "MATTERESS", ["MATTRESS", "MATTERESS"])],
+    "PILLOW & YIELD":   [("Pillow", "PILLOW", ["PILLOW"])],
+    "MOULD":            [("Mould", "MOULD", ["MOULD"])],
+    "BONDED":           [("Bonded", "BONDED", ["BOUND", "BONDED"])],
     "SCRAP":            [("Scrap", "SCRAP", ["BAILLING", "BAILING", "BALING"])],
 }
 
 def _pt_find(df, key):
-    """key shed name ka match (mould wale rows me shed name blank/'-' ho sakta hai, isliye carry-forward hi use hota hai)"""
-    return df[df["shed"].str.upper().str.replace(" ", "").str.contains(key.replace(" ", ""), regex=False)]
+    clean_key = key.upper().replace(" ", "")
+    return df[df["shed"].str.upper().str.replace(" ", "").str.contains(clean_key, regex=False)]
 
 def _pt_target_text(df, ym, key):
     d = _pt_find(df[df["ym"] == ym], key)
@@ -7678,15 +7690,18 @@ def _pt_target_text(df, ym, key):
         t = g["target"].iloc[0]
         lab = u or ""
         s = str(sub).upper()
-        if "NIGHT" in s: lab = (lab or "") + " Night"
-        elif "DAY" in s and len(d) > 1 and ("PCS" in s or "KG" in s): lab = (lab or "") + " Day"
-        if "(KG)" in s and not u: lab = "Kg"
-        if "(PCS)" in s and not u: lab = "Pcs"
+        if "NIGHT" in s:
+            lab = (lab + " Night").strip()
+        elif "DAY" in s and len(d) > 1 and ("PCS" in s or "KG" in s):
+            lab = (lab + " Day").strip()
+        if "(KG)" in s and not u:
+            lab = "Kg"
+        if "(PCS)" in s and not u:
+            lab = "Pcs"
         parts.append(f"{t:,.0f} {lab}".strip())
     return " · ".join(parts)
 
 def _pt_manpower(day, kws):
-    """selected day ka manpower; us din data na ho to us mahine ka latest available din"""
     try:
         m = hr_manpower_df()
         if m is None or m.empty:
@@ -7697,33 +7712,43 @@ def _pt_manpower(day, kws):
         if sel.empty:
             return None, None
         day = _pd2.Timestamp(day).normalize()
-        sel = sel[_pd2.to_datetime(sel["_date"]).dt.normalize() <= day]
-        sel = sel[sel["man"].notna()]
+        sel["_dt_norm"] = _pd2.to_datetime(sel["_date"]).dt.normalize()
+        sel = sel[(sel["_dt_norm"] <= day) & (sel["man"].notna())]
         if sel.empty:
             return None, None
-        last = _pd2.to_datetime(sel["_date"]).dt.normalize().max()
-        v = sel[_pd2.to_datetime(sel["_date"]).dt.normalize() == last]["man"].sum()
+        last = sel["_dt_norm"].max()
+        v = sel[sel["_dt_norm"] == last]["man"].sum()
         return float(v), last
     except Exception:
         return None, None
 
 def _prod_add_tiles(res, title, day=None):
-    """OVERRIDE: Avg Manpower (day-wise) + Target (unit-wise, per shift). Purana code same rehta hai."""
     try:
-        day = _pd2.Timestamp(day) if day is not None else _pd2.Timestamp.today()
+        # Agar day pass nahi hua, to res ke metrics/subtitle se date nikalne ki koshish karega
+        if day is None and isinstance(res, dict):
+            sub_txt = str(res.get("subtitle", "")) + " " + str(res.get("date", ""))
+            m_dt = _re2.search(r"\d{2}-\d{2}-\d{4}|\d{2}-[A-Za-z]{3}-\d{4}", sub_txt)
+            if m_dt:
+                day = _pd2.to_datetime(m_dt.group(0), dayfirst=True, errors="coerce")
+        
+        day = _pd2.Timestamp(day) if (day is not None and not _pd2.isna(day)) else _pd2.Timestamp.today()
         ym = day.strftime("%Y-%m")
+        
         tdf = prod_target_df()
         if tdf is not None and not tdf.empty and ym not in set(tdf["ym"]):
-            ym = max(tdf["ym"])                    # mahina sheet me na ho to latest month ka target
-        blocks = PROD_CARD_MAP.get(title)
-        if title == "Total Production & Yield":   # saare sheds ka unit-wise total
+            ym = max(tdf["ym"])
+
+        t_upper = str(title or "").strip().upper()
+        blocks = PROD_CARD_MAP.get(t_upper)
+
+        if t_upper == "TOTAL PRODUCTION & YIELD":
             blocks = [x for v in PROD_CARD_MAP.values() for x in v]
-            mp, tg = [], {}
+            tg = {}
             tot_mp = 0.0
             for lab, key, kws in blocks:
                 v, _d = _pt_manpower(day, kws)
                 tot_mp += v or 0
-                d = _pt_find(tdf[tdf["ym"] == ym], key) if tdf is not None and not tdf.empty else None
+                d = _pt_find(tdf[tdf["ym"] == ym], key) if (tdf is not None and not tdf.empty) else None
                 if d is not None:
                     for _, r in d.iterrows():
                         if r["unit"]:
@@ -7731,17 +7756,20 @@ def _prod_add_tiles(res, title, day=None):
             res["metrics"].append((f"{tot_mp:,.0f}" if tot_mp else "—", "Avg Manpower"))
             res["metrics"].append((" · ".join(f"{v:,.0f} {u}" for u, v in tg.items()) or "—", "Target / Shift"))
             return res
+
         if not blocks:
             res["metrics"].append(("—", "Avg Manpower"))
             res["metrics"].append(("—", "Target"))
             return res
+
         mp_parts, tg_tiles = [], []
         for lab, key, kws in blocks:
-            v, d = _pt_manpower(day, kws)
+            v, _d = _pt_manpower(day, kws)
             if v is not None:
                 mp_parts.append(f"{lab} {v:,.0f}" if len(blocks) > 1 else f"{v:,.0f}")
-            txt = _pt_target_text(tdf, ym, key) if tdf is not None and not tdf.empty else None
+            txt = _pt_target_text(tdf, ym, key) if (tdf is not None and not tdf.empty) else None
             tg_tiles.append((txt or "—", f"{lab} Target / Shift" if len(blocks) > 1 else "Target / Shift"))
+
         res["metrics"].append((" | ".join(mp_parts) or "—", "Avg Manpower"))
         res["metrics"].extend(tg_tiles)
     except Exception:
