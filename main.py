@@ -3426,6 +3426,62 @@ def hrg_dept_card(day):
         "sections": [(f"🏭 All departments · {day:%d-%b-%Y}", rows)],
         "details": [(f"🏭 Department-wise · {day:%d-%b-%Y}", rows)],
     }
+# ===== ORDER MANAGEMENT: PPC WISE (5 clickable blocks) — ADD-ON =====
+PPC_NAMES = ["ASHIMA", "DIMPLE", "RAMAN", "SAJID", "SACHIN"]
+
+def _ppc_wise_card(df, day):
+    if "ORDER NO" not in df.columns:
+        return {"value": "Error", "desc": "ORDER NO column nahi mila", "color": RED}
+    tab_col = "TAB_NAME" if "TAB_NAME" in df.columns else "TAB_GID"
+
+    # Orders Left jaisa hi rule: ek ORDER NO = ek order (pehli date wala)
+    orders = df[df["ORDER NO"].astype(str).str.strip() != ""].copy()
+    orders["ORDER NO"] = orders["ORDER NO"].astype(str).str.strip()
+    orders["_sort"] = orders["_date"].apply(lambda x: x if pd.notna(x) else datetime.date.max)
+    orders = orders.sort_values("_sort", kind="stable").drop_duplicates("ORDER NO", keep="first")
+    orders["_age"] = pd.to_numeric(
+        orders["_date"].apply(lambda x: (day - x).days if pd.notna(x) else None), errors="coerce")
+    orders["_ppc"] = orders[tab_col].astype(str).str.strip().str.upper()
+
+    qty_col = next((c for c in orders.columns if "QTY" in str(c).upper()), None)
+
+    def rows_for(g):
+        g = g.sort_values("_age", ascending=False, na_position="last")
+        out = []
+        for _, r in g.iterrows():
+            party = r.get("PARTY", r.get("PARTY NAME", "Unknown"))
+            age = f"{int(r['_age'])} din" if pd.notna(r["_age"]) else "date nahi"
+            q = ""
+            if qty_col and str(r.get(qty_col, "")).strip() not in ("", "nan"):
+                q = f" · Qty {r[qty_col]}"
+            out.append((f"Order {r['ORDER NO']}", f"{party} · {age}{q}"))
+        return out
+
+    drill = []
+    names = PPC_NAMES + [n for n in orders["_ppc"].unique() if n not in PPC_NAMES and n]  # koi extra tab ho to wo bhi
+    for n in names:
+        g = orders[orders["_ppc"] == n]
+        drill.append((f"👤 {n.title()} — {len(g)} pending", rows_for(g)))
+
+    total = len(orders)
+    return {
+        "value": f"{total} Orders",
+        "desc": "PPC wise pending (kisi ka bhi block kholo)",
+        "color": RED if total > 0 else BLUE,
+        "drill": drill,
+        "drill_heading": "Pending orders (oldest pehle)",
+    }
+
+KPI_SOURCES[("order", "PPC Wise")] = {
+    "sheet": ["order_management_1", "order_management_2"],
+    "calc": "order_ppc",
+}
+
+_compute_kpi_orig = compute_kpi
+def compute_kpi(df, spec, day, *a, **k):
+    if spec.get("calc") == "order_ppc":
+        return _ppc_wise_card(df, day)
+    return _compute_kpi_orig(df, spec, day, *a, **k)
 
 
 def compute_kpi(df, spec, day):
@@ -8115,7 +8171,7 @@ def render_kpi(dept_key, idx, title, desc):
             if res is not None and res.get("drill"):
                 for _lbl, _rows in res["drill"]:
                     with st.expander(_lbl):
-                        st.markdown(_sections_html([("Material-wise balance", _rows)]), unsafe_allow_html=True)
+                        st.markdown(_sections_html([(res.get("drill_heading", "Material-wise balance"), _rows)]), unsafe_allow_html=True)
 
             if res is None:
                 _card(slot, title, "No Data Available for This Date", desc, GREY, chosen.strftime(DATE_FMT))
