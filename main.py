@@ -7776,6 +7776,98 @@ def _prod_add_tiles(res, title, day=None):
         res["metrics"].append(("—", "Avg Manpower"))
         res["metrics"].append(("—", "Target"))
     return res
+# ===== PRODUCTION FINAL ADD-ON: combined Avg Manpower + combined Target + Rollpack Pcs =====
+
+def _pt_day(res, day):
+    if day is None and isinstance(res, dict):
+        sub_txt = str(res.get("subtitle", "")) + " " + str(res.get("date", ""))
+        m_dt = _re2.search(r"\d{2}-\d{2}-\d{4}|\d{2}-[A-Za-z]{3}-\d{4}", sub_txt)
+        if m_dt:
+            day = _pd2.to_datetime(m_dt.group(0), dayfirst=True, errors="coerce")
+    if day is not None and not _pd2.isna(day):
+        return _pd2.Timestamp(day)
+    try:
+        g = st.session_state.get("global_date")
+        if g:
+            return _pd2.Timestamp(g)
+    except Exception:
+        pass
+    return _pd2.Timestamp.today()
+
+def _pt_vals(tdf, ym, key):
+    """ek shed ke targets -> {unit: value}. Mould me Day/Night ko jod ke Pcs / Kg."""
+    out = {}
+    d = _pt_find(tdf[tdf["ym"] == ym], key)
+    for (u, sub), g in d.groupby(["unit", "sub"], sort=False):
+        s = str(sub).upper()
+        lab = u or ""
+        if not lab and "(KG)" in s:  lab = "Kg"
+        if not lab and "(PCS)" in s: lab = "Pcs"
+        out[lab] = out.get(lab, 0) + float(g["target"].iloc[0])
+    return out
+
+def _pt_fmt(vals):
+    return " · ".join(f"{v:,.0f} {u}".strip() for u, v in vals.items() if v) or "—"
+
+def _rollpack_pcs_day(day):
+    try:
+        pdf, _e, _t = get_sheet("production_logs")
+        if pdf is None or pdf.empty:
+            return None
+        t = PROD_TYPES["rollpack"]
+        s = _pcol(pdf, t["col"]).astype(str).str.upper()
+        m = s.str.contains("|".join(map(re.escape, t["words"])), na=False)
+        d = pdf[m & (_pd2.to_datetime(pdf["_date"]).dt.normalize() == _pd2.Timestamp(day).normalize())]
+        return float(_num(_pcol(d, "SHEET")).sum())
+    except Exception:
+        return None
+
+_prod_add_tiles_prev = _prod_add_tiles   # purana function safe rakha hai
+
+def _prod_add_tiles(res, title, day=None):
+    """FINAL: har card me ek hi Avg Manpower (total) + ek hi Target (total). Rollpack me Pcs tile bhi."""
+    try:
+        day = _pt_day(res, day)
+        ym = day.strftime("%Y-%m")
+        tdf = prod_target_df()
+        if tdf is None or tdf.empty:
+            raise ValueError("no target data")
+        if ym not in set(tdf["ym"]):
+            ym = max(tdf["ym"])
+        t_up = str(title or "").strip().upper()
+        if t_up == "TOTAL PRODUCTION & YIELD":
+            return _prod_add_tiles_prev(res, title, day)      # jaisa tha waisa hi
+        blocks = PROD_CARD_MAP.get(t_up)
+        if not blocks:
+            return _prod_add_tiles_prev(res, title, day)
+
+        # ---- ROLLPACK: Pcs tile ----
+        if t_up == "ROLLPACK & YIELD":
+            p = _rollpack_pcs_day(day)
+            res["metrics"].append((f"{p:,.0f}" if p is not None else "—", "Pcs"))
+
+        # ---- Avg Manpower: sab blocks ka total ----
+        tot, found = 0.0, False
+        for lab, key, kws in blocks:
+            v, _d = _pt_manpower(day, kws)
+            if v is not None:
+                tot += v; found = True
+        res["metrics"].append((f"{tot:,.0f}" if found else "—", "Avg Manpower"))
+
+        # ---- Target: sab blocks ka unit-wise total ----
+        vals = {}
+        for lab, key, kws in blocks:
+            for u, v in _pt_vals(tdf, ym, key).items():
+                vals[u] = vals.get(u, 0) + v
+        if t_up == "ROLLPACK & YIELD":      # Blocks + Bdls ko jod ke Pcs
+            comb = vals.pop("Blocks", 0) + vals.pop("Bdls", 0)
+            if comb:
+                vals = {"Pcs": comb, **vals}
+        res["metrics"].append((_pt_fmt(vals), "Target / Shift"))
+    except Exception:
+        res["metrics"].append(("—", "Avg Manpower"))
+        res["metrics"].append(("—", "Target"))
+    return res
 
 
 def _card(slot, title, value, desc, color, date_text=None, error=False, extra=None,
@@ -8015,7 +8107,7 @@ def render_kpi(dept_key, idx, title, desc):
                 _card(slot, title, "Config error", f"{type(exc).__name__}: {exc}", RED, label, error=True)
                 return
             if res is not None and dept_key == "production":
-                res = _prod_add_tiles(res, title)
+                res = _prod_add_tiles(res, title, chosen)
 
             if res is not None and res.get("details"):
                 with st.expander("📋 View Full Details"):
