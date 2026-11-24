@@ -3423,7 +3423,7 @@ def hrg_dept_card(day):
         "desc": f"Department-wise · {day:%d-%b-%Y}",
         "color": BLUE,
         "metrics": [(f"{present}", "Present"), (f"{req}" if req else "-", "Required"), (f"{len(x)}", "Departments")],
-        "sections": [(f"🏭 Sabhi departments · {day:%d-%b-%Y}", rows)],
+        "sections": [(f"🏭 All departments · {day:%d-%b-%Y}", rows)],
         "details": [(f"🏭 Department-wise · {day:%d-%b-%Y}", rows)],
     }
 
