@@ -3466,7 +3466,7 @@ def _ppc_wise_card(df, day):
     total = len(orders)
     return {
         "value": f"{total} Orders",
-        "desc": "PPC wise pending (kisi ka bhi block kholo)",
+        "desc": "PPC wise pending (Open Anyone's Block)",
         "color": RED if total > 0 else BLUE,
         "drill": drill,
         "drill_heading": "Pending orders (oldest pehle)",
