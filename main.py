@@ -7945,7 +7945,6 @@ def _fix_sheets_to_pcs(obj):
     elif isinstance(obj, dict):
         return {k: _fix_sheets_to_pcs(v) for k, v in obj.items()}
     return obj
-@st.fragment
 KPI_SOURCES[("order", "PPC Wise")] = {
     "sheet": ["order_management_1", "order_management_2"],
     "calc": "order_ppc",
@@ -7956,6 +7955,7 @@ def compute_kpi(df, spec, day, *a, **k):
     if spec.get("calc") == "order_ppc":
         return _ppc_wise_card(df, day)
     return _compute_kpi_orig(df, spec, day, *a, **k)
+@st.fragment
 def render_kpi(dept_key, idx, title, desc):
     """One KPI block, fully independent: own source, own dates, own dropdown, own errors."""
     key = f"{dept_key}_date_{idx}"
