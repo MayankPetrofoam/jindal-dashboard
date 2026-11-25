@@ -5143,9 +5143,9 @@ MISSING_SOURCE = {
                                     "(not in the PO 'Consolidated' tab)",
     ("production", "Average Manpower (Section-wise)"): "Section-wise manpower sheet is not connected yet",
     ("production", "Targets"): "Production target sheet is not connected yet",
-    ("finance", "Dispute Cases"): "Dispute cases ki sheet connect hona baaki hai",
-    ("other", "Material Returns"): "Material returns ki sheet connect hona baaki hai",
-    ("other", "Capacity Utilisation"): "Max capacity + actual production ka data connect hona baaki hai",
+    ("finance", "Dispute Cases"): "Dispute cases sheet is not connected yet",
+    ("other", "Material Returns"): "Material returns sheet is not connected yet",
+    ("other", "Capacity Utilisation"): "Max capacity + actual production data is not connected yet",
 }
 DEFAULT_MISSING = "Source tab not provided yet (the PO STATUS sheet only holds purchase-order rows)"
 
@@ -6024,7 +6024,7 @@ def serviceability_card_live(day):
         ot = " · ".join(f"{k} {_sq(v)}" for k, v in a["oth"].items() if v > 0)
         rows_mat.append((lbl, mt or "—"))
         rows_oth.append((lbl, ot or "—"))
-    rows_m.append(("TOTAL (April se ab tak)", f"{_sq(a_all['planned'])} planned | {_sq(a_all['dispatch'])} dispatch | "
+    rows_m.append(("TOTAL (April to date)", f"{_sq(a_all['planned'])} planned | {_sq(a_all['dispatch'])} dispatch | "
                                               f"{_sq(a_all['left'])} left | {a_all['pct']:.1f}%"))
     details += [
         ("📊 All Months · Serviceability", rows_m),
@@ -6092,7 +6092,7 @@ def finance_drs_crs_month_card(day):
     mcols = _drs_crs_month_cols(df)
     if not c_grp or not mcols:
         return {"value": "Config error", "color": RED,
-                "desc": f"Group / month columns nahi mile. Columns: {cols}"}
+                "desc": f"Group / month columns not found. Columns: {cols}"}
 
     grp = df[c_grp].astype(str).str.strip().str.upper()
     is_drs, is_crs = grp.isin(DRS_GROUPS), grp.isin(CRS_GROUPS)
@@ -6157,7 +6157,7 @@ def _bal_prepare(df):
     c_grp = next((c for c in cols if norm(c) == "GROUP"), None)
     c_bal = next((c for c in cols if norm(c) == "BALAMT"), None)
     if not (c_mon and c_grp and c_bal):
-        raise DataError(f"Month / GROUP / BAL.AMT column nahi mila. Columns: {cols}")
+        raise DataError(f"Month / GROUP / BAL.AMT column not found. Columns: {cols}")
     c_dc = cols[cols.index(c_bal) - 1] if cols.index(c_bal) > 0 else None     # BAL.AMT se pehle wala Dr/Cr column
     w = pd.DataFrame({
         "m": df[c_mon].map(_bal_month_no),
@@ -6197,7 +6197,7 @@ def finance_drs_crs_sd_sc_card(day):
     c_grp = next((c for c in cols if norm(c) == "GROUP"), None)
     c_bal = next((c for c in cols if norm(c) == "CLOSINGBALANCE"), None)
     if not c_grp or not c_bal:
-        return {"value": "Config error", "desc": f"Group / Closing Balance column nahi mila. Columns: {cols}", "color": RED}
+        return {"value": "Config error", "desc": f"Group / Closing Balance column not found. Columns: {cols}", "color": RED}
 
     w = pd.DataFrame({
         "grp": df[c_grp].astype(str).str.strip().str.upper(),
@@ -6285,9 +6285,9 @@ def finance_rec_paid_card(day):
         ],
         "details": [
             (f"📥 Party-wise Received ({len(rec_rows)} parties)",
-             rec_rows + [("TOTAL RECEIVED", f"{_inr(tot_rec_rs)} ({cr(tot_rec_rs)})")] if rec_rows else [("Koi data nahi", "-")]),
+             rec_rows + [("TOTAL RECEIVED", f"{_inr(tot_rec_rs)} ({cr(tot_rec_rs)})")] if rec_rows else [("No data", "-")]),
             (f"📤 Party-wise Paid ({len(paid_rows)} parties)",
-             paid_rows + [("TOTAL PAID", f"{_inr(tot_paid_rs)} ({cr(tot_paid_rs)})")] if paid_rows else [("Koi data nahi", "-")]),
+             paid_rows + [("TOTAL PAID", f"{_inr(tot_paid_rs)} ({cr(tot_paid_rs)})")] if paid_rows else [("No data", "-")]),
         ],
     }
 
@@ -6342,7 +6342,7 @@ def _recv_sale_by_month(sdf):
     """{(year, month): (sale_sum, din_count)} daily sales sheet se."""
     amt_col = next((c for c in sdf.columns if "TOTAL SALE" in str(c).upper()), None)
     if amt_col is None:
-        raise DataError("TOTAL SALE AMOUNT column nahi mila")
+        raise DataError("TOTAL SALE AMOUNT column not found")
     t = pd.DataFrame({"d": sdf["_date"], "a": _num(sdf[amt_col]).fillna(0.0)})
     t = t[t["d"].notna()]
     t["ym"] = t["d"].map(lambda x: (x.year, x.month))
@@ -6383,16 +6383,16 @@ def finance_recv_days_card(day):
     py, pm = _recv_prev(day.year, day.month)
     prev = datetime.date(py, pm, 1)
     if pm not in set(w["m"]):
-        return {"value": "No Data", "desc": f"{prev:%b-%y} ka DRS sheet mein nahi hai", "color": GREY}
+        return {"value": "No Data", "desc": f"{prev:%b-%y} is not in the DRS sheet", "color": GREY}
     if (py, pm) not in sales or sales[(py, pm)][0] <= 0:
-        return {"value": "No Data", "desc": f"{prev:%b-%y} ki Sale sheet mein nahi hai", "color": GREY}
+        return {"value": "No Data", "desc": f"{prev:%b-%y} is not in the Sale sheet", "color": GREY}
 
     drs = _bal_drs_crs(w, pm)["drs"]
     sale, ndays = sales[(py, pm)]
     days = drs / sale * 30
     cr = lambda x: f"{x / 10000000:,.2f} Cr"
     full = calendar.monthrange(py, pm)[1]
-    warn = [] if ndays >= full else [("⚠️ Note", f"Sale sirf {ndays}/{full} din ki hai - result adhoora")]
+    warn = [] if ndays >= full else [("⚠️ Note", f"Sale sirf {ndays}/{full} days - result incomplete")]
 
     return {
         "value": f"{days:,.2f}",
@@ -6497,7 +6497,7 @@ def maint_pm_card(df, day):
     p = _pm_parse(df)
     cur = p[p["m"] == day.month]
     if cur.empty:
-        return {"value": "No Data", "desc": f"{day:%b-%y} ka preventive schedule sheet mein nahi hai", "color": GREY}
+        return {"value": "No Data", "desc": f"{day:%b-%y} is not in the preventive schedule sheet", "color": GREY}
     total, done = len(cur), int(cur["done"].sum())
     pct = done / total * 100
     pend = cur[~cur["done"]]
@@ -6510,16 +6510,16 @@ def maint_pm_card(df, day):
         f = p[p["m"] == m]
         mrows.append((mname(m), f"{f['done'].mean() * 100:.1f}%  ({int(f['done'].sum())}/{len(f)} machines)"))
 
-    sec_done = [(s or "-", f"{int(f['done'].sum())}/{len(f)} machines ho gayi") for s, f in cur.groupby("section", sort=False)]
+    sec_done = [(s or "-", f"{int(f['done'].sum())}/{len(f)} machines done") for s, f in cur.groupby("section", sort=False)]
     return {
         "value": f"{pct:.1f} %",
-        "desc": f"{done} / {total} machines ka PM ho gaya · {day:%b-%y}",
+        "desc": f"{done} / {total} machines PM done · {day:%b-%y}",
         "color": BLUE if pct >= 90 else (AMBER if pct >= 70 else RED),
-        "sections": [(f"⏳ PM baaki ({len(pend)} machines)", [(r["machine"].title(), r["section"]) for _, r in pend.iterrows()])] if len(pend) else [],
+        "sections": [(f"⏳ PM pending ({len(pend)} machines)", [(r["machine"].title(), r["section"]) for _, r in pend.iterrows()])] if len(pend) else [],
         "details": [
             ("📊 Month-wise PM %", mrows),
             (f"🏭 {day:%b-%y} · Section-wise (PM done)", sec_done),
-            (f"✅ {day:%b-%y} · PM ho chuki machines ({done})", [(r["machine"].title(), r["section"]) for _, r in cur[cur["done"]].iterrows()]),
+            (f"✅ {day:%b-%y} · PM completed machines ({done})", [(r["machine"].title(), r["section"]) for _, r in cur[cur["done"]].iterrows()]),
         ],
     }
 def _bd_start_end(df):
@@ -6562,7 +6562,7 @@ def maint_downtime_card(df, day):
     c_m = _mcol(df, "MACHINE NAME")
     c_i = _mcol(df, "ISSUE DESCRIPTION")
     if not c_m:
-        return {"value": "Config error", "desc": f"Machine Name column nahi mila. Columns: {list(df.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Machine Name column not found: {list(df.columns)}", "color": RED}
 
     w = _bd_start_end(df)
     w["machine"] = w[c_m].astype(str).str.strip()
@@ -6588,11 +6588,11 @@ def maint_downtime_card(df, day):
     yrows.append(("TOTAL (YTD)", f"{ytd['hrs'].sum():,.1f} Hrs"))
 
     details = [
-        (f"🏭 {day:%b-%y} · Machine-wise downtime ({len(mrows)} machines)", mrows or [("Koi breakdown nahi", "✅")]),
+        (f"🏭 {day:%b-%y} · Machine-wise downtime ({len(mrows)} machines)", mrows or [("No breakdown", "✅")]),
         (f"📊 Month-wise (Apr-{fy_start.year % 100} se {day:%b-%y})", yrows),
     ]
     if missing:
-        details.append(("⚠ Check", [(f"{missing} solved breakdowns", "Resolution date/time nahi bhara, unka downtime 0 gina")]))
+        details.append(("⚠ Check", [(f"{missing} solved breakdowns", "Resolution date/time missing; their downtime counted as 0")]))
 
     return {
         "value": h(mon["hrs"].sum()),
@@ -6627,18 +6627,18 @@ def _fetch_complaints_cached(url, gid):
     base = url.split("/pub")[0]
     data = _http_get(f"{base}/pub?output=csv&gid={gid}")
     if data.lstrip()[:1] == b"<":
-        raise PermissionError("Complaint sheet publish nahi hui. File > Share > Publish to web karein aur gid check karein.")
+        raise PermissionError("Complaint sheet is not published. File > Share > Publish to web and check the gid.")
     rows = list(csv.reader(io.StringIO(data.decode("utf-8-sig", errors="replace"))))
     hdr = next((i for i, r in enumerate(rows)
                 if any(c.strip().upper() == "DATE" for c in r) and any("COMPLAINT" in c.upper() for c in r)), None)
     if hdr is None:
-        raise DataError("Complaint sheet mein 'DATE' aur 'COMPLAINT' wali header row nahi mili.")
+        raise DataError("'DATE' and 'COMPLAINT' header row not found in Complaint sheet.")
     df = _frame_from_rows(rows[hdr:])
     df.columns = [re.sub(r"\s+", " ", str(c)).strip().upper() for c in df.columns]
     df["_date"] = df["DATE"].map(_cmp_date)
     df = df[df["_date"].notna()].copy()
     if df.empty:
-        raise DataError("Complaint sheet mein koi valid date nahi mili.")
+        raise DataError("No valid date found in Complaint sheet.")
     return df, datetime.datetime.now(IST)
 
 
@@ -6676,13 +6676,13 @@ def complaints_card(df, day):
     need = ["PRODUCT NAME", "CUSTOMER", "COMPLAINT", "PREVENTIVE ACTION"]
     miss = [c for c in need if c not in df.columns]
     if miss:
-        return {"value": "Config error", "desc": f"Columns nahi mile: {miss}. Mile hue: {list(df.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Columns not found: {miss}. Found: {list(df.columns)}", "color": RED}
 
     w = df[(df["_date"] <= day)].copy()
     w["comp"] = w["COMPLAINT"].astype(str).str.strip()
     w = w[w["comp"] != ""]
     if w.empty:
-        return {"value": "0 Complaints", "desc": "Is date tak koi complaint nahi", "color": BLUE}
+        return {"value": "0 Complaints", "desc": "No complaints up to this date", "color": BLUE}
 
     w["action"] = w["PREVENTIVE ACTION"].astype(str).str.strip()
     w["done"] = w["action"] != ""
@@ -6718,7 +6718,7 @@ def complaints_card(df, day):
 
     return {
         "value": f"{total} Complaints",
-        "desc": f"{first:%d-%b-%y} se {day:%d-%b-%y} tak (last complaint {last:%d-%b-%y})",
+        "desc": f"{first:%d-%b-%y} to {day:%d-%b-%y} (last complaint {last:%d-%b-%y})",
         "color": RED if pending else BLUE,
         "metrics": [
             (f"{total}", "Total Complaints"),
@@ -6751,7 +6751,7 @@ def _due_prepare(df):
     c_d, c_os = pick("DUEDYS", "DUEDAYS"), pick("TOTALO/S", "TOTALOS")
     c_due, c_ov = pick("DUEAMT"), pick("OVERDUEAMT")
     if not all([c_p, c_m, c_os, c_due, c_ov]):
-        raise DataError(f"PARTY NAME / Month / TOTAL O/S / DUE AMT / OVERDUE AMT column nahi mila. Columns: {cols}")
+        raise DataError(f"PARTY NAME / Month / TOTAL O/S / DUE AMT / OVERDUE AMT column not found. Columns: {cols}")
     w = pd.DataFrame({
         "party": df[c_p].astype(str).str.strip(),
         "m": df[c_m].map(_bal_month_no),
@@ -6817,9 +6817,9 @@ def finance_total_due_month_card(day):
         "details": [
             ("📊 All Months · Month-wise", rows_all),
             (f"👥 Party-wise · {day:%b-%y} ({len(prow)} parties)",
-             prow + [("TOTAL (Due + Overdue wali parties)",
+             prow + [("TOTAL (Due + Overdue parties)",
                       f"O/S: {_inr(float(s['os'].sum()))} | Due: {_inr(float(s['due'].sum()))} | Overdue: {_inr(float(s['ov'].sum()))}")]
-             if prow else [("Koi party nahi", "✅")]),
+             if prow else [("No party", "✅")]),
         ],
     }
 # ====================================================================
@@ -6838,7 +6838,7 @@ def _gtm_prepare(df):
     c_b = pick(">120DAYS", ">120", "120-180DAYS", "121-180DAYS", "120-180", "121-180")
     
     if not all([c_p, c_a, c_b]):
-        raise DataError(f"Party Name / 61-120 Days / >120 Days column nahi mila. Columns: {cols}")
+        raise DataError(f"Party Name / 61-120 Days / >120 Days column not found. Columns: {cols}")
         
     w = pd.DataFrame({
         "party": df[c_p].astype(str).str.strip(),
@@ -6884,9 +6884,9 @@ def finance_recv_paid_card(day):
     r_p, r_a = pick(rdf, "PARTYNAME"), pick(rdf, "RECEIVED")
     p_c, p_p, p_a = pick(pdf, "PAYMENTCATEGORY"), pick(pdf, "PARTYNAME"), pick(pdf, "AMOUNT")
     if not (r_p and r_a):
-        return {"value": "Config error", "desc": f"Received file mein PARTY NAME / RECEIVED nahi mila. Columns: {list(rdf.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"PARTY NAME / RECEIVED not found in Received file. Columns: {list(rdf.columns)}", "color": RED}
     if not (p_c and p_p and p_a):
-        return {"value": "Config error", "desc": f"Paid file mein Payment Category / Party Name / Amount nahi mila. Columns: {list(pdf.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Payment Category / Party Name / Amount not found in Paid file. Columns: {list(pdf.columns)}", "color": RED}
 
     # ---- RECEIVED: party-wise (8 blocks ek party ke jod diye jate hain) ----
     r = pd.DataFrame({"party": rdf[r_p].astype(str).str.strip(),
@@ -6954,11 +6954,11 @@ def _rp_prep(rdf, pdf):
 
     r_p, r_m, r_a = pick(rdf, ("PARTYNAME",)), pick(rdf, ("MONTH",)), pick(rdf, ("RECEIVED", "TOTAL"))
     if not (r_p and r_m and r_a):
-        raise DataError(f"Received sheet mein PARTY NAME / Month / RECEIVED (ya Total) column nahi mila. Columns: {list(rdf.columns)}")
+        raise DataError(f"Received sheet mein PARTY NAME / Month / RECEIVED (or Total) column not found in Received sheet. Columns: {list(rdf.columns)}")
     p_p, p_m, p_a = pick(pdf, ("PARTYNAME",)), pick(pdf, ("MONTH",)), pick(pdf, ("AMOUNT",))
     p_c = pick(pdf, ("PAYMENTCATEGORY", "CATEGORY"))
     if not (p_p and p_m and p_a):
-        raise DataError(f"Paid sheet mein Party Name / Month / Amount column nahi mila. Columns: {list(pdf.columns)}")
+        raise DataError(f"Party Name / Month / Amount column not found in Paid sheet. Columns: {list(pdf.columns)}")
 
     r = pd.DataFrame({"m": rdf[r_m].map(_rp_mno),
                       "party": rdf[r_p].astype(str).str.strip(),
@@ -7043,7 +7043,7 @@ def finance_recv_paid_month_card(day):
     p_by = p_m.groupby("party")["amt"].sum().sort_values(ascending=False)
 
     details = [
-        (f"📅 Month-wise (Apr se {lab})", mrows),
+        (f"📅 Month-wise (Apr to {lab})", mrows),
         (f"💰 {lab} · Received party-wise ({len(r_by)} parties)",
          [(esc(k), _inr(v)) for k, v in r_by.items()] + [("TOTAL RECEIVED", _inr(rec_m))]),
     ]
@@ -7098,11 +7098,11 @@ def finance_recv_pay_days_card(day):
     s_col = next((c for c in sdf.columns if "TOTAL SALE" in str(c).upper()), None)
     p_col = next((c for c in pdf.columns if norm(c) == "BILLAMOUNT"), None)
     if not (g and b):
-        return {"value": "Config error", "desc": f"DRS/CRS file mein Group / Closing Balance nahi mila. Columns: {list(d.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"DRS/CRS file mein Group / Closing Balance not found. Columns: {list(d.columns)}", "color": RED}
     if not s_col:
-        return {"value": "Config error", "desc": "Sales sheet mein TOTAL SALE AMOUNT column nahi mila", "color": RED}
+        return {"value": "Config error", "desc": "TOTAL SALE AMOUNT column not found in Sales sheet", "color": RED}
     if not p_col:
-        return {"value": "Config error", "desc": "Purchase sheet mein Bill Amount column nahi mila", "color": RED}
+        return {"value": "Config error", "desc": "Bill Amount column not found in Purchase sheet", "color": RED}
 
     grp = d[g].astype(str).str.strip().str.upper()
     bal = _num(d[b]).fillna(0.0)
@@ -7111,9 +7111,9 @@ def finance_recv_pay_days_card(day):
     sa = _rp_avg_month(sdf, s_col, day)
     pa = _rp_avg_month(pdf, p_col, day)
     if not sa or sa["avg"] <= 0:
-        return {"value": "No Data", "desc": "Sale data nahi mila", "color": GREY}
+        return {"value": "No Data", "desc": "Sale data not found", "color": GREY}
     if not pa or pa["avg"] <= 0:
-        return {"value": "No Data", "desc": "Purchase data nahi mila", "color": GREY}
+        return {"value": "No Data", "desc": "Purchase data not found", "color": GREY}
 
     rd = drs * 30 / sa["avg"]
     pdays = crs * 30 / pa["avg"]
@@ -7121,14 +7121,14 @@ def finance_recv_pay_days_card(day):
 
     warn = ""
     if sa["start"] > RP_FY_START:
-        warn = f" · ⚠ Sale data {sa['start']:%d-%b} se hi hai (April se nahi)"
+        warn = f" · ⚠ Sale data {sa['start']:%d-%b} only (not from April)"
 
     def block(title, net, a, label):
         return (title, [
             (f"Net {label} (closing balance)", _inr(net)),
-            (f"{label[:4]} period", f"{a['start']:%d-%m-%Y} to {a['end']:%d-%m-%Y} ({a['days']} din)"),
+            (f"{label[:4]} period", f"{a['start']:%d-%m-%Y} to {a['end']:%d-%m-%Y} ({a['days']} days)"),
             ("Total", _inr(a["total"])),
-            ("Avg per month (Total ÷ din × 30)", _inr(a["avg"])),
+            ("Avg per month (Total ÷ days × 30)", _inr(a["avg"])),
         ])
 
     return {
@@ -7248,13 +7248,13 @@ def finance_gt90_month_card(day):
         "details": [
             ("📊 All Months · Month-wise", rows_all),
             (f"👥 Party-wise · Combined · {day:%b-%y} ({len(r_all)} parties)",
-             r_all + [("TOTAL", f"{_inr(tot_gt)} ({p_tot:.2f}% DRS)")] if r_all else [("Koi party nahi", "✅")]),
+             r_all + [("TOTAL", f"{_inr(tot_gt)} ({p_tot:.2f}% DRS)")] if r_all else [("No party", "✅")]),
             (f"👥 Party-wise · {c1_col} · {day:%b-%y} ({len(r_c1)} parties)",
-             r_c1 + [("TOTAL", f"{_inr(c1)} ({p1:.2f}%)")] if r_c1 else [("Koi party nahi", "✅")]),
+             r_c1 + [("TOTAL", f"{_inr(c1)} ({p1:.2f}%)")] if r_c1 else [("No party", "✅")]),
             (f"👥 Party-wise · {c2_col} · {day:%b-%y} ({len(r_c2)} parties)",
-             r_c2 + [("TOTAL", f"{_inr(c2)} ({p2:.2f}%)")] if r_c2 else [("Koi party nahi", "✅")]),
+             r_c2 + [("TOTAL", f"{_inr(c2)} ({p2:.2f}%)")] if r_c2 else [("No party", "✅")]),
             (f"👥 Party-wise · {c3_col} · {day:%b-%y} ({len(r_c3)} parties)",
-             r_c3 + [("TOTAL", f"{_inr(c3)} ({p3:.2f}%)")] if r_c3 else [("Koi party nahi", "✅")]),
+             r_c3 + [("TOTAL", f"{_inr(c3)} ({p3:.2f}%)")] if r_c3 else [("No party", "✅")]),
         ],
     }
 def inv_dead_stock_card(day):
@@ -7282,7 +7282,7 @@ def inv_dead_stock_card(day):
     val_candidates = [c for c in w.columns if c not in ignore and "SR" not in c.upper()]
     qty_col = val_candidates[-1] if val_candidates else None
     if not qty_col:
-        return {"value": "Config error", "desc": "Stock balance column nahi mila", "color": RED}
+        return {"value": "Config error", "desc": "Stock balance column not found", "color": RED}
 
     records = []
     sub_cat = None
@@ -7315,7 +7315,7 @@ def inv_dead_stock_card(day):
                 records.append({"category": cat_name, "material": mat, "uom": uom, "qty": float(qty)})
 
     if not records:
-        return {"value": "0 Items", "desc": "Koi dead stock nahi", "color": BLUE}
+        return {"value": "0 Items", "desc": "No dead stock", "color": BLUE}
 
     res = pd.DataFrame(records)
 
@@ -7507,7 +7507,7 @@ def rec_payable_days_card(day):
     party_col = next((c for c in d.columns if "party" in c.lower()), d.columns[0])
 
     if not grp_col or not bal_col:
-        return {"value": "Config error", "desc": f"Group/Closing column nahi mila: {list(d.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Group/Closing column not found: {list(d.columns)}", "color": RED}
 
     d[bal_col] = pd.to_numeric(d[bal_col].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0.0)
     d["_grp"] = d[grp_col].astype(str).str.strip().str.upper()
@@ -7525,7 +7525,7 @@ def rec_payable_days_card(day):
     s_amt_col = next((c for c in s.columns if "sale" in c.lower() or "amount" in c.lower() or "amt" in c.lower()), None)
 
     if not s_amt_col:
-        return {"value": "Config error", "desc": f"Sale Amount column nahi mila: {list(s.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Sale Amount column not found: {list(s.columns)}", "color": RED}
 
     s[s_amt_col] = pd.to_numeric(s[s_amt_col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
     if s_dt_col:
@@ -7548,7 +7548,7 @@ def rec_payable_days_card(day):
     )
 
     if not p_amt_col:
-        return {"value": "Config error", "desc": f"Purchase Amount column nahi mila: {list(p.columns)}", "color": RED}
+        return {"value": "Config error", "desc": f"Purchase Amount column not found: {list(p.columns)}", "color": RED}
 
     p[p_amt_col] = pd.to_numeric(p[p_amt_col].astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
     if p_dt_col:
@@ -8267,7 +8267,7 @@ def render_online_business(dept):
                                      + [("TOTAL (main)", _inr(main_total))]),
                 ("➕ Other expenses", [(f"{n} ({c})", _inr(a)) for n, c, a in other]
                                       + [("TOTAL (others)", _inr(other_total))]),
-                ("🧮 Grand Total", [("Sab mila ke", _inr(grand))]),
+                ("🧮 Grand Total", [("Combined", _inr(grand))]),
             ]
             st.markdown(_sections_html(sections), unsafe_allow_html=True)
 
