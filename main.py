@@ -3450,7 +3450,7 @@ def _ppc_wise_card(df, day):
         out = []
         for _, r in g.iterrows():
             party = r.get("PARTY", r.get("PARTY NAME", "Unknown"))
-            age = f"{int(r['_age'])} din" if pd.notna(r["_age"]) else "No date"
+            age = f"{int(r['_age'])} days" if pd.notna(r["_age"]) else "No date"
             q = ""
             if qty_col and str(r.get(qty_col, "")).strip() not in ("", "nan"):
                 q = f" · Qty {r[qty_col]}"
@@ -3458,7 +3458,7 @@ def _ppc_wise_card(df, day):
         return out
 
     drill = []
-    names = PPC_NAMES + [n for n in orders["_ppc"].unique() if n not in PPC_NAMES and n]  # koi extra tab ho to wo bhi
+    names = PPC_NAMES + [n for n in orders["_ppc"].unique() if n not in PPC_NAMES and n]  # Any Extra Tab
     for n in names:
         g = orders[orders["_ppc"] == n]
         drill.append((f"👤 {n.title()} — {len(g)} pending", rows_for(g)))
