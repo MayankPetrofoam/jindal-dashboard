@@ -8338,6 +8338,9 @@ def render_kpi(dept_key, idx, title, desc):
                 log.exception("KPI %s/%s failed", dept_key, title)
                 _card(slot, title, "Config error", f"{type(exc).__name__}: {exc}", RED, label, error=True)
                 return
+            if res is not None and dept_key == "production" and st.session_state.get("prod_month_view"):
+                res = _prod_month_view(res, chosen)
+                label = f"Month {chosen:%b-%Y}"
             if res is not None and dept_key == "production":
                 res = _prod_add_tiles(res, title, chosen)
 
@@ -8461,6 +8464,125 @@ def render_department(dept):
         
         for start in range(0, len(kpis), per_row):
             # Yahan gap="small" kiya hai taaki 4 cards mein space bache
+            cols = st.columns(per_row, gap="small", vertical_alignment="top")
+            for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
+                with cols[offset]:
+                    with st.container():
+                        render_kpi(dept["key"], start + offset, title, desc)
+# ===== ADD-ON: PRODUCTION MONTH VIEW (dropdown next to the PRODUCTION button) =====
+def _prod_month_options():
+    """Last 12 months, newest first, as (year, month) tuples."""
+    today = datetime.datetime.now(IST).date()
+    y, m = today.year, today.month
+    out = []
+    for _ in range(12):
+        out.append((y, m))
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return out
+
+
+def _prod_month_view(res, day):
+    """Month view: the month figures replace the day tiles on a production card."""
+    r = dict(res)
+    secs = res.get("sections") or []
+    month_secs = [s for s in secs if "Month" in str(s[0])]
+    other_secs = [s for s in secs if "Month" not in str(s[0])]
+    if month_secs:
+        tiles = []
+        for _h, rows in month_secs:
+            for row in rows:
+                lab, val = row[0], row[1]
+                if str(lab).strip().lower() == "yield":
+                    tiles.append((val, lab, "yield"))
+                else:
+                    tiles.append((val, lab))
+        r["metrics"] = tiles
+        r["sections"] = other_secs
+    else:
+        dstr = f"{day:%d-%m}"
+        keep = [m for m in (res.get("metrics") or []) if dstr not in str(m[1]) and "Day" not in str(m[1])]
+        if keep:
+            r["metrics"] = keep
+    if r.get("desc"):
+        r["desc"] = str(r["desc"]).replace("Selected date total", "Month total")
+    return r
+
+
+def _pt_manpower_month(day, kws):
+    """Average daily manpower of the mapped departments over the month of `day`."""
+    try:
+        m = hr_manpower_df()
+        if m is None or m.empty:
+            return None
+        m = m.copy()
+        m["_n"] = m["dept"].astype(str).str.upper()
+        m["_dt"] = _pd2.to_datetime(m["_date"]).dt.normalize()
+        day = _pd2.Timestamp(day)
+        sel = m[m["_n"].apply(lambda x: any(k in x for k in kws)) & m["man"].notna()
+                & (m["_dt"].dt.year == day.year) & (m["_dt"].dt.month == day.month)]
+        if sel.empty:
+            return None
+        return float(sel.groupby("_dt")["man"].sum().mean())
+    except Exception:
+        return None
+
+
+_prod_add_tiles_dayview = _prod_add_tiles   # day-wise version is kept as it is
+def _prod_add_tiles(res, title, day=None):
+    res = _prod_add_tiles_dayview(res, title, day)
+    if not st.session_state.get("prod_month_view") or day is None:
+        return res
+    try:
+        t_up = str(title or "").strip().upper()
+        if t_up == "TOTAL PRODUCTION & YIELD":
+            blocks = [x for v in PROD_CARD_MAP.values() for x in v]
+        else:
+            blocks = PROD_CARD_MAP.get(t_up)
+        if not blocks:
+            return res
+        v = _pt_manpower_month(day, [k for _l, _key, ks in blocks for k in ks])
+        if v is None:
+            return res
+        res["metrics"] = [((f"{v:,.0f}",) + tuple(m[1:])) if str(m[1]) == "Avg Manpower" else m
+                          for m in res["metrics"]]
+    except Exception:
+        pass
+    return res
+
+
+def render_department(dept):
+    if dept["key"] == "online":
+        render_online_business(dept)
+        return
+    with st.container(border=True):
+        if dept["key"] == "production":
+            bcol, mcol = st.columns([3, 2], gap="small", vertical_alignment="center")
+            with bcol:
+                render_department_button(dept)
+            with mcol:
+                pick = st.selectbox(
+                    "Production month view", [None] + _prod_month_options(), key="prod_month_pick",
+                    label_visibility="collapsed",
+                    format_func=lambda m: "Day-wise view" if m is None
+                    else "Month: " + datetime.date(m[0], m[1], 1).strftime("%b-%y"),
+                )
+            st.session_state["prod_month_view"] = pick
+            if pick != st.session_state.get("_prod_month_last"):
+                st.session_state["_prod_month_last"] = pick
+                target_m = pick if pick is not None else st.session_state.get("global_month")
+                if target_m is not None:
+                    for i in range(len(dept["kpis"])):
+                        st.session_state[f"production_date_{i}_m"] = target_m
+        else:
+            render_department_button(dept)
+        kpis = dept["kpis"]
+
+        # PRODUCTION: 4 cards per row, all other departments use KPI_PER_ROW
+        per_row = 4 if dept["key"] == "production" else KPI_PER_ROW
+
+        for start in range(0, len(kpis), per_row):
             cols = st.columns(per_row, gap="small", vertical_alignment="top")
             for offset, (title, desc) in enumerate(kpis[start:start + per_row]):
                 with cols[offset]:
