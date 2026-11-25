@@ -7955,6 +7955,178 @@ def compute_kpi(df, spec, day, *a, **k):
     if spec.get("calc") == "order_ppc":
         return _ppc_wise_card(df, day)
     return _compute_kpi_orig(df, spec, day, *a, **k)
+# ===== ADD-ON: HR "Opening Pending" + "Induction" cards, new cards, SAFETY department =====
+HR_TAB_INDUCTION = "INDUCTION"        # tab name keyword in the HR workbook
+HR_TAB_OPENINGS = "MANPOWER REQD"     # tab name keyword in the HR workbook
+
+
+def _hr_find_col(hdr, *names):
+    for i, h in enumerate(hdr):
+        if any(n in h for n in names):
+            return i
+    return None
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hr_induction_df():
+    rows = _hr_tab_rows(HR_PUB_URL, HR_TAB_INDUCTION)
+    cols = ["_date", "dept", "persons", "kind", "remarks"]
+    if not rows:
+        return pd.DataFrame(columns=cols)
+    hdr = [str(x).strip().upper() for x in rows[0]]
+    c_date = _hr_find_col(hdr, "DATE")
+    c_dept = _hr_find_col(hdr, "DEPTT", "DEPARTMENT")
+    c_per = _hr_find_col(hdr, "PERSONS")
+    c_kind = _hr_find_col(hdr, "EXISTING", "NEW")
+    c_rem = _hr_find_col(hdr, "REMARK")
+    out = []
+    for r in rows[1:]:
+        def cell(i):
+            return str(r[i]).strip() if i is not None and i < len(r) else ""
+        d = pd.to_datetime(cell(c_date), dayfirst=True, errors="coerce")
+        if pd.isna(d):
+            continue
+        out.append({
+            "_date": d.date(),
+            "dept": cell(c_dept).upper() or "-",
+            "persons": _hr_val(cell(c_per)) or 0.0,
+            "kind": cell(c_kind).upper(),
+            "remarks": cell(c_rem),
+        })
+    return pd.DataFrame(out, columns=cols)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def hr_openings_df():
+    rows = _hr_tab_rows(HR_PUB_URL, HR_TAB_OPENINGS)
+    cols = ["role", "qty", "interview", "joining", "status"]
+    start = next((i for i, r in enumerate(rows) if r and "REQUIREMENT" in str(r[0]).upper()), None)
+    if start is None:
+        return pd.DataFrame(columns=cols)
+    out = []
+    for r in rows[start + 1:]:
+        role = str(r[0]).strip() if len(r) > 0 else ""
+        if not role:
+            continue
+        m = re.match(r"^(\d+)\s+(.*)$", role)
+        qty = int(m.group(1)) if m else 1
+        interview = str(r[1]).strip() if len(r) > 1 else ""
+        joining = str(r[2]).strip() if len(r) > 2 else ""
+        status = "Joined" if joining else ("Interview" if interview else "Open")
+        out.append({"role": role, "qty": qty, "interview": interview, "joining": joining, "status": status})
+    return pd.DataFrame(out, columns=cols)
+
+
+def _hr_induction_dates():
+    try:
+        d = hr_induction_df()
+        return sorted(d["_date"].unique(), reverse=True) if len(d) else []
+    except Exception:
+        return []
+
+
+def _hrg_openings_card():
+    d = hr_openings_df()
+    if d.empty:
+        return {"value": "0", "desc": "No openings found", "color": GREY}
+    pending = d[d["status"] != "Joined"]
+    n_pending = int(pending["qty"].sum())
+    n_interview = int(d[d["status"] == "Interview"]["qty"].sum())
+    n_joined = int(d[d["status"] == "Joined"]["qty"].sum())
+    n_open = int(d[d["status"] == "Open"]["qty"].sum())
+    rows = [(f"{r['role']}" + (f" (x{r['qty']})" if r["qty"] > 1 and not re.match(r"^\d+\s", r["role"]) else ""),
+             f"{r['status']}" + (f" · {r['interview']}" if r['interview'] else ""))
+            for _, r in pending.iterrows()]
+    return {
+        "value": f"{n_pending} Pending",
+        "desc": "Open positions (not yet joined)",
+        "color": RED if n_pending else BLUE,
+        "metrics": [(f"{n_pending}", "Total Pending"), (f"{n_open}", "No Interview Yet"),
+                    (f"{n_interview}", "Interviewed / Scheduled"), (f"{n_joined}", "Joined")],
+        "details": [("📋 Pending Requirements", rows)] if rows else [],
+    }
+
+
+def _hrg_induction_card(day):
+    d = hr_induction_df()
+    if d.empty:
+        return {"value": "0", "desc": "No induction data found", "color": GREY}
+    day = pd.Timestamp(day).date()
+    dd = d[d["_date"] == day]
+    mm = d[[(x.year, x.month) == (day.year, day.month) for x in d["_date"]]]
+    day_tot, mon_tot = float(dd["persons"].sum()), float(mm["persons"].sum())
+    new_m = float(mm[mm["kind"].str.contains("NEW", na=False)]["persons"].sum())
+    ext_m = mon_tot - new_m
+    dept_rows = [(k, f"{v:,.0f} persons") for k, v in
+                 mm.groupby("dept")["persons"].sum().sort_values(ascending=False).items()]
+    day_rows = [(x.strftime("%d-%m-%Y"), f"{v:,.0f} persons") for x, v in
+                mm.groupby("_date")["persons"].sum().sort_index().items()]
+    return {
+        "value": f"{day_tot:,.0f} Persons",
+        "desc": f"Induction on {day:%d-%m-%Y}",
+        "color": BLUE,
+        "metrics": [(f"{day_tot:,.0f}", f"Day ({day:%d-%m})"), (f"{mon_tot:,.0f}", f"Month Total ({day:%b-%y})"),
+                    (f"{new_m:,.0f}", "New Joining (Month)"), (f"{ext_m:,.0f}", "Existing (Month)")],
+        "details": [("🏢 Department-wise (month)", dept_rows), ("🗓 Day-wise (month)", day_rows)],
+    }
+
+
+_compute_kpi_hr2 = compute_kpi
+def compute_kpi(df, spec, day, *a, **k):
+    if spec.get("calc") == "hrg_openings":
+        return _hrg_openings_card()
+    if spec.get("calc") == "hrg_induction":
+        return _hrg_induction_card(day)
+    return _compute_kpi_hr2(df, spec, day, *a, **k)
+
+
+KPI_SOURCES[("hr", "Opening Pending")] = {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_openings"}
+KPI_SOURCES[("hr", "Induction")] = {"sheet": "hr_manpower", "mode": "on_date", "date_label": "date", "calc": "hrg_induction"}
+
+
+# ---- New cards in existing departments ----
+def _dept_by_key(key):
+    return next(d for d in DEPARTMENTS if d["key"] == key)
+
+_dept_by_key("foaming")["kpis"].append(("Other Chemicals", "Other chemicals stock"))
+_dept_by_key("purchase")["kpis"].append(("Consumables", "Consumables purchase / stock"))
+_dept_by_key("maint")["kpis"].append(("Spares", "Spare parts"))
+_dept_by_key("hr")["kpis"].extend([
+    ("Opening Pending", "Open positions not yet joined"),
+    ("Induction", "Induction: persons present"),
+])
+# OTHERS: "Safety" card is replaced by "Dollar" at the same position
+_dept_by_key("other")["kpis"] = [("Dollar", "Dollar rate") if k[0] == "Safety" else k
+                                 for k in _dept_by_key("other")["kpis"]]
+
+# ---- New SAFETY department (separate button) ----
+DEPARTMENTS.append({
+    "key": "safety",
+    "icon": "🦺",
+    "name": "SAFETY",
+    "kpis": [
+        ("Unsafe Conditions & Actions Taken", "Unsafe conditions and actions taken"),
+        ("Drills Safety", "Safety drills"),
+        ("Trainings Conducted", "Safety trainings conducted"),
+    ],
+    "links": [
+        ("📋 Safety Log (Google Sheets)", None),
+    ],
+})
+DISPLAY_ORDER = ["foaming", "production", "order", "sales", "purchase",
+                 "inventory", "finance", "maint", "safety", "hr", "other", "online", "projects", "rnd"]
+DEPARTMENTS.sort(key=lambda d: DISPLAY_ORDER.index(d["key"]))
+
+# ---- "Not connected" messages for cards that have no data source yet ----
+MISSING_SOURCE.update({
+    ("foaming", "Other Chemicals"): "Other chemicals data source is not connected yet",
+    ("purchase", "Consumables"): "Consumables data source is not connected yet",
+    ("maint", "Spares"): "Spares data source is not connected yet",
+    ("other", "Dollar"): "Dollar data source is not connected yet",
+    ("safety", "Unsafe Conditions & Actions Taken"): "Safety sheet is not connected yet",
+    ("safety", "Drills Safety"): "Safety sheet is not connected yet",
+    ("safety", "Trainings Conducted"): "Safety sheet is not connected yet",
+})
 @st.fragment
 def render_kpi(dept_key, idx, title, desc):
     """One KPI block, fully independent: own source, own dates, own dropdown, own errors."""
@@ -7996,6 +8168,10 @@ def render_kpi(dept_key, idx, title, desc):
                 dates = _hr_dates_overtime() or dates
             if spec.get("calc") == "hrg_staff":
                 dates = sorted(set(_hr_dates_manpower()) | {datetime.datetime.now(IST).date()}, reverse=True)
+            if spec.get("calc") == "hrg_induction":
+                dates = _hr_induction_dates() or [datetime.datetime.now(IST).date()]
+            if spec.get("calc") == "hrg_openings":
+                dates = [datetime.datetime.now(IST).date()]
 
             # ROLLPACK ke liye F-Shed ki dates bhi jodo (taaki Oct month dropdown mein aaye)
             if spec.get("type") == "rollpack":
