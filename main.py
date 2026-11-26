@@ -4812,14 +4812,13 @@ SHEETS = {
     "sheet_name": "dn",
     "date_col": "DEBIT NOTE DATE",
 },
-
-    "foaming_chemicals": {
-        "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/Chemical%20Consumption.xlsx",
-        "sheet_name": "Data",
-        "date_col": "MONTH",
-        "dayfirst": True
-    },
+# Jahan Foaming / Chemical Consumption ki sheet defined hai, wahan ye update karein:
+"foaming": {
+    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuVHGRUThJGfTT7YswKlYNSeLE8DJztXTY94Ogx_Vh9RoHBiqQIQOU6F1JVfGjMNcRbAljY6PgE9Ru/pubhtml",
+    "worksheet": "Sheet1",      # Agar publish link (2PACX-...) use kar rahi hain to yahan tab ka gid number (e.g. "0") daalein
+    "date_col": "DATE",
+    "header_hint": "DATE",
+},
     "finance_ageing_new": {
         "type": "excel",
         "static": True,
