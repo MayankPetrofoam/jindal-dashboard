@@ -4813,12 +4813,12 @@ SHEETS = {
     "date_col": "DEBIT NOTE DATE",
 },
 # Jahan Foaming / Chemical Consumption ki sheet defined hai, wahan ye update karein:
-"foaming": {
-    "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuVHGRUThJGfTT7YswKlYNSeLE8DJztXTY94Ogx_Vh9RoHBiqQIQOU6F1JVfGjMNcRbAljY6PgE9Ru/pubhtml",
-    "worksheet": "Sheet1",      # Agar publish link (2PACX-...) use kar rahi hain to yahan tab ka gid number (e.g. "0") daalein
-    "date_col": "DATE",
-    "header_hint": "DATE",
-},
+"foaming_chemicals": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRuVHGRUThJGfTT7YswKlYNSeLE8DJztXTY94Ogx_Vh9RoHBiqQIQOU6F1JVfGjMNcRbAljY6PgE9Ru/pubhtml",
+        "worksheet": "0",
+        "date_col": "DATE",
+        "header_hint": "DATE",
+    },
     "finance_ageing_new": {
         "type": "excel",
         "static": True,
