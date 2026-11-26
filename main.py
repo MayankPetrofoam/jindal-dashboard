@@ -4086,8 +4086,9 @@ def compute_kpi(df, spec, day):
 
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
+    # ---------- FOAMING: LONG BLOCK (LB) STOCK ----------
     if calc == "lb_stock":
-        # Sirf DENSITY, GRADE, WIDTH aur MTR liye jaate hain (HEIGHT(MTR) aur COLOUR ignore).
+        # Sirf DENSITY, GRADE aur MTR liye jaate hain (WIDTH, HEIGHT(MTR), COLOUR ignore).
         def exact_col(*names):
             want = {re.sub(r"[^A-Z0-9]", "", n.upper()) for n in names}
             for c in df.columns:
@@ -4097,11 +4098,38 @@ def compute_kpi(df, spec, day):
 
         col_density = exact_col("DENSITY")
         col_grade = exact_col("GRADE")
-        col_width = exact_col("WIDTH", "WIDGHT")
         col_mtr = exact_col("MTR")      # exact: 'HEIGHT(MTR)' is column se match nahi hoga
 
         if not col_grade or not col_mtr:
             raise DataError(f"'GRADE' or 'MTR' column not found in LB Stock sheet. Columns: {list(df.columns)}")
+
+        # Grade ka naam saaf karo. CL aur CL+ ALAG rahenge.
+        def _norm_grade(x):
+            x = re.sub(r"\s+", " ", str(x).strip().upper()).replace(" +", "+")
+            if not x or x == "NAN":
+                return ""
+            if "CL+" in x:
+                return "CL+"
+            for key in ("CL", "SOFTY", "HF", "MJR", "FG", "RESPONCE", "COOLGEL", "HR", "RG"):
+                if key in x:
+                    return key
+            return x
+
+        # Grade ka serial = sheet mein jis order mein aate hain (CL hamesha CL+ se pehle)
+        grade_order = []
+        for _g in df[col_grade].map(_norm_grade):
+            if _g and _g not in grade_order:
+                grade_order.append(_g)
+        if "CL" in grade_order and "CL+" in grade_order:
+            grade_order.remove("CL")
+            grade_order.insert(grade_order.index("CL+"), "CL")
+        _rank = {g: i for i, g in enumerate(grade_order)}
+
+        def _dkey(d):
+            try:
+                return float(d)
+            except Exception:
+                return 1e9
 
         df_clean = df.copy()
         df_clean["_m"] = _num(df_clean[col_mtr]).fillna(0)
@@ -4114,37 +4142,28 @@ def compute_kpi(df, spec, day):
         total_mtr = mtr_vals.sum()
         total_blocks = len(df_clean)
 
-        grades = df_clean[col_grade].astype(str).str.strip().str.upper().str.replace(r"\s+", " ", regex=True)
-        grades = grades.apply(lambda x: "CL" if "CL" in x else ("SOFTY" if "SOFTY" in x else ("HF" if "HF" in x else ("MJR" if "MJR" in x else ("FG" if "FG" in x else ("RESPONCE" if "RESPONCE" in x else ("COOLGEL" if "COOLGEL" in x else ("HR" if "HR" in x else ("RG" if "RG" in x else x)))))))))
-        grade_wise = mtr_vals.groupby(grades).sum().sort_values(ascending=False)
+        grades = df_clean[col_grade].map(_norm_grade)
+        grade_wise = mtr_vals.groupby(grades).sum()
+        grade_wise = grade_wise[[g for g in sorted(grade_wise.index, key=lambda g: _rank.get(g, 999)) if g]]
 
-        density_wise = None
         densities = None
+        density_wise = None
+        gd_rows = None
         if col_density:
             densities = df_clean[col_density].astype(str).str.strip()
-            density_wise = mtr_vals.groupby(densities).sum().sort_values(ascending=False)
-
-        mix_wise = None
-        if densities is not None:
-            mix_wise = mtr_vals.groupby(grades + " " + densities).sum().sort_values(ascending=False)
-            mix_wise_txt = " | ".join(f"{k}: {v:,.0f} Mtr" for k, v in mix_wise.head(3).items() if k and "NAN" not in k and v > 0)
-        else:
-            mix_wise_txt = " | ".join(f"{k}: {v:,.0f} Mtr" for k, v in grade_wise.head(3).items())
+            density_wise = mtr_vals.groupby(densities).sum()
+            density_wise = density_wise[sorted(density_wise.index, key=_dkey)]
+            gd = mtr_vals.groupby([grades, densities]).sum()
+            gd_rows = sorted(gd.items(), key=lambda kv: (_rank.get(kv[0][0], 999), _dkey(kv[0][1])))
 
         details = []
-        if mix_wise is not None:
-            details.append(("📊 Grade + Density MTR", [(k, f"{v:,.1f} Mtr") for k, v in mix_wise.items() if k and "NAN" not in k]))
-        details.append(("⚖ Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items() if g and g != "NAN"]))
+        details.append(("⚖ Grade-wise MTR", [(g, f"{v:,.1f} Mtr") for g, v in grade_wise.items()]))
+        if gd_rows is not None:
+            details.append(("📊 Grade + Density MTR",
+                            [(f"{g} {d}", f"{v:,.1f} Mtr") for (g, d), v in gd_rows if g and d and d != "nan" and v > 0]))
         if density_wise is not None:
-            details.append(("📏 Density-wise MTR", [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "NAN"]))
-        if col_width:
-            widths = df_clean[col_width].astype(str).str.strip()
-            width_wise = mtr_vals.groupby(widths).sum().sort_values(ascending=False)
-            details.append(("↔ Width-wise MTR", [(f"Width {w}", f"{v:,.1f} Mtr") for w, v in width_wise.items() if w and w != "NAN"]))
-            if densities is not None:
-                gdw = mtr_vals.groupby([grades, densities, widths]).sum().sort_index()
-                details.append(("📋 Grade + Density + Width MTR",
-                                [(f"{g} · {d} · W{w}", f"{v:,.1f} Mtr") for (g, d, w), v in gdw.items() if v > 0]))
+            details.append(("📏 Density-wise MTR",
+                            [(f"{d} Density", f"{v:,.1f} Mtr") for d, v in density_wise.items() if d and d != "nan"]))
 
         # Har list ke aakhir mein TOTAL (taaki sum seedha check ho sake)
         details = [(h, rows + [("TOTAL", f"{total_mtr:,.1f} Mtr")]) for h, rows in details]
@@ -4158,16 +4177,11 @@ def compute_kpi(df, spec, day):
                                         ("Sheet's own total", f"{_sheet_tot:,.1f} Mtr"),
                                         ("Result", "✅ Match" if _ok else "⚠ No match - please check the sheet")]))
 
-        width_line = ""
-        if col_width:
-            _w = mtr_vals.groupby(df_clean[col_width].astype(str).str.strip()).sum().sort_values(ascending=False)
-            width_line = "<br>Width-wise: " + " | ".join(f"{w}: {v:,.0f} Mtr" for w, v in _w.items() if w and w != "NAN" and v > 0)
-
         return {
             "value": f"{total_mtr:,.0f} Mtr",
-            "desc": f"Total {total_blocks:,} Blocks | {mix_wise_txt}",
+            "desc": f"Total {total_blocks:,} Blocks | All values in Mtr",
             "color": BLUE,
-            "extra": "Grade-wise: " + " | ".join(f"{g}: {v:,.0f} Mtr" for g, v in grade_wise.head(3).items() if g and g != "NAN" and v > 0) + width_line,
+            "extra": " | ".join(f"{g}: {v:,.0f}" for g, v in grade_wise.items() if v > 0),
             "details": details
         }
 
