@@ -2834,71 +2834,86 @@ def _tonnage_net(frame):
 
 
 def tonnage_card(day):
-    """Tonnage Foaming: selected din ki consumption + mahine ka total (daily file se, warna monthly sheet se).
-    Daily file par formula: TOTAL - (ADDTIVE 90250 x 2.5 + MCL)  (din ka bhi aur mahine ka bhi)."""
+    """Tonnage Foaming:
+    - Uppar tiles me direct Google Sheet ('foaming_chemicals' -> CONS) ki actual values (Day KG, Month KG, Month Tons).
+    - Neeche 'View Full Details' me formula calculation aur chemical-wise breakup.
+    """
     d_df, d_err, _ = get_sheet("foaming_daily")
     m_df, m_err, _ = get_sheet("foaming_chemicals")
     m_start, m_end = _month_range(day)
-    day_val = month_val = None
+
+    day_val = None
+    month_val = None
     n_days = 0
-    src = ""
     chem = None
-    f_day = f_mon = None
-    if d_df is not None:
-        tot = d_df[d_df["chem"] == "GRAND TOTAL"]
+    f_day = None
+    f_mon = None
+
+    # 1. Direct actual values Google Sheet ('foaming_chemicals') se
+    if m_df is not None and not m_df.empty and "CONS" in m_df.columns:
+        sub_mon = m_df[(m_df["_date"] >= m_start) & (m_df["_date"] <= m_end)].copy()
+        if not sub_mon.empty:
+            sub_mon["_kg"] = _num(sub_mon["CONS"]).fillna(0)
+            month_val = float(sub_mon["_kg"].sum())
+            n_days = int((sub_mon.groupby("_date")["_kg"].sum() > 0).sum())
+
+            sub_day = sub_mon[sub_mon["_date"] == day]
+            if not sub_day.empty:
+                day_val = float(sub_day["_kg"].sum())
+
+            if "CHEMICALS" in sub_mon.columns:
+                chem = sub_mon.rename(columns={"CHEMICALS": "chem", "_kg": "kg"})[["_date", "chem", "kg"]]
+
+    # 2. Formula details ('View Full Details' ke liye)
+    if d_df is not None and not d_df.empty:
         f_day = _tonnage_net(d_df[d_df["_date"] == day])
         f_mon = _tonnage_net(d_df[(d_df["_date"] >= m_start) & (d_df["_date"] <= m_end)])
-        if f_day and f_day["total"] > 0:
-            day_val = f_day["net"]
-        if f_mon and f_mon["total"] > 0:
-            month_val = f_mon["net"]
-            t_mon = tot[(tot["_date"] >= m_start) & (tot["_date"] <= m_end)]
-            n_days = int((t_mon.groupby("_date")["kg"].sum() > 0).sum())
-            src = "daily"
-        chem = d_df[d_df["chem"] != "GRAND TOTAL"]
-    if month_val is None and m_df is not None and "CONS" in m_df.columns:
-        sub = m_df[m_df["_date"].apply(lambda d: d.year == day.year and d.month == day.month)]
-        if not sub.empty:
-            month_val = float(_num(sub["CONS"]).sum())
-            src = "monthly"
+        if chem is None:
+            chem = d_df[d_df["chem"] != "GRAND TOTAL"]
+
     if month_val is None and day_val is None:
         return None
 
-    # Tiles ko update karein
+    # Uppar ke tiles: direct actual values
     tiles = [
         (f"{day_val:,.0f}" if day_val is not None else "—", f"{day:%d-%m} Kg"),
     ]
     if month_val is not None:
         tiles += [
             (f"{month_val:,.0f}", f"{day:%b-%y} Kg"),
-            (f"{month_val / 1000:,.1f}", f"Tons {day:%b-%y}")
+            (f"{month_val / 1000:,.1f}", f"Tons {day:%b-%y}"),
         ]
 
-    if src == "daily":
-        desc = f"Consumption {day:%b-%Y} · {n_days} working days · avg {month_val / max(n_days, 1):,.0f} kg/day"
+    if n_days > 0 and month_val is not None:
+        desc = f"Consumption {day:%b-%Y} · {n_days} working days · avg {month_val / n_days:,.0f} kg/day"
     else:
-        desc = f"Consumption for {day:%b-%Y} (monthly total, daily data not added)"
+        desc = f"Consumption for {day:%b-%Y}"
 
+    # Neeche View Full Details: formula + chemical-wise
     details = []
     for lbl, f in ((f"📅 {day:%d-%m-%y} · Formula", f_day), (f"🗓 Month {day:%b-%y} · Formula", f_mon)):
-        if f and f["total"] > 0:
+        if f and f.get("total", 0) > 0:
             details.append((lbl, [
                 ("Total chemicals", f"{f['total']:,.0f} kg"),
                 ("Additive 90250 x 2.5", f"- {f['add'] * 2.5:,.0f} kg  ({f['add']:,.0f} x 2.5)"),
                 ("MCL", f"- {f['mcl']:,.0f} kg"),
-                ("Net tonnage", f"{f['net']:,.0f} kg")]))
+                ("Net tonnage", f"{f['net']:,.0f} kg"),
+            ]))
+
     if chem is not None and not chem.empty:
         c_day = chem[chem["_date"] == day].groupby("chem")["kg"].sum().sort_values(ascending=False)
         c_day = c_day[c_day > 0]
         if not c_day.empty:
             details.append((f"📅 {day:%d-%m-%y} · Chemical wise",
-                            [(k.title(), f"{v:,.0f} kg") for k, v in c_day.items()]))
+                            [(str(k).title(), f"{v:,.0f} kg") for k, v in c_day.items()]))
+
         c_mon = (chem[(chem["_date"] >= m_start) & (chem["_date"] <= m_end)]
                  .groupby("chem")["kg"].sum().sort_values(ascending=False))
         c_mon = c_mon[c_mon > 0]
         if not c_mon.empty:
             details.append((f"🗓 Month {day:%b-%y} · Chemical wise",
-                            [(k.title(), f"{v:,.0f} kg") for k, v in c_mon.items()]))
+                            [(str(k).title(), f"{v:,.0f} kg") for k, v in c_mon.items()]))
+
     return {
         "value": f"{(month_val if month_val is not None else day_val):,.0f}",
         "desc": desc,
