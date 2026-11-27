@@ -8258,6 +8258,11 @@ def _prod_add_tiles(res, title, day=None):
 
 def _card(slot, title, value, desc, color, date_text=None, error=False, extra=None,
           metrics=None, sections=None):
+    if value not in ("Loading…", "Not connected", "Data unavailable"):
+        _snap = st.session_state.setdefault("_snap", {})
+        _m = " | ".join(f"{re.sub('<[^>]+>', ' ', str(a)).strip()} {re.sub('<[^>]+>', ' ', str(b)).strip()}"
+                        for a, b, *_ in (metrics or []))
+        _snap[str(title)] = f"{title}: value={value}; date={date_text}; note={desc}; extra={extra}; {_m}"[:900]
     date_html = f'<div class="kpi-date">📅 {date_text}</div>' if date_text else ""
     safe = str(desc).replace('"', "'").replace("<", "&lt;")
     desc_html = (f'<div class="kpi-err" style="color:{color};" title="{safe}">{safe}</div>' if error else
@@ -9054,6 +9059,41 @@ def render_diagnostics():
 # 10. MAIN LAYOUT (original: two departments per row, auto-refresh fragment)
 # ====================================================================
 # 1. Yahan @st.fragment lagayein
+def render_chatbot():
+    """Sidebar AI assistant that answers from the numbers currently shown on the dashboard cards."""
+    with st.sidebar:
+        st.markdown("### 🤖 Dashboard Assistant")
+        key = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
+        if not key:
+            st.info("Add ANTHROPIC_API_KEY in app Secrets to enable the assistant.")
+            return
+        hist = st.session_state.setdefault("_chat", [])
+        box = st.container(height=420)
+        for role, text in hist:
+            box.chat_message(role).write(text)
+        q = st.chat_input("Ask about stock, production, orders...")
+        if q:
+            hist.append(("user", q))
+            box.chat_message("user").write(q)
+            snap = "\n".join(st.session_state.get("_snap", {}).values())
+            system = ("You are the data assistant of Jindal Petrofoam's management dashboard. "
+                      "Answer ONLY from the dashboard data below. If the answer is not in the data, say so. "
+                      "Reply in the same language the user writes in (Hinglish is fine). Keep answers short.\n\n"
+                      "DASHBOARD DATA:\n" + snap)
+            msgs = [{"role": r if r == "user" else "assistant", "content": t} for r, t in hist[-10:]]
+            try:
+                import anthropic
+                client = anthropic.Anthropic(api_key=key)
+                out = client.messages.create(model="claude-sonnet-5-5", max_tokens=700,
+                                             system=system, messages=msgs)
+                ans = out.content[0].text
+            except Exception as exc:
+                ans = f"Assistant error: {type(exc).__name__}: {exc}"
+            hist.append(("assistant", ans))
+            box.chat_message("assistant").write(ans)
+        if st.button("Clear chat"):
+            st.session_state["_chat"] = []
+            st.rerun()
 def dashboard_body():
     st.session_state["_errors"] = {}
 
@@ -9097,6 +9137,7 @@ def dashboard_body():
 
 # 2. Yahan se @st.fragment hata dein
 dashboard_body()
+render_chatbot()
 
 st.markdown(
     '<div class="corp-footer">© Jindal Petrofoam Private Limited • Enterprise Master Dashboard • Data auto-refreshes every 5 minutes</div>',
