@@ -9063,9 +9063,10 @@ def render_chatbot():
     """Sidebar AI assistant that answers from the numbers currently shown on the dashboard cards."""
     with _chat_slot.expander("🤖 Dashboard Assistant", expanded=True):
         st.markdown("### 🤖 Dashboard Assistant")
-        key = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
-        if not key:
-            st.info("Add ANTHROPIC_API_KEY in app Secrets to enable the assistant.")
+key = str(st.secrets.get("ANTHROPIC_API_KEY", "")).strip() if hasattr(st, "secrets") else ""
+        invalid_keys = ("", "sk-ant-...", "sk-ant-xxxxxxxxx", "sk-ant-your_actual_api_key_here")
+        if key in invalid_keys or "your_actual" in key or len(key) < 20:
+            st.info("Add a valid ANTHROPIC_API_KEY in app Secrets to enable the assistant.")
             return
         hist = st.session_state.setdefault("_chat", [])
         box = st.container(height=420)
