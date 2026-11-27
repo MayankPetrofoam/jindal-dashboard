@@ -2003,6 +2003,202 @@ def category_mix_kgs_card(day):
     }
 
 
+# Pcs wali categories (Category Mix 1). Baaki sab Kgs wali (Category Mix 2).
+def _cm_group(item):
+    u = re.sub(r"\s+", " ", str(item)).strip().upper()
+    if u == "ORTHO PILLOW":
+        return "_skip"                      # Ortho Pillow dono cards se hata diya
+    if "ROLLPACK" in u or "ROLL PACK" in u or u.startswith("FLO "):
+        return "Rollpack"
+    if "MOULDED" in u:
+        return "Moulded"
+    if u == "PILLOW":
+        return "Pillow"
+    if u == "MATTRESS COVER":
+        return "Mattress Cover"
+    if u.startswith("MATTRESS"):
+        return "Mattress"
+    if u == "SOFA CUM BED":
+        return "Sofa Cum Bed"
+    if u == "BONDED SHEET":
+        return "Bonded Sheet"
+    if u == "FOAM MATTRESS BARE":
+        return "Foam Mattress Bare"
+    return None
+
+
+# Jin groups mein Bundles bhi dikhane hain
+CM_BDL_GROUPS = ("Bonded Sheet", "Foam Mattress Bare", "Moulded", "Rollpack")
+
+
+def _cm_load(day=None):
+    df, err, _ = get_sheet("cate_2")          # <-- nayi GitHub sheet
+    if df is None:
+        return None, err
+    w = df.copy()
+    w.columns = [re.sub(r"\s+", " ", str(c)).strip() for c in w.columns]
+    low = {c.lower(): c for c in w.columns}
+    pick = lambda *n: next((low[x.lower()] for x in n if x.lower() in low), None)
+    item, grade = pick("ITEM", "Category"), pick("Grade")
+    pcs, kgs, amt = pick("Pcs", "Pieces"), pick("Kgs", "Kg"), pick("Amt", "Amount", "Value")
+    month_col = pick("Month", "Date")
+    if not (item and pcs and kgs and amt):
+        return None, f"Columns not found: {list(w.columns)}"
+    # Bundles column: naam se, nahi mila to Pcs se theek pehle wala column
+    bdl = pick("Bdls", "Bdl", "Bundles", "Bundle", "Bundals", "Bundal", "Bndl")
+    if bdl is None:
+        i = list(w.columns).index(pcs)
+        bdl = w.columns[i - 1] if i > 0 else None
+    if day is not None and month_col:
+        target_m = day.strftime("%B").lower()
+        target_short = day.strftime("%b-%y").lower()
+        m_series = w[month_col].astype(str).str.strip().str.lower()
+        w = w[m_series.str.startswith(day.strftime("%b").lower()) | m_series.str.startswith(target_m) | (m_series == target_short)]
+    num = lambda s: pd.to_numeric(s.astype(str).str.replace(",", "").str.replace("₹", "").str.strip(), errors="coerce").fillna(0.0)
+    for c in (pcs, kgs, amt):
+        w[c] = num(w[c])
+    w["_bdl"] = num(w[bdl]) if bdl is not None else 0.0
+    w["_item"] = w[item].fillna("").astype(str).str.strip()
+    # Khali ITEM (har month ki upar wali line) = UNSPECIFIED
+    w.loc[w["_item"].isin(["", "nan", "None", "NaN", "#N/A"]), "_item"] = "UNSPECIFIED"
+    w["_grade"] = w[grade].fillna("").astype(str).str.strip() if grade else "-"
+    w.loc[w["_grade"].isin(["", "nan", "None", "NaN"]), "_grade"] = "-"
+    w["_grp"] = w["_item"].map(_cm_group)
+    w = w[w["_grp"] != "_skip"]
+    w = w[(w[pcs] != 0) | (w[kgs] != 0) | (w[amt] != 0)].copy()
+    return (w, pcs, kgs, amt), None
+
+
+def _cm_amt(x):
+    v = float(x)
+    if abs(v) >= 1e7: return f"₹{v/1e7:,.2f} Cr"
+    if abs(v) >= 1e5: return f"₹{v/1e5:,.2f} L"
+    return f"₹{v:,.2f}"
+
+
+def _cm_tile(name, a, b, c=None):
+    """Ek category ka box: upar naam, neeche ek line mein (c) bundles, (a) pcs/kg aur (b) amount."""
+    import html as _h
+    num = f'<span style="font-size:13px;font-weight:800;">{_h.escape(str(name))}</span>'
+    spans = "".join(f"<span>{x}</span>" for x in (c, a, b) if x)
+    lbl = (f'<span style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;'
+           f'text-transform:none;letter-spacing:0;font-size:12px;font-weight:700;color:#0F172A;">{spans}</span>')
+    return (num, lbl)
+
+
+def _cm_family_tile(parts):
+    """Ek hi tile jisme boxes upar-neeche (stack) aate hain. parts = [(naam, kg_text, amt_text), ...]"""
+    import html as _h
+    box = ('<div style="background:#fff;border:1px solid #DCE4F0;border-radius:8px;padding:5px 6px;margin-bottom:5px;">'
+           '<div style="font-size:12.5px;font-weight:800;text-transform:none;letter-spacing:0;">{n}</div>'
+           '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;'
+           'font-size:11.5px;font-weight:700;color:#0F172A;text-transform:none;letter-spacing:0;">'
+           '<span>{a}</span><span>{b}</span></div></div>')
+    return ("".join(box.format(n=_h.escape(str(n)), a=a, b=b) for n, a, b in parts), "")
+
+
+def category_mix_pcs_card(day):
+    r, err = _cm_load(day)
+    if r is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, pcs, kgs, amt = r
+    w = w[w["_grp"].notna()]
+    if w.empty:
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
+    sections, details = [], []
+    for g in ["Pillow", "Mattress", "Sofa Cum Bed", "Bonded Sheet", "Foam Mattress Bare",
+              "Moulded", "Rollpack", "Mattress Cover"]:
+        x = w[w["_grp"] == g]
+        if x.empty:
+            continue
+        has_b = g in CM_BDL_GROUPS
+        sections.append(_cm_tile(g.upper(), f"{x[pcs].sum():,.0f} Pcs", _cm_amt(x[amt].sum()),
+                                 f"{x['_bdl'].sum():,.0f} Bdls" if has_b else None))
+        rows = []
+        for _, rr in x.sort_values(amt, ascending=False).iterrows():
+            nm = rr["_grade"] if rr["_item"].upper() == g.upper() else f"{rr['_grade']} ({rr['_item'].title()})"
+            b_txt = f"{rr['_bdl']:,.0f} Bdls | " if has_b else ""
+            rows.append((nm, f"{b_txt}{rr[pcs]:,.0f} Pcs | {_cm_amt(rr[amt])}"))
+        b_tot = f"{x['_bdl'].sum():,.0f} Bdls | " if has_b else ""
+        rows.append(("TOTAL", f"{b_tot}{x[pcs].sum():,.0f} Pcs | {_cm_amt(x[amt].sum())}"))
+        details.append((f"📦 {g} · Grade-wise", rows))
+    return {
+        "value": _cm_amt(w[amt].sum()),
+        "desc": "Pillow · Mattress · Bonded Sheet · Foam Mattress Bare · Moulded · Rollpack",
+        "color": BLUE,
+        "metrics": [(f"{w[pcs].sum():,.0f}", "Total Pcs"), (_cm_amt(w[amt].sum()), "Total Amt")] + sections,
+        "details": details,
+    }
+
+
+# Kgs card ke groups: items ka order yahi rahega
+CM_KGS_FAMILIES = [
+    ("PU FOAM", ["PU FOAM SHEET", "PU FOAM 1ST GRADE", "PU FOAM 2ND GRADE", "PU FOAM 3RD GRADE"]),
+    ("PEELING", ["PEELING ROLL", "PEELING 1ST GRADE", "PEELING 2ND GRADE", "PEELING 3RD GRADE"]),
+]
+CM_KGS_MERGE = ("A GRADE + PU FOAM DC GRADE", ["A GRADE", "PU FOAM A GRADE", "PU FOAM DC GRADE"])
+
+
+def category_mix_kgs_card(day):
+    r, err = _cm_load(day)
+    if r is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, pcs, kgs, amt = r
+    w = w[w["_grp"].isna()].copy()        # pcs wali categories yahan nahi aati (UNSPECIFIED yahin aata hai)
+    if w.empty:
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
+    w["_u"] = w["_item"].str.upper().str.replace(r"\s+", " ", regex=True)
+
+    tiles, details, used = [], [], set()
+
+    def kg_amt(x):
+        return f"{x[kgs].sum():,.1f} Kg", _cm_amt(x[amt].sum())
+
+    def add_details(title, x, show_item):
+        x = x.sort_values(amt, ascending=False)
+        rows = [((f"{rr['_grade']} ({rr['_item'].title()})" if show_item else rr["_grade"]),
+                 f"{rr[kgs]:,.1f} Kg | {_cm_amt(rr[amt])}") for _, rr in x.iterrows()]
+        rows.append(("TOTAL", f"{x[kgs].sum():,.1f} Kg | {_cm_amt(x[amt].sum())}"))
+        details.append((f"📦 {title} · Grade-wise", rows))
+
+    # 1) A GRADE + PU FOAM DC GRADE = ek hi box
+    name, items = CM_KGS_MERGE
+    x = w[w["_u"].isin(items)]
+    if not x.empty:
+        used.update(x.index)
+        a, b = kg_amt(x)
+        tiles.append(_cm_tile(name, a, b))
+        add_details(name, x, True)
+
+    # 2) Families: har family ek tile, uske andar boxes upar-neeche
+    for fam, order in CM_KGS_FAMILIES:
+        parts = []
+        for it in order:
+            x = w[w["_u"] == it]
+            if x.empty:
+                continue
+            used.update(x.index)
+            a, b = kg_amt(x)
+            parts.append((it, a, b))
+            add_details(it, x, False)
+        if parts:
+            tiles.append(_cm_family_tile(parts))
+
+    # 3) Baaki sab items (UNSPECIFIED bhi) amount ke order mein
+    rest = w[~w.index.isin(used)]
+    if not rest.empty:
+        items = rest.groupby("_item")[[kgs, amt]].sum().sort_values(amt, ascending=False)
+        for i, v in items.iterrows():
+            tiles.append(_cm_tile(i, f"{v[kgs]:,.1f} Kg", _cm_amt(v[amt])))
+            add_details(i, rest[rest["_item"] == i], False)
+
+    return {
+        "value": _cm_amt(w[amt].sum()),
+        "desc": "Kgs categories",
+        "color": BLUE,
+        "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")] + tiles,
+        "details": details,
+    }
 def category_mix_card(day):
     """Category Mix: cate (1) sheet se har ek ITEM category + Grade wise breakdown aur Amount."""
     df, err, _ = get_sheet("cate_1")
