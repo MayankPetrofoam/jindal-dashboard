@@ -6991,7 +6991,22 @@ def consumables_card(df, day):
     for col in ["RECD.QTY", "ISSD.QTY", "CLS.QTY"]:
         d[col] = pd.to_numeric(d[col], errors="coerce").fillna(0.0)
 
-    sub = d[d["_
+    sub = d[d["_m"] == target_month]
+    bal_sum = float(sub["CLS.QTY"].sum())
+    recd_sum = float(sub["RECD.QTY"].sum())
+    issd_sum = float(sub["ISSD.QTY"].sum())
+
+    mrows = [
+        (m.title(), f"Bal: {g['CLS.QTY'].sum():,.2f} | Recd: {g['RECD.QTY'].sum():,.2f} | Issd: {g['ISSD.QTY'].sum():,.2f}")
+        for m, g in d.groupby("_m", sort=False)
+    ]
+
+    return {
+        "value": f"{bal_sum:,.2f}",
+        "desc": f"Balance Qty ({target_month.title()}) | Recd: {recd_sum:,.2f} | Issd: {issd_sum:,.2f}",
+        "color": "BLUE",
+        "details": [("Month-wise", mrows)],
+    }
 # ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
 #   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
