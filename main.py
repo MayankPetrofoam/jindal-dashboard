@@ -2076,12 +2076,14 @@ def _cm_amt(x):
     return f"₹{v:,.2f}"
 
 
-def _cm_tile(name, a, b, c=None):
-    """Ek category ka box: upar naam, neeche ek line mein (c) bundles, (a) pcs/kg aur (b) amount."""
+def _cm_tile(name, a, b, c=None, lines=3):
+    """One category box. Every box has the same minimum height."""
     import html as _h
-    num = f'<span style="font-size:13px;font-weight:800;">{_h.escape(str(name))}</span>'
+    num = (f'<span style="display:block;min-height:49px;font-size:13px;font-weight:800;line-height:1.25;">'
+           f'{_h.escape(str(name))}</span>')
     spans = "".join(f"<span>{x}</span>" for x in (c, a, b) if x)
-    lbl = (f'<span style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;'
+    lbl = (f'<span style="display:flex;flex-wrap:wrap;justify-content:space-between;align-content:flex-start;'
+           f'gap:2px 8px;min-height:{lines * 17}px;'
            f'text-transform:none;letter-spacing:0;font-size:12px;font-weight:700;color:#0F172A;">{spans}</span>')
     return (num, lbl)
 
@@ -2191,6 +2193,69 @@ def category_mix_kgs_card(day):
         for i, v in items.iterrows():
             tiles.append(_cm_tile(i, f"{v[kgs]:,.1f} Kg", _cm_amt(v[amt])))
             add_details(i, rest[rest["_item"] == i], False)
+
+    return {
+        "value": _cm_amt(w[amt].sum()),
+        "desc": "Kgs categories",
+        "color": BLUE,
+        "metrics": [(f"{w[kgs].sum():,.0f}", "Total Kg"), (_cm_amt(w[amt].sum()), "Total Amt")] + tiles,
+        "details": details,
+    }
+# Kgs card: left column = PU FOAM family, right column = PEELING family
+CM_KGS_LEFT = ["PU FOAM SHEET", "PROFILE SHEET 1ST GRADE", "PU FOAM 1ST GRADE", "PU FOAM 2ND GRADE", "PU FOAM 3RD GRADE"]
+CM_KGS_RIGHT = ["PEELING ROLL", "PEELING 1ST GRADE", "PEELING 2ND GRADE", "PEELING 3RD GRADE"]
+CM_KGS_MERGE = ("A GRADE + PU FOAM DC GRADE", ["A GRADE", "PU FOAM A GRADE", "PU FOAM DC GRADE"])
+CM_GHOST = ("", "", "ghost")          # invisible box, only keeps the grid even
+
+
+def category_mix_kgs_card(day):
+    r, err = _cm_load(day)
+    if r is None:
+        return {"value": "Error", "desc": f"Data error: {err}", "color": RED}
+    w, pcs, kgs, amt = r
+    w = w[w["_grp"].isna()].copy()
+    if w.empty:
+        return {"value": "0 Items", "desc": "No data found", "color": GREY}
+    w["_u"] = w["_item"].str.upper().str.replace(r"\s+", " ", regex=True)
+
+    details, used = [], set()
+
+    def tile_for(title, x, show_item=False):
+        used.update(x.index)
+        y = x.sort_values(amt, ascending=False)
+        rows = [((f"{rr['_grade']} ({rr['_item'].title()})" if show_item else rr["_grade"]),
+                 f"{rr[kgs]:,.1f} Kg | {_cm_amt(rr[amt])}") for _, rr in y.iterrows()]
+        rows.append(("TOTAL", f"{x[kgs].sum():,.1f} Kg | {_cm_amt(x[amt].sum())}"))
+        details.append((f"📦 {title} · Grade-wise", rows))
+        return _cm_tile(title, f"{x[kgs].sum():,.1f} Kg", _cm_amt(x[amt].sum()))
+
+    def column(order):
+        out = []
+        for it in order:
+            x = w[w["_u"] == it]
+            if not x.empty:
+                out.append(tile_for(it, x))
+        return out
+
+    left, right = column(CM_KGS_LEFT), column(CM_KGS_RIGHT)
+    n = max(len(left), len(right))
+    left += [CM_GHOST] * (n - len(left))
+    right += [CM_GHOST] * (n - len(right))
+    tiles = []
+    for a, b in zip(left, right):
+        tiles += [a, b]
+
+    x = w[w["_u"].isin(CM_KGS_MERGE[1])]
+    if not x.empty:
+        tiles.append(tile_for(CM_KGS_MERGE[0], x, True))
+
+    rest = w[~w.index.isin(used)]
+    if not rest.empty:
+        order = rest.groupby("_item")[amt].sum().sort_values(ascending=False).index
+        for i in order:
+            tiles.append(tile_for(i, rest[rest["_item"] == i]))
+    if len(tiles) % 2:
+        tiles.append(CM_GHOST)
 
     return {
         "value": _cm_amt(w[amt].sum()),
@@ -4941,6 +5006,11 @@ SHEETS = {
         "sheet_name": "Sheet1",
         "date_col": "Grade",
     },
+"consumables_data": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQv_A1h5-TgkmgvXUZqZask1CC4PnhLlPdu6ajE48Nfx7Q0GbvrRSFF10bYqYwuxOjQkdrbe74wwWW6/pubhtml",
+        "worksheet": "0",
+        "date_col": "MONTH",
+    },
 "min_stock": {
     "type": "excel",
     "static": True,
@@ -5216,7 +5286,7 @@ KPI_SOURCES = {
         "calc": "po_pending",
     },
     ("purchase", "Consumables"): {
-        "sheet": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQv_A1h5-TgkmgvXUZqZask1CC4PnhLlPdu6ajE48Nfx7Q0GbvrRSFF10bYqYwuxOjQkdrbe74wwWW6/pubhtml",
+        "sheet": "consumables_data",
         "mode": "month",
         "calc": "consumables",
     },
@@ -7875,7 +7945,8 @@ def _tiles_html(metrics):
     for m in metrics:
         num, lbl = m[0], m[1]
         cls = "kpi-tile yield" if len(m) > 2 and m[2] == "yield" else "kpi-tile"
-        out.append(f'<div class="{cls}"><div class="kpi-num">{num}</div><div class="kpi-lbl">{lbl}</div></div>')
+        hide = ' style="visibility:hidden"' if len(m) > 2 and m[2] == "ghost" else ""
+        out.append(f'<div class="{cls}"{hide}><div class="kpi-num">{num}</div><div class="kpi-lbl">{lbl}</div></div>')
     return '<div class="kpi-tiles">' + "".join(out) + "</div>"
 
 
