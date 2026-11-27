@@ -3719,6 +3719,8 @@ def compute_kpi(df, spec, day):
         return maint_downtime_card(df, day)
     if calc == "complaints":
         return complaints_card(df, day)
+    if calc == "consumables":
+        return consumables_card(df, day)
     # ---------- FOAMING: TONNAGE (daily + monthly) ----------
     if calc == "tonnage_daily":
         return tonnage_card(day)
@@ -5212,6 +5214,11 @@ KPI_SOURCES = {
         "mode": "on_date",
         "date_label": "PO date",
         "calc": "po_pending",
+    },
+    ("purchase", "Consumables"): {
+        "sheet": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQv_A1h5-TgkmgvXUZqZask1CC4PnhLlPdu6ajE48Nfx7Q0GbvrRSFF10bYqYwuxOjQkdrbe74wwWW6/pubhtml",
+        "mode": "month",
+        "calc": "consumables",
     },
     ("purchase", "PO 0-15 Days Old"):  {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_0_15"},
     ("purchase", "PO 15-30 Days Old"): {"sheet": "purchase_po", "mode": "as_of", "date_label": "as on", "calc": "po_age_15_30"},
@@ -6962,6 +6969,29 @@ def complaints_card(df, day):
             (f"📋 All Complaints ({total})", full),
         ],
     }
+def consumables_card(df, day):
+    if df is None or getattr(df, "empty", True):
+        return {
+            "value": "0.00",
+            "desc": "No data",
+            "color": "GREY",
+            "details": [],
+        }
+
+    d = df.copy()
+    d.columns = [str(c).strip() for c in d.columns]
+
+    if hasattr(day, "strftime"):
+        target_month = day.strftime("%B").strip().lower()
+    else:
+        parsed = pd.to_datetime(day, errors="coerce")
+        target_month = parsed.strftime("%B").strip().lower() if pd.notna(parsed) else "november"
+
+    d["_m"] = d["MONTH"].astype(str).str.strip().str.lower()
+    for col in ["RECD.QTY", "ISSD.QTY", "CLS.QTY"]:
+        d[col] = pd.to_numeric(d[col], errors="coerce").fillna(0.0)
+
+    sub = d[d["_
 # ====================================================================
 # FINANCE: TOTAL DUE (month-wise)
 #   File columns: PARTY NAME | Month | DUE DYS | TOTAL O/S | UNDUE AMT | DUE AMT | OVERDUE AMT
@@ -8380,6 +8410,8 @@ def render_kpi(dept_key, idx, title, desc):
             else:
                 dates = available_dates(df)
             if spec.get("calc") == "complaints":
+                dates = [datetime.datetime.now(IST).date()]
+            if spec.get("calc") == "consumables":
                 dates = [datetime.datetime.now(IST).date()]
             # HR: dates sirf wo jin din attendance / OT bhara hai (aaj ki date nahi)
             if str(spec.get("calc", "")).startswith("hr_"):
