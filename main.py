@@ -2989,6 +2989,7 @@ def stock_balance_card(df, day, issued_col, label):
         ])
     ]
     if opening is not None:
+        sections[0][1].insert(0, ("Opening Qty", f"{opening:,.2f} Kg"))
         calc_bal = opening + t_in - t_out
         if abs(calc_bal - balance) > 1:
             sections.append(("⚠ Check: sheet balance does not match", [
