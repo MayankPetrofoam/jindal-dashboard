@@ -4932,11 +4932,11 @@ SHEETS = {
         "sheet_name": "Sheet1",
         "date_col": "Party Name",
     },
-"cate_1": {
+"cate_2": {
         "type": "excel",
         "static": True,
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate%20(1).xls",
-        "sheet_name": 0,
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/cate2.xlsx?v=1",
+        "sheet_name": "Sheet1",
         "date_col": "Grade",
     },
 "min_stock": {
