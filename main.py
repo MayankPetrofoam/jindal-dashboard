@@ -9094,6 +9094,47 @@ def render_chatbot():
         if st.button("Clear chat"):
             st.session_state["_chat"] = []
             st.rerun()
+@st.fragment
+def render_chatbot():
+    """AI assistant. Runs as a fragment so only this box refreshes, not the whole dashboard."""
+    with st.expander("🤖 Dashboard Assistant", expanded=False):
+        key = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
+        if not key:
+            st.info("Add ANTHROPIC_API_KEY in app Secrets to enable the assistant.")
+            return
+        hist = st.session_state.setdefault("_chat", [])
+        if hist and st.button("Clear chat", key="_chat_clear"):
+            st.session_state["_chat"] = []
+            st.rerun(scope="fragment")
+        box = st.container(height=200)
+        for role, text in hist:
+            box.chat_message(role).write(text)
+        q = st.chat_input("Ask about stock, production, orders...", key="_chat_input")
+        if q:
+            hist.append(("user", q))
+            box.chat_message("user").write(q)
+            snap = "\n".join(st.session_state.get("_snap", {}).values())
+            system = ("You are the data assistant of Jindal Petrofoam's management dashboard. "
+                      "Answer ONLY from the dashboard data below. If the answer is not in the data, say so. "
+                      "Reply in the same language the user writes in. Keep answers short.\n\n"
+                      "DASHBOARD DATA:\n" + snap)
+            msgs = [{"role": r if r == "user" else "assistant", "content": t} for r, t in hist[-10:]]
+            try:
+                import json as _json
+                body = _json.dumps({"model": "claude-sonnet-5-5", "max_tokens": 500,
+                                    "system": system, "messages": msgs}).encode("utf-8")
+                req = urllib.request.Request(
+                    "https://api.anthropic.com/v1/messages", data=body,
+                    headers={"x-api-key": key, "anthropic-version": "2023-06-01",
+                             "content-type": "application/json"})
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    ans = _json.loads(resp.read().decode("utf-8"))["content"][0]["text"]
+            except urllib.error.HTTPError as exc:
+                ans = f"Assistant error: HTTP {exc.code} {exc.read().decode('utf-8', 'ignore')[:200]}"
+            except Exception as exc:
+                ans = f"Assistant error: {type(exc).__name__}: {exc}"
+            hist.append(("assistant", ans))
+            box.chat_message("assistant").write(ans)
 def dashboard_body():
     st.session_state["_errors"] = {}
 
@@ -9137,8 +9178,8 @@ def dashboard_body():
 
 # 2. Yahan se @st.fragment hata dein
 _chat_slot = st.container()
-dashboard_body()
 render_chatbot()
+dashboard_body()
 
 st.markdown(
     '<div class="corp-footer">© Jindal Petrofoam Private Limited • Enterprise Master Dashboard • Data auto-refreshes every 5 minutes</div>',
