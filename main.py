@@ -2989,7 +2989,6 @@ def stock_balance_card(df, day, issued_col, label):
         ])
     ]
     if opening is not None:
-        sections[0][1].insert(0, ("Opening Qty", f"{opening:,.2f} Kg"))
         calc_bal = opening + t_in - t_out
         if abs(calc_bal - balance) > 1:
             sections.append(("⚠ Check: sheet balance does not match", [
@@ -4943,7 +4942,7 @@ SHEETS = {
     },
     "poly_data": {
         "type": "excel",
-        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/polyol.xls",
+        "url": "https://raw.githubusercontent.com/MayankPetrofoam/jindal-dashboard/main/polyol.xls?v=2",
         "sheet_name": "polyol",
         "date_col": "Date",
         "dayfirst": True,
