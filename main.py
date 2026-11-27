@@ -9061,7 +9061,7 @@ def render_diagnostics():
 # 1. Yahan @st.fragment lagayein
 def render_chatbot():
     """Sidebar AI assistant that answers from the numbers currently shown on the dashboard cards."""
-    with st.sidebar:
+    with _chat_slot.expander("🤖 Dashboard Assistant", expanded=True):
         st.markdown("### 🤖 Dashboard Assistant")
         key = st.secrets.get("ANTHROPIC_API_KEY", "") if hasattr(st, "secrets") else ""
         if not key:
@@ -9136,6 +9136,7 @@ def dashboard_body():
                 st.write(f"- {m}")
 
 # 2. Yahan se @st.fragment hata dein
+_chat_slot = st.container()
 dashboard_body()
 render_chatbot()
 
